@@ -100,11 +100,13 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
       await new Promise(resolve => setTimeout(resolve, PAGE_DELAY_MS))
     }
 
+    const pageStart = Date.now()
     const { offers, nextCursor } = await fetchPage(from)
 
     if (offers.length === 0) break
 
     const { inserted, updated } = await upsertPage(offers, existingSlugs, fetchedAt)
+    const pageMs = Date.now() - pageStart
 
     for (const o of offers) {
       allFetchedSlugs.push(o.slug)
@@ -118,7 +120,7 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
     pageNum++
 
     console.log(
-      `[offerScraper] Page ${pageNum}: fetched ${offers.length} offers (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
+      `[offerScraper] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
     )
 
     if (nextCursor === null) break
