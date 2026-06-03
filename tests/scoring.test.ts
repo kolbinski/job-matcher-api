@@ -35,7 +35,6 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
     open_to_hire_ukrainians: null,
     languages: [],
     url: null,
-    is_active: true,
     published_at: null,
     fetched_at: null,
     created_at: new Date(),

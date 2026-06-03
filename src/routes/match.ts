@@ -44,7 +44,7 @@ matchRouter.post(
     }
 
     // ── 2. Load active offers ──────────────────────────────────────────────
-    const offers = await prisma.offer.findMany({ where: { is_active: true } })
+    const offers = await prisma.offer.findMany()
 
     // ── 3. Red flag filter + scoring (RULE A-1: filter before AI, RULE P-3: score before filters)
     const matched: MatchedOffer[] = []

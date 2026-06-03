@@ -31,7 +31,7 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     remote_interview: true,
     required_skills: ['typescript', 'node.js'],
     nice_to_have_skills: [],
-    employment_types: [{ from: 8000, to: 12000, currency: 'pln', type: 'b2b', unit: 'month', gross: false, fromUsd: 2000, toUsd: 3000 }],
+    employment_types: [{ from: 8000, to: 12000, currency: 'pln', type: 'b2b', unit: 'month', gross: false }],
     multilocation: null,
     city: 'Warszawa',
     street: null,
@@ -43,6 +43,19 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     url: 'https://justjoin.it/test',
     published_at: new Date('2026-06-01T00:00:00Z'),
     ...overrides,
+  }
+}
+
+function makeDbOffer(slug: string) {
+  return {
+    slug: `${TEST_SLUG_PREFIX}${slug}`,
+    source: 'justjoin',
+    title: 'Test Engineer',
+    company_name: 'Corp',
+    required_skills: [],
+    nice_to_have_skills: [],
+    employment_types: [],
+    languages: [],
   }
 }
 
@@ -120,33 +133,18 @@ describe('syncOffers', () => {
     await prisma.offer.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })
   })
 
-  it('returns early without deactivating anything when Apify returns empty array', async () => {
-    // Seed an active offer that must NOT be deactivated
-    await prisma.offer.create({
-      data: {
-        slug: `${TEST_SLUG_PREFIX}existing`,
-        source: 'justjoin',
-        title: 'Existing',
-        company_name: 'Corp',
-        required_skills: [],
-        nice_to_have_skills: [],
-        employment_types: [],
-        languages: [],
-        is_active: true,
-      },
-    })
+  it('returns early without deleting anything when fetch returns empty array', async () => {
+    await prisma.offer.create({ data: makeDbOffer('existing') })
 
     mockFetch.mockResolvedValueOnce([])
 
     const result = await syncOffers()
 
-    expect(result).toEqual({ fetched: 0, inserted: 0, updated: 0, deactivated: 0 })
-
-    const offer = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })
-    expect(offer?.is_active).toBe(true)
+    expect(result).toEqual({ fetched: 0, inserted: 0, updated: 0, deleted: 0 })
+    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })).not.toBeNull()
   })
 
-  it('inserts new offers as is_active=true', async () => {
+  it('inserts new offers', async () => {
     mockFetch.mockResolvedValueOnce([makeOffer('new-1'), makeOffer('new-2')])
 
     const result = await syncOffers()
@@ -154,28 +152,11 @@ describe('syncOffers', () => {
     expect(result.fetched).toBe(2)
     expect(result.inserted).toBe(2)
     expect(result.updated).toBe(0)
-
-    const offers = await prisma.offer.findMany({
-      where: { slug: { startsWith: TEST_SLUG_PREFIX } },
-    })
-    expect(offers).toHaveLength(2)
-    expect(offers.every(o => o.is_active)).toBe(true)
+    expect(await prisma.offer.count({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })).toBe(2)
   })
 
-  it('updates existing offers and keeps is_active=true', async () => {
-    await prisma.offer.create({
-      data: {
-        slug: `${TEST_SLUG_PREFIX}existing`,
-        source: 'justjoin',
-        title: 'Old Title',
-        company_name: 'Old Corp',
-        required_skills: [],
-        nice_to_have_skills: [],
-        employment_types: [],
-        languages: [],
-        is_active: true,
-      },
-    })
+  it('updates existing offers', async () => {
+    await prisma.offer.create({ data: { ...makeDbOffer('existing'), title: 'Old Title' } })
 
     mockFetch.mockResolvedValueOnce([makeOffer('existing', { title: 'Updated Title' })])
 
@@ -183,73 +164,29 @@ describe('syncOffers', () => {
 
     const offer = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })
     expect(offer?.title).toBe('Updated Title')
-    expect(offer?.is_active).toBe(true)
   })
 
-  it('deactivates offers absent from the latest fetch', async () => {
-    await prisma.offer.createMany({
-      data: [
-        {
-          slug: `${TEST_SLUG_PREFIX}stays`,
-          source: 'justjoin',
-          title: 'Stays',
-          company_name: 'Corp',
-          required_skills: [],
-          nice_to_have_skills: [],
-          employment_types: [],
-          languages: [],
-          is_active: true,
-        },
-        {
-          slug: `${TEST_SLUG_PREFIX}gone`,
-          source: 'justjoin',
-          title: 'Gone',
-          company_name: 'Corp',
-          required_skills: [],
-          nice_to_have_skills: [],
-          employment_types: [],
-          languages: [],
-          is_active: true,
-        },
-      ],
-    })
+  it('hard deletes offers absent from the latest fetch', async () => {
+    await prisma.offer.createMany({ data: [makeDbOffer('stays'), makeDbOffer('gone')] })
 
-    // Mock 1000 offers so the deactivation threshold is met.
-    // Only `stays` is in the fetch — `gone` is absent and should be deactivated.
-    // The other 999 slugs don't exist in DB so they cause no side effects.
+    // Mock 1000 offers so the deletion threshold is met.
+    // Only `stays` is in the fetch — `gone` is absent and should be hard deleted.
+    // The 999 padding slugs don't exist in DB so they have no side effects.
     const padding = Array.from({ length: 999 }, (_, i) => makeOffer(`padding-${i}`))
     mockFetch.mockResolvedValueOnce([makeOffer('stays'), ...padding])
 
     await syncOffers()
 
-    // Assert on specific offer states — not the global deactivated count,
-    // which includes any real offers already in the shared DB.
-    const stays = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}stays` } })
-    const gone = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })
-    expect(stays?.is_active).toBe(true)
-    expect(gone?.is_active).toBe(false)
+    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}stays` } })).not.toBeNull()
+    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })).toBeNull()
   })
 
-  it('reactivates a previously deactivated offer when it reappears', async () => {
-    await prisma.offer.create({
-      data: {
-        slug: `${TEST_SLUG_PREFIX}comeback`,
-        source: 'justjoin',
-        title: 'Was Gone',
-        company_name: 'Corp',
-        required_skills: [],
-        nice_to_have_skills: [],
-        employment_types: [],
-        languages: [],
-        is_active: false,
-      },
-    })
-
+  it('re-inserts an offer that was previously deleted when it reappears in the fetch', async () => {
+    // Offer not in DB — simulates a previously deleted offer reappearing in the API
     mockFetch.mockResolvedValueOnce([makeOffer('comeback')])
 
     await syncOffers()
 
-    const offer = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}comeback` } })
-    expect(offer?.is_active).toBe(true)
+    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}comeback` } })).not.toBeNull()
   })
 })

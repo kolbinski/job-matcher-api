@@ -38,7 +38,6 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
     url: offer.url,
     published_at: offer.published_at,
     fetched_at: fetchedAt,
-    is_active: true,
   }
 }
 
@@ -56,18 +55,18 @@ function logSkillBreakdown(offers: NormalizedOffer[]): void {
   console.log(`[offerSync] Top skills: ${top}`)
 }
 
-export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deactivated: number }> {
+export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
   const raw = await fetchOffers()
 
   const MIN_FETCH_THRESHOLD = 1_000
 
   if (raw.length === 0) {
-    console.warn('[offerSync] API returned 0 offers — skipping deactivation')
-    return { fetched: 0, inserted: 0, updated: 0, deactivated: 0 }
+    console.warn('[offerSync] API returned 0 offers — skipping deletion')
+    return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
   }
 
   if (raw.length < MIN_FETCH_THRESHOLD) {
-    console.warn(`[offerSync] Partial fetch detected (${raw.length} offers < ${MIN_FETCH_THRESHOLD} threshold) — upserting but skipping deactivation to protect existing data`)
+    console.warn(`[offerSync] Partial fetch detected (${raw.length} offers < ${MIN_FETCH_THRESHOLD} threshold) — upserting but skipping deletion to protect existing data`)
   }
 
   const fetchedAt = new Date()
@@ -104,18 +103,17 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
 
   const fetchedSlugs = raw.map(o => o.slug)
 
-  let deactivated = { count: 0 }
+  let deleted = { count: 0 }
   if (raw.length >= MIN_FETCH_THRESHOLD) {
-    deactivated = await prisma.offer.updateMany({
-      where: { slug: { notIn: fetchedSlugs }, is_active: true },
-      data: { is_active: false },
+    deleted = await prisma.offer.deleteMany({
+      where: { slug: { notIn: fetchedSlugs } },
     })
   }
 
   console.log(
-    `[offerSync] Sync complete: fetched ${raw.length}, inserted ${toInsert.length}, updated ${toUpdate.length}, deactivated ${deactivated.count}`,
+    `[offerSync] Sync complete: fetched ${raw.length}, inserted ${toInsert.length}, updated ${toUpdate.length}, deleted ${deleted.count}`,
   )
   logSkillBreakdown(raw)
 
-  return { fetched: raw.length, inserted: toInsert.length, updated: toUpdate.length, deactivated: deactivated.count }
+  return { fetched: raw.length, inserted: toInsert.length, updated: toUpdate.length, deleted: deleted.count }
 }
