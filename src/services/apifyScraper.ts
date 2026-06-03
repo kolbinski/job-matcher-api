@@ -3,6 +3,19 @@ import { env } from '../lib/env'
 
 const ACTOR_ID = 'trev0n/justjoinit-scraper'
 
+// All JustJoin.it technology categories. Passing each as a separate startUrl gives the
+// actor 24 independent entry points so it doesn't stop at the first listing page (100 offers).
+// The upsert in offerSync.ts deduplicates any offer that appears in multiple categories.
+const JJ_CATEGORIES = [
+  'javascript', 'html', 'php', 'ruby', 'python', 'java', 'net', 'scala',
+  'c', 'mobile', 'testing', 'devops', 'admin', 'ux', 'pm', 'game',
+  'analytics', 'security', 'data', 'go', 'support', 'erp', 'architecture', 'ai',
+]
+
+const START_URLS = JJ_CATEGORIES.map(cat => ({
+  url: `https://justjoin.it/job-offers/all-locations/${cat}`,
+}))
+
 export interface NormalizedOffer {
   slug: string
   source: string
@@ -80,8 +93,10 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
 export async function fetchOffersFromApify(): Promise<NormalizedOffer[]> {
   const client = new ApifyClient({ token: env.APIFY_API_TOKEN })
 
-  // maxItems: 0 = unlimited; default is 100 which only returns one page of results
-  const run = await client.actor(ACTOR_ID).call({ maxItems: 0 })
+  // startUrls: one entry per category so the actor has 24 independent starting points.
+  // Without this, the actor hits the default listing once and stops at 100 offers.
+  // maxItems: 0 = unlimited within each startUrl.
+  const run = await client.actor(ACTOR_ID).call({ startUrls: START_URLS, maxItems: 0 })
 
   const allItems: Record<string, unknown>[] = []
   let offset = 0
