@@ -2,12 +2,15 @@ import 'express-async-errors'
 import express from 'express'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from './lib/errors'
+import { healthRouter } from './routes/health'
+import { matchRouter } from './routes/match'
 
 export const app = express()
 
 app.use(express.json())
 
-// Routes registered here in Step 3+
+app.use('/v1/health', healthRouter)
+app.use('/v1/match', matchRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {

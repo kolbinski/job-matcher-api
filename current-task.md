@@ -1,6 +1,6 @@
 # Current Task
 
-**Status:** 🟢 V1 Build — Step 3 complete, Step 4 starting
+**Status:** 🟢 V1 Build — Step 4 complete, Step 5 starting
 **Last Updated:** 2026-06-03
 
 ---
@@ -42,13 +42,14 @@ Ship a working `POST /v1/match` endpoint that:
 - [x] Implement Claude API integration — `src/services/aiSummary.ts` (`claude-sonnet-4-6`, 10s timeout, null fallback)
 - [x] Tests — `tests/scoring.test.ts` (18 new tests: weights sum, red flags, techScore, remoteScore, salaryScore)
 
-### SPARK Step 4 — Reliability Layer
-- [ ] Register `express-async-errors` at app entry point
-- [ ] Implement standard error handler middleware
-- [ ] Implement rate limiter (100 req/min per API key)
-- [ ] Log response time to `api_calls.response_ms`
-- [ ] Implement graceful shutdown (SIGTERM handler for Railway)
-- [ ] Wire `GET /v1/health` health check
+### SPARK Step 4 — Reliability Layer ✅
+- [x] `express-async-errors` + standard error handler — already in `src/app.ts` (Step 2)
+- [x] Graceful shutdown (SIGTERM) — already in `src/index.ts` (Step 2)
+- [x] Rate limiter — `src/middleware/rateLimiter.ts` (100 req/min per API key, in-memory)
+- [x] Response time logged to `api_calls.response_ms` via `billCall` at end of route handler
+- [x] `GET /v1/health` — `src/routes/health.ts` (status + active offers count + last cronjob)
+- [x] `POST /v1/match` — `src/routes/match.ts` (full pipeline: auth → credits → rate limit → parse → filter → score → AI → bill → respond)
+- [x] Tests — `tests/health.test.ts` + `tests/match.test.ts` (8 new integration tests: 401/422/200, billing, credits deduction, 402)
 
 ### SPARK Step 5 — Knowledge Capture
 - [ ] Write OpenAPI spec for `POST /v1/match`
