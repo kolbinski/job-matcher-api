@@ -3,7 +3,6 @@ import { prisma } from '../lib/prisma'
 import { fetchPage, NormalizedOffer, PAGE_SIZE } from '../services/offerScraper'
 
 const BATCH_SIZE = 500
-const PAGE_DELAY_MS = 2_000
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -97,7 +96,9 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
 
   while (true) {
     if (pageNum > 0) {
-      await new Promise(resolve => setTimeout(resolve, PAGE_DELAY_MS))
+      const delay = Math.floor(Math.random() * (60_000 - 20_000 + 1)) + 20_000
+      console.log(`[offerScraper] Waiting ${Math.round(delay / 1000)}s before next page...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
     }
 
     const pageStart = Date.now()
