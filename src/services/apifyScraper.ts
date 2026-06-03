@@ -91,7 +91,7 @@ export async function fetchOffersFromApify(): Promise<NormalizedOffer[]> {
   // Single all-locations URL + high max_items_per_url — the actor paginates internally
   // via its offset mechanism, unlike RSC-payload actors that are hard-capped at 100.
   const run = await client.actor(ACTOR_ID).call({
-    urls: [{ url: 'https://justjoin.it/job-offers/all-locations' }],
+    urls: ['https://justjoin.it/job-offers/all-locations'],
     max_items_per_url: 10000,
   })
 
