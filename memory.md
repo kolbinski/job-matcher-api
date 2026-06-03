@@ -10,9 +10,13 @@ Last reviewed: 2026-06-03
 
 ## Architecture Decisions
 
-**[2026-06-03] Billing atomicity design**
-Credit deduction (`UPDATE users SET credits = credits - cost`) and `api_calls` INSERT are wrapped in a single Prisma `$transaction`. The transaction uses `SELECT ... FOR UPDATE` on the user row to prevent race conditions when two concurrent requests both pass the credits check before either deducts.
-*Why:* Two concurrent API calls with $0.15 remaining would both pass a credits check of $0.10, resulting in a -$0.05 balance and two `api_calls` records for one user.
+**[2026-06-03] Billing atomicity design** [SUPERSEDED — see entry below]
+Credit deduction and `api_calls` INSERT are wrapped in a single Prisma `$transaction`. Originally planned to use `SELECT ... FOR UPDATE` for race condition prevention.
+*Superseded by:* Supabase PgBouncer blocks raw UUID casts via `$queryRaw`, making `SELECT ... FOR UPDATE` unworkable. See corrected entry below.
+
+**[2026-06-03] Billing atomicity design — ACTUAL IMPLEMENTATION**
+Credit deduction and `api_calls` INSERT are wrapped in a single Prisma `$transaction`. Race condition prevention uses a **conditional `updateMany`**: `UPDATE users SET credits = credits - cost WHERE id = $id AND credits >= cost`. If `updateMany` returns `count = 0`, the transaction aborts with `INSUFFICIENT_CREDITS`.
+*Why:* `SELECT ... FOR UPDATE` requires `$queryRaw` with `::uuid` cast, which fails through Supabase PgBouncer in transaction mode (`operator does not exist: text = uuid`). The conditional UPDATE is atomic at the row level and achieves the same correctness guarantee without raw SQL.
 
 **[2026-06-03] `call_cost` lives in DB, not env vars**
 The `settings` table holds `call_cost` (and other tunables). This is read on every request — no caching. The business requirement is "price change without deploy." Cache invalidation introduces the same risk as hardcoding.
@@ -22,6 +26,10 @@ The `settings` table holds `call_cost` (and other tunables). This is read on eve
 Red flag filter runs first (hard reject, score = 0). Then scoring algorithm runs on all remaining offers. Claude API is called only for top 10 by score.
 *Why:* At scale (1,247 offers in DB), calling Claude on every offer would cost ~$0.37 per match call at current token rates — 3.7× the $0.10 call price.
 
+**[2026-06-03] Claude model and failure behavior**
+Model: `claude-sonnet-4-6`. Timeout: 10s. On timeout or non-retryable error: return `null` for the AI summary field and roll back the billing transaction — return 503 to client, no charge.
+*Why:* Null fallback prevents a Claude outage from breaking the entire match response. The summary field is enrichment, not a correctness requirement.
+
 **[2026-06-03] Profile input format is JSON, not Markdown**
 Despite the spec's description mentioning "Markdown profile," the actual `POST /v1/match` request body is a structured JSON object (`profile` key). The Homo Digital agent workflow passes JSON. Markdown parsing is not needed for V1.
 
@@ -29,6 +37,10 @@ Despite the spec's description mentioning "Markdown profile," the actual `POST /
 - `jm_live_` prefix: production key, deducts credits
 - `jm_test_` prefix: test key, no credit deduction, returns mock data, still writes `api_calls` row with `cost = 0`
 *Why:* Enables integration testing by API clients without burning real credits. Analogous to Stripe's `sk_test_` / `sk_live_` pattern.
+
+**[2026-06-03] Red flag filter categories (V1)**
+Three hard-reject categories: `technology` (legacy/outsourcing stack), `salary` (missing or below threshold), `work_model` (fully on-site when candidate requires remote). All red-flagged offers get `score = 0` and appear in `unmatched` with `reason` field.
+*Why:* Keeping categories explicit and named (not a generic `reasons[]`) allows clients to build UI that explains why an offer was rejected.
 
 **[2026-06-03] Scoring weights are V1-immutable**
 `techScore * 0.40 + salaryScore * 0.25 + remoteScore * 0.20 + industryScore * 0.15`
@@ -38,6 +50,18 @@ Weight changes are a breaking change — they alter the `score` field in API res
 Actor ID: `falconscrape/just-join-it-scraper`. Estimated cost: $5-15/month at 10-minute intervals.
 V2 adds NoFluffJobs. V3 adds RemoteOK (free API). V4 adds Wellfound + Dice.
 *Gotcha:* Apify returns `requiredSkills` (camelCase) but DB stores `required_skills` (snake_case). Normalize in the scraper service, not in the scoring algorithm.
+
+**[2026-06-03] Railway/Supabase connection — Supavisor session mode**
+Database connection uses Supabase Supavisor pooler in **session mode** (port 5432 on the pooler host). The direct Supabase host port is blocked on Railway. Migrations are run via Supavisor session mode, not transaction mode, because `ALTER TYPE` and other DDL statements are incompatible with transaction-mode pooling.
+*Why:* Railway firewall blocks the direct Supabase connection. Supavisor port 5432 (session mode) is the only reliable path for both migrations and runtime queries.
+
+**[2026-06-03] Rate limiter — in-memory for V1**
+`express-rate-limit` with in-memory store. Limit: 100 req/min per API key (keyed by `X-API-Key` header). No Redis.
+*Why:* Railway V1 runs a single dyno. In-memory rate limiting is exact at single-instance scale. Redis adds operational cost and complexity that's only justified when running multiple dynos. Migrate to Redis when Railway auto-scaling is enabled.
+
+**[2026-06-03] response_ms logging placement**
+`api_calls.response_ms` is recorded inside `billCall` at the **end** of the route handler, just before `res.json()`. It is NOT recorded in a middleware (which would capture total Express overhead, not business logic time).
+*Why:* We want to measure time from auth-validated request to scored response — the duration that reflects actual pipeline performance, not network/middleware overhead.
 
 **[2026-06-03] `is_active` flag strategy**
 Offers that don't appear in the latest Apify fetch are marked `is_active = false`. However: if Apify returns an empty array (e.g., rate-limited or API error), we must NOT set all offers inactive. Guard: only run the `is_active = false` update if the fetch returned > 0 offers.

@@ -113,3 +113,15 @@ Three API changes that silently break v3 code under v4:
 **RULE P-4: The health endpoint is `GET /v1/health`, not `/v1/status`.**
 **Why:** The English spec (authoritative) defines `GET /v1/health`. Writing `/v1/status` in code produces a 404 for any monitoring integration or Railway health check configured against `/v1/health`.
 **How to apply:** Search for `/v1/status` before every commit — should return zero results.
+
+**RULE D-3: Railway blocks the Supabase direct host port — use Supavisor pooler on port 5432.**
+**Why:** The Supabase direct connection host is unreachable from Railway. This is not a credentials problem. The only working connection string uses the Supavisor pooler hostname with port 5432 in session mode.
+**How to apply:** When setting `DATABASE_URL` on Railway, use the Supavisor session-mode URL (`?pgbouncer=true` is NOT needed for session mode — that flag is for transaction mode). Verify with `npx prisma db pull` after setting the URL before running any migrations.
+
+**RULE A-5: AI-generated enrichment fields must have a null fallback — they are not correctness requirements.**
+**Why:** A Claude timeout or outage must not block the match response. The AI summary is enrichment. A response with `ai_summary: null` is correct; a 503 because Claude timed out is not acceptable when scoring already completed successfully.
+**How to apply:** Any AI-generated field in the API response should be typed as `string | null`. The pipeline must proceed to billing and response even when Claude returns null. Only roll back billing if Claude fails AND the failure occurred before the response could be assembled (i.e., scoring itself did not complete).
+
+**RULE D-4: Use in-memory rate limiting only on single-dyno deployments.**
+**Why:** In-memory rate limit state is not shared across Railway dyno instances. On a single dyno it's exact. The moment Railway auto-scales to two dynos, each dyno enforces its own 100 req/min limit, effectively doubling the true rate limit.
+**How to apply:** In `rateLimiter.ts`, add a comment: `// in-memory store — migrate to Redis before enabling Railway auto-scaling`. Add a pre-scaling checklist item: "upgrade rate limiter to Redis-backed store."
