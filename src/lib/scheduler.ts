@@ -24,8 +24,8 @@ export async function startScheduler(): Promise<void> {
     where: { key: 'cronjob_interval_minutes' },
   })
 
-  const raw = setting ? parseInt(setting.value, 10) : 10
-  const intervalMinutes = !isNaN(raw) && raw >= 1 && raw <= 59 ? raw : 10
+  const raw = setting ? parseInt(setting.value, 10) : 15
+  const intervalMinutes = !isNaN(raw) && raw >= 1 && raw <= 59 ? raw : 15
 
   const expression = `*/${intervalMinutes} * * * *`
   cron.schedule(expression, runSync)
