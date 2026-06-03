@@ -10,16 +10,29 @@ const DEFAULT_SCHEDULE = '45 6 * * 1-5|0 7-15 * * 1-5'
 
 let syncInProgress = false
 
-// Mon-Fri 06:45-15:59 UTC = 08:45-17:59 CEST (UTC+2, summer)
-// In October (CET, UTC+1): update to hour >= 7 && hour <= 16
-function isWithinSchedule(): boolean {
-  const now = new Date()
-  const day = now.getUTCDay()   // 0=Sun … 6=Sat
+// Reads work_start_utc, work_end_utc, work_days from settings on every call
+// so DB changes take effect immediately without redeploy.
+async function isWithinSchedule(): Promise<boolean> {
+  const [startRow, endRow, daysRow] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'work_start_utc' } }),
+    prisma.settings.findUnique({ where: { key: 'work_end_utc' } }),
+    prisma.settings.findUnique({ where: { key: 'work_days' } }),
+  ])
+
+  const startHour = parseInt(startRow?.value ?? '6', 10)
+  const endHour   = parseInt(endRow?.value   ?? '15', 10)
+
+  // Parse 'min-max' day range, e.g. '1-5' → [1, 5]
+  const [minDay, maxDay] = (daysRow?.value ?? '1-5').split('-').map(Number)
+
+  const now  = new Date()
+  const day  = now.getUTCDay()
   const hour = now.getUTCHours()
-  const min = now.getUTCMinutes()
-  const afterStart = hour > 6 || (hour === 6 && min >= 45)
-  const beforeEnd = hour <= 15
-  return day >= 1 && day <= 5 && afterStart && beforeEnd
+  const min  = now.getUTCMinutes()
+
+  const afterStart = hour > startHour || (hour === startHour && min >= 45)
+  const beforeEnd  = hour <= endHour
+  return day >= minDay && day <= maxDay && afterStart && beforeEnd
 }
 
 function cetTimeString(): string {
@@ -27,7 +40,7 @@ function cetTimeString(): string {
 }
 
 async function runSync(): Promise<void> {
-  if (!isWithinSchedule()) {
+  if (!await isWithinSchedule()) {
     console.log('[scheduler] Outside working hours — skipping sync')
     return
   }
