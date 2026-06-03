@@ -106,6 +106,10 @@ Three API changes that silently break v3 code under v4:
 **Why:** These are TypeScript errors at compile time (not runtime surprises), but they block `tsc --noEmit` on first compile. Always run `tsc --noEmit` after installing a new Zod major version before writing any business logic.
 **How to apply:** When starting a project with Zod, add a `tsc --noEmit` step to the SPARK Step 1 checklist to catch version incompatibilities before they compound.
 
+**RULE B-5: Do not use `$queryRaw` with `::uuid` cast through Supabase PgBouncer.**
+**Why:** PgBouncer in transaction mode sends parameters as untyped text. `WHERE id = $1::uuid` fails with `operator does not exist: text = uuid` because the cast is not applied before type resolution. Raw UUID comparisons via `$queryRaw` break silently through the pooler.
+**How to apply:** Use Prisma's typed query methods (`updateMany`, `findUnique`) for UUID comparisons. For atomic credit deduction, use `updateMany WHERE id = $id AND credits >= $cost` — the conditional UPDATE is atomic at the row level and handles race conditions correctly without `SELECT ... FOR UPDATE`.
+
 **RULE P-4: The health endpoint is `GET /v1/health`, not `/v1/status`.**
 **Why:** The English spec (authoritative) defines `GET /v1/health`. Writing `/v1/status` in code produces a 404 for any monitoring integration or Railway health check configured against `/v1/health`.
 **How to apply:** Search for `/v1/status` before every commit — should return zero results.

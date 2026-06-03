@@ -1,6 +1,6 @@
 # Current Task
 
-**Status:** 🟢 V1 Build — Step 1 complete, Step 2 starting
+**Status:** 🟢 V1 Build — Step 2 complete, Step 3 starting
 **Last Updated:** 2026-06-03
 
 ---
@@ -28,19 +28,12 @@ Ship a working `POST /v1/match` endpoint that:
 - [x] Define Zod schema for `POST /v1/match` request body — `src/types/match.ts` + `src/types/profile.ts`
 - [x] Define TypeScript types for `MatchResponse`, `MatchedOffer`, `UnmatchedOffer` — `src/types/match.ts`
 
-### SPARK Step 2 — Payment Guard
-- [ ] Implement API key validation middleware (`validateApiKey`)
-  - Lookup key in `users` table
-  - Return 401 for invalid/inactive keys
-  - Attach `user` to `req` for downstream use
-- [ ] Implement credits check middleware (`checkCredits`)
-  - Read `call_cost` from `settings` table (never hardcode)
-  - Return 402 `INSUFFICIENT_CREDITS` if `credits < call_cost`
-- [ ] Implement billing transaction service (`billCall`)
-  - `SELECT ... FOR UPDATE` on user row
-  - Deduct credits + insert `api_calls` in one Prisma `$transaction`
-  - `jm_test_` key path: skip deduction, write `cost = 0` record
-- [ ] Write integration tests for billing (success, insufficient credits, rollback, test key)
+### SPARK Step 2 — Payment Guard ✅
+- [x] Implement API key validation middleware (`validateApiKey`) — `src/middleware/validateApiKey.ts`
+- [x] Implement credits check middleware (`checkCredits`) — `src/middleware/checkCredits.ts`
+- [x] Implement billing transaction service (`billCall`) — `src/services/billing.ts`
+  - Used conditional `updateMany WHERE credits >= cost` instead of `SELECT ... FOR UPDATE` (PgBouncer blocks raw UUID cast via $queryRaw)
+- [x] Write integration tests for billing (success, insufficient credits, rollback, test key) — `tests/billing.test.ts` (11 tests, all green)
 
 ### SPARK Step 3 — AI Pipeline
 - [ ] Implement profile parser (JSON → internal `CandidateProfile` type)
