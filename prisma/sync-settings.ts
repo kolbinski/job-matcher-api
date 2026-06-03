@@ -8,7 +8,7 @@ const SETTINGS = [
   { key: 'call_cost',                value: '0.10' },
   { key: 'cronjob_interval_minutes', value: '15' },
   { key: 'ai_scoring_enabled',       value: 'true' },
-  { key: 'cronjob_schedule',         value: '45 7 * * 1-5|0 8-16 * * 1-5' },
+  { key: 'cronjob_schedule',         value: '45 6 * * 1-5|0 7-15 * * 1-5' },
 ]
 
 async function main() {
