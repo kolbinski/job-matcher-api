@@ -54,46 +54,58 @@ afterAll(async () => {
 // ─── normalizeOffer ───────────────────────────────────────────────────────────
 
 describe('normalizeOffer', () => {
-  it('normalizes required_skills to lowercase (stealth_mode snake_case format)', () => {
+  it('extracts skill names from {name, level} objects and lowercases them', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
       title: 'Dev',
-      company_name: 'Corp',
-      required_skills: ['React', 'TypeScript', 'NODE.JS'],
-      employment_types: [],
+      companyName: 'Corp',
+      requiredSkills: [{ name: 'React', level: 3 }, { name: 'TypeScript', level: 2 }, { name: 'NODE.JS', level: 1 }],
+      employmentTypes: [],
     })
     expect(result?.required_skills).toEqual(['react', 'typescript', 'node.js'])
   })
 
   it('returns null for a record missing slug', () => {
-    const result = normalizeOffer({ title: 'Dev', company_name: 'Corp', employment_types: [] })
+    const result = normalizeOffer({ title: 'Dev', companyName: 'Corp', employmentTypes: [] })
     expect(result).toBeNull()
   })
 
-  it('extracts street and coordinates from multilocation[0]', () => {
+  it('reads top-level latitude/longitude and stores locations as multilocation', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
-      company_name: 'Corp',
+      companyName: 'Corp',
       title: 'Dev',
-      employment_types: [],
-      multilocation: [{ city: 'Wrocław', street: 'Żmigrodzka 81', latitude: 51.14, longitude: 17.03 }],
+      employmentTypes: [],
+      street: 'Żmigrodzka 81',
       latitude: 51.14,
       longitude: 17.03,
+      locations: [{ city: 'Wrocław', street: 'Żmigrodzka 81', latitude: 51.14, longitude: 17.03 }],
     })
     expect(result?.street).toBe('Żmigrodzka 81')
     expect(result?.latitude).toBe(51.14)
     expect(result?.longitude).toBe(17.03)
+    expect(Array.isArray(result?.multilocation)).toBe(true)
   })
 
-  it('defaults nice_to_have_skills to [] when null', () => {
+  it('defaults nice_to_have_skills to [] when null or missing', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
-      company_name: 'Corp',
+      companyName: 'Corp',
       title: 'Dev',
-      employment_types: [],
-      nice_to_have_skills: null,
+      employmentTypes: [],
+      niceToHaveSkills: null,
     })
     expect(result?.nice_to_have_skills).toEqual([])
+  })
+
+  it('constructs url from slug', () => {
+    const result = normalizeOffer({
+      slug: 'company-role-city-tech',
+      companyName: 'Corp',
+      title: 'Dev',
+      employmentTypes: [],
+    })
+    expect(result?.url).toBe('https://justjoin.it/job-offer/company-role-city-tech')
   })
 })
 

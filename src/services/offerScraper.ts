@@ -1,20 +1,5 @@
-// Direct JustJoin.it API — found by stealth_mode actor network interception.
-// Endpoint requires browser-like headers; Cloudflare may block plaintext server
-// requests from some IP ranges. Works on Railway in practice.
-const JJ_API_BASE = 'https://justjoin.it/api/candidate/api/offers'
+const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
 const PAGE_SIZE = 100
-
-const HEADERS: Record<string, string> = {
-  'User-Agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8',
-  'Referer': 'https://justjoin.it/job-offers',
-  'Origin': 'https://justjoin.it',
-  'sec-fetch-dest': 'empty',
-  'sec-fetch-mode': 'cors',
-  'sec-fetch-site': 'same-origin',
-}
 
 export interface NormalizedOffer {
   slug: string
@@ -41,11 +26,20 @@ export interface NormalizedOffer {
   published_at: Date | null
 }
 
-function normalizeSkills(raw: unknown): string[] {
+interface RawSkill {
+  name: string
+  level?: number
+}
+
+function extractSkillNames(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return raw
-    .filter((s): s is string => typeof s === 'string')
-    .map(s => s.toLowerCase().trim())
+    .map((s: unknown) => {
+      if (typeof s === 'string') return s.toLowerCase().trim()
+      if (s && typeof (s as RawSkill).name === 'string') return (s as RawSkill).name.toLowerCase().trim()
+      return null
+    })
+    .filter((s): s is string => s !== null && s.length > 0)
 }
 
 function toDate(value: unknown): Date | null {
@@ -54,73 +48,41 @@ function toDate(value: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-function str(v: unknown): string | null {
-  return typeof v === 'string' ? v : null
-}
-
-// JustJoin.it API returns camelCase fields. Handles both the current
-// /api/candidate/api/offers format and the old /api/offers format.
 export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | null {
-  const slug = str(raw.slug)
+  const slug = typeof raw.slug === 'string' ? raw.slug : null
   if (!slug) return null
-
-  const loc =
-    Array.isArray(raw.multilocation) && raw.multilocation.length > 0
-      ? (raw.multilocation[0] as Record<string, unknown>)
-      : null
 
   return {
     slug,
     source: 'justjoin',
-    title: str(raw.title) ?? '',
-    company_name: str(raw.companyName) ?? str(raw.company_name) ?? '',
-    company_logo_url: str(raw.companyLogoThumbUrl) ?? str(raw.companyLogoUrl) ?? str(raw.company_logo_url),
-    experience_level: str(raw.experienceLevel) ?? str(raw.experience_level),
-    workplace_type: str(raw.workplaceType) ?? str(raw.workplace_type),
-    working_time: str(raw.workingTime) ?? str(raw.working_time),
-    remote_interview:
-      typeof raw.remoteInterview === 'boolean'
-        ? raw.remoteInterview
-        : typeof raw.remote_interview === 'boolean'
-          ? raw.remote_interview
-          : null,
-    required_skills: normalizeSkills(raw.requiredSkills ?? raw.required_skills),
-    nice_to_have_skills: normalizeSkills(raw.niceToHaveSkills ?? raw.nice_to_have_skills),
-    employment_types: Array.isArray(raw.employmentTypes)
-      ? raw.employmentTypes
-      : Array.isArray(raw.employment_types)
-        ? raw.employment_types
-        : [],
-    multilocation: Array.isArray(raw.multilocation) ? raw.multilocation : null,
-    city: str(raw.city),
-    street: loc && typeof loc.street === 'string' ? loc.street : null,
-    latitude:
-      typeof raw.latitude === 'number'
-        ? raw.latitude
-        : loc && typeof loc.latitude === 'number'
-          ? loc.latitude
-          : null,
-    longitude:
-      typeof raw.longitude === 'number'
-        ? raw.longitude
-        : loc && typeof loc.longitude === 'number'
-          ? loc.longitude
-          : null,
-    category_id:
-      typeof raw.categoryId === 'number'
-        ? raw.categoryId
-        : typeof raw.category_id === 'number'
-          ? raw.category_id
-          : null,
+    title: typeof raw.title === 'string' ? raw.title : '',
+    company_name: typeof raw.companyName === 'string' ? raw.companyName : '',
+    company_logo_url: typeof raw.companyLogoThumbUrl === 'string' ? raw.companyLogoThumbUrl : null,
+    experience_level: typeof raw.experienceLevel === 'string' ? raw.experienceLevel : null,
+    workplace_type: typeof raw.workplaceType === 'string' ? raw.workplaceType : null,
+    working_time: typeof raw.workingTime === 'string' ? raw.workingTime : null,
+    remote_interview: typeof raw.isRemoteInterview === 'boolean' ? raw.isRemoteInterview : null,
+    required_skills: extractSkillNames(raw.requiredSkills),
+    nice_to_have_skills: extractSkillNames(raw.niceToHaveSkills),
+    employment_types: Array.isArray(raw.employmentTypes) ? raw.employmentTypes : [],
+    multilocation: Array.isArray(raw.locations) ? raw.locations : null,
+    city: typeof raw.city === 'string' ? raw.city : null,
+    street: typeof raw.street === 'string' ? raw.street : null,
+    latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
+    longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
+    category_id: null, // API returns category.key (string) — not used in V1 scoring
     open_to_hire_ukrainians:
-      typeof raw.openToHireUkrainians === 'boolean'
-        ? raw.openToHireUkrainians
-        : typeof raw.open_to_hire_ukrainians === 'boolean'
-          ? raw.open_to_hire_ukrainians
-          : null,
-    languages: normalizeSkills(raw.languages),
-    url: str(raw.link) ?? str(raw.jobUrl) ?? str(raw.job_url) ?? str(raw.url),
-    published_at: toDate(raw.publishedAt ?? raw.published_at),
+      typeof raw.isOpenToHireUkrainians === 'boolean' ? raw.isOpenToHireUkrainians : null,
+    languages: extractSkillNames(raw.languages),
+    url: `https://justjoin.it/job-offer/${slug}`,
+    published_at: toDate(raw.publishedAt),
+  }
+}
+
+interface ApiResponse {
+  data: Record<string, unknown>[]
+  meta: {
+    next: { cursor: number | null; itemsCount: number }
   }
 }
 
@@ -129,24 +91,25 @@ export async function fetchOffers(): Promise<NormalizedOffer[]> {
   let from = 0
 
   while (true) {
-    const url = `${JJ_API_BASE}?from=${from}&itemsCount=${PAGE_SIZE}`
-    const res = await fetch(url, { headers: HEADERS })
+    const url = `${JJ_API}?from=${from}&itemsCount=${PAGE_SIZE}`
+    const res = await fetch(url)
 
     if (!res.ok) {
-      throw new Error(`JustJoin.it API error: ${res.status} ${res.statusText} at ${url}`)
+      throw new Error(`JustJoin.it API error: ${res.status} ${res.statusText} (from=${from})`)
     }
 
-    const page = (await res.json()) as unknown[]
+    const body = (await res.json()) as ApiResponse
 
-    if (!Array.isArray(page) || page.length === 0) break
+    if (!Array.isArray(body.data) || body.data.length === 0) break
 
-    for (const item of page) {
-      const offer = normalizeOffer(item as Record<string, unknown>)
+    for (const item of body.data) {
+      const offer = normalizeOffer(item)
       if (offer) all.push(offer)
     }
 
-    if (page.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    const nextCursor = body.meta?.next?.cursor
+    if (nextCursor === null || nextCursor === undefined) break
+    from = nextCursor
   }
 
   return all
