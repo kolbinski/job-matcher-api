@@ -1,5 +1,13 @@
 const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
 const PAGE_SIZE = 100
+const PAGE_DELAY_MS = 20_000
+
+const HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Referer': 'https://justjoin.it/job-offers/all-locations',
+  'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept': 'application/json, text/plain, */*',
+}
 
 export interface NormalizedOffer {
   slug: string
@@ -89,10 +97,15 @@ interface ApiResponse {
 export async function fetchOffers(): Promise<NormalizedOffer[]> {
   const all: NormalizedOffer[] = []
   let from = 0
+  let page = 0
 
   while (true) {
+    if (page > 0) {
+      await new Promise(resolve => setTimeout(resolve, PAGE_DELAY_MS))
+    }
+
     const url = `${JJ_API}?from=${from}&itemsCount=${PAGE_SIZE}`
-    const res = await fetch(url)
+    const res = await fetch(url, { headers: HEADERS })
 
     if (!res.ok) {
       throw new Error(`JustJoin.it API error: ${res.status} ${res.statusText} (from=${from})`)
@@ -107,9 +120,12 @@ export async function fetchOffers(): Promise<NormalizedOffer[]> {
       if (offer) all.push(offer)
     }
 
+    console.log(`[offerScraper] Page ${page + 1}: fetched ${body.data.length} offers (total so far: ${all.length})`)
+
     const nextCursor = body.meta?.next?.cursor
     if (nextCursor === null || nextCursor === undefined) break
     from = nextCursor
+    page++
   }
 
   return all
