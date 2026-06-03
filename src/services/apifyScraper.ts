@@ -9,7 +9,7 @@ const ACTOR_ID = 'trev0n/justjoinit-scraper'
 const JJ_CATEGORIES = [
   'javascript', 'html', 'php', 'ruby', 'python', 'java', 'net', 'scala',
   'c', 'mobile', 'testing', 'devops', 'admin', 'ux', 'pm', 'game',
-  'analytics', 'security', 'data', 'go', 'support', 'erp', 'architecture', 'ai',
+  'analytics', 'security', 'data', 'go', 'support', 'erp', 'architecture', 'ai', 'other',
 ]
 
 const START_URLS = JJ_CATEGORIES.map(cat => ({
