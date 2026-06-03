@@ -61,7 +61,6 @@ model Offer {
   open_to_hire_ukrainians Boolean?
   languages               String[]
   url                     String?
-  is_active               Boolean   @default(true)
   published_at            DateTime?
   fetched_at              DateTime?
   created_at              DateTime  @default(now())
