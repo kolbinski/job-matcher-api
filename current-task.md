@@ -1,6 +1,6 @@
 # Current Task
 
-**Status:** 🟢 V1 Build — Step 2 complete, Step 3 starting
+**Status:** 🟢 V1 Build — Step 3 complete, Step 4 starting
 **Last Updated:** 2026-06-03
 
 ---
@@ -35,20 +35,12 @@ Ship a working `POST /v1/match` endpoint that:
   - Used conditional `updateMany WHERE credits >= cost` instead of `SELECT ... FOR UPDATE` (PgBouncer blocks raw UUID cast via $queryRaw)
 - [x] Write integration tests for billing (success, insufficient credits, rollback, test key) — `tests/billing.test.ts` (11 tests, all green)
 
-### SPARK Step 3 — AI Pipeline
-- [ ] Implement profile parser (JSON → internal `CandidateProfile` type)
-- [ ] Implement red flag filter (`filterRedFlags`)
-  - Input: candidate red_flags array + offer
-  - Output: rejection_reasons array or null
-  - Offers with rejection_reasons → `unmatched`, score = 0
-- [ ] Implement scoring algorithm (`scoreOffer`)
-  - `techScore * 0.40 + salaryScore * 0.25 + remoteScore * 0.20 + industryScore * 0.15`
-  - `missing_skills`: diff between `offer.required_skills` and candidate technologies
-- [ ] Implement Claude API integration (`generateAiSummary`)
-  - Only for top 10 offers by score
-  - Prompt: score + match_reasons + missing_skills → ai_summary + ai_recommendation
-  - Timeout: 10s, fallback: omit `ai_summary`, set `ai_scoring: false` in meta
-- [ ] Write tests for scoring (weight sum = 1.0, red flags produce score = 0)
+### SPARK Step 3 — AI Pipeline ✅
+- [x] Implement profile parser — `src/services/profileParser.ts` (normalizes techs to lowercase, infers experience level)
+- [x] Implement red flag filter — `src/services/redFlagFilter.ts` (technology, salary, work_model categories)
+- [x] Implement scoring algorithm — `src/services/scoring.ts` (`techScore*0.40 + salaryScore*0.25 + remoteScore*0.20 + industryScore*0.15`)
+- [x] Implement Claude API integration — `src/services/aiSummary.ts` (`claude-sonnet-4-6`, 10s timeout, null fallback)
+- [x] Tests — `tests/scoring.test.ts` (18 new tests: weights sum, red flags, techScore, remoteScore, salaryScore)
 
 ### SPARK Step 4 — Reliability Layer
 - [ ] Register `express-async-errors` at app entry point
