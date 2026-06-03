@@ -1,6 +1,6 @@
 # Current Task
 
-**Status:** 🟢 V1 Build — Step 2 in progress
+**Status:** 🟢 V1 Build — Step 1 complete, Step 2 starting
 **Last Updated:** 2026-06-03
 
 ---
@@ -23,7 +23,7 @@ Ship a working `POST /v1/match` endpoint that:
 ### SPARK Step 1 — Schema Contract ✅
 - [x] Initialize Railway PostgreSQL (Supabase) connection — `src/lib/prisma.ts` + `.env.example`
 - [x] Write Prisma schema: `users`, `offers`, `api_calls`, `settings` — `prisma/schema.prisma`
-- [ ] Write and run initial migration — needs real `DATABASE_URL`
+- [x] Write and run initial migration — `20260603111352_init` applied via Supavisor session mode (port 5432 on pooler host; direct host port blocked)
 - [x] Seed `settings` with `call_cost = 0.10`, `cronjob_interval_minutes = 10`, `ai_scoring_enabled = true` — `prisma/seed.ts`
 - [x] Define Zod schema for `POST /v1/match` request body — `src/types/match.ts` + `src/types/profile.ts`
 - [x] Define TypeScript types for `MatchResponse`, `MatchedOffer`, `UnmatchedOffer` — `src/types/match.ts`

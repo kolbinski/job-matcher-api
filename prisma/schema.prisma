@@ -5,9 +5,8 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // directUrl is required when using Supabase connection pooler (PgBouncer)
-  // Uncomment when deploying to Railway + Supabase:
-  // directUrl = env("DIRECT_URL")
+  // directUrl bypasses PgBouncer for Prisma CLI (migrate, introspect)
+  directUrl = env("DIRECT_URL")
 }
 
 model Settings {
