@@ -1,0 +1,147 @@
+import { z } from 'zod'
+
+const LocationSchema = z.object({
+  city: z.string(),
+  country_code: z.string().min(2).max(2),
+})
+
+const BasicInfoSchema = z.object({
+  full_name: z.string(),
+  current_title: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email().optional(),
+  linkedin: z.string().optional(),
+  github: z.string().optional(),
+  location: LocationSchema.optional(),
+  remote_ok: z.boolean().default(false),
+  job_search_status: z.string().optional(),
+})
+
+const SalaryRangeSchema = z.object({
+  min: z.number().nonnegative(),
+  max: z.number().nonnegative(),
+})
+
+const CareerGoalsSchema = z.object({
+  short_term: z
+    .object({
+      timeframe_months: z.number().int().positive().optional(),
+      target_role: z.array(z.string()).optional(),
+      company_type: z.string().optional(),
+      salary_target_pln_net_b2b: SalaryRangeSchema.optional(),
+      current_salary_pln_net_b2b: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  long_term: z
+    .object({
+      timeframe_years: z.number().int().positive().optional(),
+      target_role: z.array(z.string()).optional(),
+      markets_considered: z.array(z.string()).optional(),
+    })
+    .optional(),
+})
+
+const WorkStyleSchema = z.object({
+  environment_preferences: z.record(z.string(), z.string()).optional(),
+  collaboration_style: z.record(z.string(), z.string()).optional(),
+})
+
+const EducationSchema = z.object({
+  institution: z.string(),
+  degree: z.string().optional(),
+  field: z.string().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+  gpa: z.string().optional(),
+  thesis: z.string().optional(),
+})
+
+const ProjectSchema = z.object({
+  name: z.string(),
+  technologies: z.array(z.string()).optional(),
+  team_size: z.number().int().positive().optional(),
+  role: z.string().optional(),
+  achievements: z.array(z.string()).optional(),
+})
+
+const WorkExperienceSchema = z.object({
+  company: z.string(),
+  title: z.string(),
+  date_from: z.string(),
+  date_to: z.string().optional(),
+  company_type: z.string().optional(),
+  company_size: z.string().optional(),
+  industry: z.string().optional(),
+  work_model: z.string().optional(),
+  projects: z.array(ProjectSchema).optional(),
+  technologies: z.array(z.string()).optional(),
+  achievements: z.array(z.string()).optional(),
+})
+
+const OwnProjectSchema = z.object({
+  name: z.string(),
+  github: z.string().optional(),
+  demo_url: z.string().optional(),
+  npm: z.string().optional(),
+  technologies: z.array(z.string()).optional(),
+  status: z.string().optional(),
+  users: z.number().int().nonnegative().optional(),
+  github_stars: z.number().int().nonnegative().optional(),
+})
+
+const TechnologySchema = z.object({
+  name: z.string(),
+  since: z.number().int().optional(),
+  last_used: z.number().int().optional(),
+  context: z.string().optional(),
+})
+
+const SoftSkillSchema = z.object({
+  skill: z.string(),
+  evidence: z.string().optional(),
+})
+
+const CertificationSchema = z.object({
+  name: z.string(),
+  status: z.string().optional(),
+  planned_date: z.string().optional(),
+  issued_date: z.string().optional(),
+})
+
+const PreferencesSchema = z.object({
+  company_type: z.array(z.string()).optional(),
+  company_type_excluded: z.array(z.string()).optional(),
+  work_model: z.string().optional(),
+  max_office_days_per_week: z.number().int().nonnegative().optional(),
+  team_size: SalaryRangeSchema.optional(),
+  industries: z.array(z.string()).optional(),
+  salary_pln_net_b2b: SalaryRangeSchema.optional(),
+  markets: z.array(z.string()).optional(),
+})
+
+const RedFlagSchema = z.object({
+  category: z.string(),
+  description: z.string(),
+})
+
+export const CandidateProfileSchema = z.object({
+  profile_version: z.string().optional(),
+  created_at: z.string().optional(),
+  basic_info: BasicInfoSchema,
+  career_goals: CareerGoalsSchema.optional(),
+  work_style: WorkStyleSchema.optional(),
+  education: z.array(EducationSchema).optional(),
+  work_experience: z.array(WorkExperienceSchema).optional(),
+  own_projects: z.array(OwnProjectSchema).optional(),
+  technologies: z.array(TechnologySchema),
+  soft_skills: z.array(SoftSkillSchema).optional(),
+  certifications: z.array(CertificationSchema).optional(),
+  preferences: PreferencesSchema,
+  red_flags: z.array(RedFlagSchema),
+  strengths: z.array(z.string()).optional(),
+})
+
+export type CandidateProfile = z.infer<typeof CandidateProfileSchema>
+export type Technology = z.infer<typeof TechnologySchema>
+export type RedFlag = z.infer<typeof RedFlagSchema>
+export type Preferences = z.infer<typeof PreferencesSchema>
