@@ -1,6 +1,6 @@
 const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
 const PAGE_SIZE = 100
-const PAGE_DELAY_MS = 20_000
+const PAGE_DELAY_MS = 2_000
 
 const HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
