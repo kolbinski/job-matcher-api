@@ -82,16 +82,18 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
     })
   }
 
-  // Bulk update in batches of 500 — each batch runs as one transaction
+  // Update existing offers sequentially — no transaction wrapper so the single
+  // pooled connection is released between each query and health checks can run.
+  let updatedCount = 0
   for (const batch of chunk(toUpdate, BATCH_SIZE)) {
-    await prisma.$transaction(
-      batch.map(o =>
-        prisma.offer.update({
-          where: { slug: o.slug },
-          data: toUpsertData(o, fetchedAt),
-        })
-      )
-    )
+    for (const offer of batch) {
+      await prisma.offer.update({
+        where: { slug: offer.slug },
+        data: toUpsertData(offer, fetchedAt),
+      })
+    }
+    updatedCount += batch.length
+    console.log(`[offerSync] Updated ${updatedCount}/${toUpdate.length}...`)
   }
 
   const fetchedSlugs = raw.map(o => o.slug)
