@@ -59,9 +59,15 @@ function logSkillBreakdown(offers: NormalizedOffer[]): void {
 export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deactivated: number }> {
   const raw = await fetchOffers()
 
+  const MIN_FETCH_THRESHOLD = 1_000
+
   if (raw.length === 0) {
     console.warn('[offerSync] API returned 0 offers — skipping deactivation')
     return { fetched: 0, inserted: 0, updated: 0, deactivated: 0 }
+  }
+
+  if (raw.length < MIN_FETCH_THRESHOLD) {
+    console.warn(`[offerSync] Partial fetch detected (${raw.length} offers < ${MIN_FETCH_THRESHOLD} threshold) — upserting but skipping deactivation to protect existing data`)
   }
 
   const fetchedAt = new Date()
@@ -98,10 +104,13 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
 
   const fetchedSlugs = raw.map(o => o.slug)
 
-  const deactivated = await prisma.offer.updateMany({
-    where: { slug: { notIn: fetchedSlugs }, is_active: true },
-    data: { is_active: false },
-  })
+  let deactivated = { count: 0 }
+  if (raw.length >= MIN_FETCH_THRESHOLD) {
+    deactivated = await prisma.offer.updateMany({
+      where: { slug: { notIn: fetchedSlugs }, is_active: true },
+      data: { is_active: false },
+    })
+  }
 
   console.log(
     `[offerSync] Sync complete: fetched ${raw.length}, inserted ${toInsert.length}, updated ${toUpdate.length}, deactivated ${deactivated.count}`,

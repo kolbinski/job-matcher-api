@@ -214,8 +214,11 @@ describe('syncOffers', () => {
       ],
     })
 
-    // Only `stays` appears in latest fetch; `gone` is absent
-    mockFetch.mockResolvedValueOnce([makeOffer('stays')])
+    // Mock 1000 offers so the deactivation threshold is met.
+    // Only `stays` is in the fetch — `gone` is absent and should be deactivated.
+    // The other 999 slugs don't exist in DB so they cause no side effects.
+    const padding = Array.from({ length: 999 }, (_, i) => makeOffer(`padding-${i}`))
+    mockFetch.mockResolvedValueOnce([makeOffer('stays'), ...padding])
 
     await syncOffers()
 
