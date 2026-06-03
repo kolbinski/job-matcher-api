@@ -81,7 +81,7 @@ Sum = 1.00. Any change to weights is a breaking change tracked in `memory.md`.
 
 ## Git Workflow
 
-When the user says **"commit"**: run `git add -A` and commit with an appropriate message describing the changes made.
+When the user says **"commit"**: run `git add -A`, commit with an appropriate message describing the changes made, then push to origin.
 
 ---
 
