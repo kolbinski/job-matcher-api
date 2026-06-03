@@ -1,6 +1,5 @@
 const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
-const PAGE_SIZE = 100
-const PAGE_DELAY_MS = 2_000
+export const PAGE_SIZE = 100
 
 const HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -32,6 +31,11 @@ export interface NormalizedOffer {
   languages: string[]
   url: string | null
   published_at: Date | null
+}
+
+export interface FetchPageResult {
+  offers: NormalizedOffer[]
+  nextCursor: number | null
 }
 
 interface RawSkill {
@@ -78,7 +82,7 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     street: typeof raw.street === 'string' ? raw.street : null,
     latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
     longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
-    category_id: null, // API returns category.key (string) — not used in V1 scoring
+    category_id: null,
     open_to_hire_ukrainians:
       typeof raw.isOpenToHireUkrainians === 'boolean' ? raw.isOpenToHireUkrainians : null,
     languages: extractSkillNames(raw.languages),
@@ -94,44 +98,40 @@ interface ApiResponse {
   }
 }
 
-export async function fetchOffers(): Promise<NormalizedOffer[]> {
-  const all: NormalizedOffer[] = []
-  let from = 0
-  let page = 0
-
-  while (true) {
-    if (page > 0) {
-      await new Promise(resolve => setTimeout(resolve, PAGE_DELAY_MS))
-    }
-
-    const url = `${JJ_API}?from=${from}&itemsCount=${PAGE_SIZE}`
-    const res = await fetch(url, { headers: HEADERS })
-
-    if (res.status === 500 || from >= 10_000) {
-      console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
-      break
-    }
-
-    if (!res.ok) {
-      throw new Error(`JustJoin.it API error: ${res.status} ${res.statusText} (from=${from})`)
-    }
-
-    const body = (await res.json()) as ApiResponse
-
-    if (!Array.isArray(body.data) || body.data.length === 0) break
-
-    for (const item of body.data) {
-      const offer = normalizeOffer(item)
-      if (offer) all.push(offer)
-    }
-
-    console.log(`[offerScraper] Page ${page + 1}: fetched ${body.data.length} offers (total so far: ${all.length})`)
-
-    const nextCursor = body.meta?.next?.cursor
-    if (nextCursor === null || nextCursor === undefined) break
-    from = nextCursor
-    page++
+// Fetches a single page of offers. syncOffers() drives the pagination loop
+// so it can upsert each page immediately rather than collecting all 10,000 first.
+export async function fetchPage(from: number): Promise<FetchPageResult> {
+  if (from >= 10_000) {
+    console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
+    return { offers: [], nextCursor: null }
   }
 
-  return all
+  const url = `${JJ_API}?from=${from}&itemsCount=${PAGE_SIZE}`
+  const res = await fetch(url, { headers: HEADERS })
+
+  if (res.status === 500) {
+    console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
+    return { offers: [], nextCursor: null }
+  }
+
+  if (!res.ok) {
+    throw new Error(`JustJoin.it API error: ${res.status} ${res.statusText} (from=${from})`)
+  }
+
+  const body = (await res.json()) as ApiResponse
+
+  if (!Array.isArray(body.data) || body.data.length === 0) {
+    return { offers: [], nextCursor: null }
+  }
+
+  const offers: NormalizedOffer[] = []
+  for (const item of body.data) {
+    const offer = normalizeOffer(item)
+    if (offer) offers.push(offer)
+  }
+
+  return {
+    offers,
+    nextCursor: body.meta?.next?.cursor ?? null,
+  }
 }

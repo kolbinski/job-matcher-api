@@ -1,8 +1,9 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
-import { fetchOffers, NormalizedOffer } from '../services/offerScraper'
+import { fetchPage, NormalizedOffer, PAGE_SIZE } from '../services/offerScraper'
 
 const BATCH_SIZE = 500
+const PAGE_DELAY_MS = 2_000
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -41,13 +42,36 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
   }
 }
 
-function logSkillBreakdown(offers: NormalizedOffer[]): void {
-  const counts = new Map<string, number>()
-  for (const offer of offers) {
-    const primary = offer.required_skills[0]
-    if (primary) counts.set(primary, (counts.get(primary) ?? 0) + 1)
+async function upsertPage(
+  offers: NormalizedOffer[],
+  existingSlugs: Set<string>,
+  fetchedAt: Date,
+): Promise<{ inserted: number; updated: number }> {
+  const toInsert = offers.filter(o => !existingSlugs.has(o.slug))
+  const toUpdate = offers.filter(o => existingSlugs.has(o.slug))
+
+  for (const batch of chunk(toInsert, BATCH_SIZE)) {
+    await prisma.offer.createMany({
+      data: batch.map(o => toUpsertData(o, fetchedAt)),
+      skipDuplicates: true,
+    })
   }
-  const top = [...counts.entries()]
+
+  for (const offer of toUpdate) {
+    await prisma.offer.update({
+      where: { slug: offer.slug },
+      data: toUpsertData(offer, fetchedAt),
+    })
+  }
+
+  // Newly inserted slugs are now in DB — add them to the set for later pages
+  for (const o of toInsert) existingSlugs.add(o.slug)
+
+  return { inserted: toInsert.length, updated: toUpdate.length }
+}
+
+function logSkillBreakdown(slugCounts: Map<string, number>): void {
+  const top = [...slugCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
     .map(([skill, n]) => `${skill}: ${n}`)
@@ -56,55 +80,65 @@ function logSkillBreakdown(offers: NormalizedOffer[]): void {
 }
 
 export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
-  const raw = await fetchOffers()
-
-  // Rule A-4: never delete from DB when fetch returns nothing (API error / rate limit)
-  if (raw.length === 0) {
-    console.warn('[offerSync] API returned 0 offers — skipping deletion')
-    return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
-  }
-
   const fetchedAt = new Date()
 
-  // One query to split inserts from updates
+  // Load existing slugs once — upsertPage keeps it up to date as pages are inserted
   const existingSlugs = new Set(
     (await prisma.offer.findMany({ select: { slug: true } })).map(o => o.slug)
   )
 
-  const toInsert = raw.filter(o => !existingSlugs.has(o.slug))
-  const toUpdate = raw.filter(o => existingSlugs.has(o.slug))
+  const allFetchedSlugs: string[] = []
+  const skillCounts = new Map<string, number>()
+  let totalFetched = 0
+  let totalInserted = 0
+  let totalUpdated = 0
+  let from = 0
+  let pageNum = 0
 
-  // Bulk insert in batches of 500
-  for (const batch of chunk(toInsert, BATCH_SIZE)) {
-    await prisma.offer.createMany({
-      data: batch.map(o => toUpsertData(o, fetchedAt)),
-      skipDuplicates: true,
-    })
-  }
-
-  // Update existing offers sequentially — no transaction wrapper so the single
-  // pooled connection is released between each query and health checks can run.
-  let updatedCount = 0
-  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
-    for (const offer of batch) {
-      await prisma.offer.update({
-        where: { slug: offer.slug },
-        data: toUpsertData(offer, fetchedAt),
-      })
+  while (true) {
+    if (pageNum > 0) {
+      await new Promise(resolve => setTimeout(resolve, PAGE_DELAY_MS))
     }
-    updatedCount += batch.length
-    console.log(`[offerSync] Updated ${updatedCount}/${toUpdate.length}...`)
+
+    const { offers, nextCursor } = await fetchPage(from)
+
+    if (offers.length === 0) break
+
+    const { inserted, updated } = await upsertPage(offers, existingSlugs, fetchedAt)
+
+    for (const o of offers) {
+      allFetchedSlugs.push(o.slug)
+      const primary = o.required_skills[0]
+      if (primary) skillCounts.set(primary, (skillCounts.get(primary) ?? 0) + 1)
+    }
+
+    totalFetched += offers.length
+    totalInserted += inserted
+    totalUpdated += updated
+    pageNum++
+
+    console.log(
+      `[offerSync] Page ${pageNum}: ${offers.length} offers (inserted ${inserted}, updated ${updated}) — total so far: ${totalFetched}`,
+    )
+
+    if (nextCursor === null) break
+    from = nextCursor
   }
 
-  const fetchedSlugs = raw.map(o => o.slug)
+  // Rule A-4: never delete when nothing was fetched (API error / rate limit)
+  if (totalFetched === 0) {
+    console.warn('[offerSync] No offers fetched — skipping deletion')
+    return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
+  }
+
   const deleted = await prisma.offer.deleteMany({
-    where: { slug: { notIn: fetchedSlugs } },
+    where: { slug: { notIn: allFetchedSlugs } },
   })
 
   console.log(
-    `[offerSync] Sync complete: fetched ${raw.length}, inserted ${toInsert.length}, updated ${toUpdate.length}, deleted ${deleted.count}`,
+    `[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deleted ${deleted.count}`,
   )
-  logSkillBreakdown(raw)
+  logSkillBreakdown(skillCounts)
 
-  return { fetched: raw.length, inserted: toInsert.length, updated: toUpdate.length, deleted: deleted.count }
+  return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: deleted.count }
 }

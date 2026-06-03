@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { prisma } from '../src/lib/prisma'
 import { normalizeOffer } from '../src/services/offerScraper'
-import type { NormalizedOffer } from '../src/services/offerScraper'
+import type { NormalizedOffer, FetchPageResult } from '../src/services/offerScraper'
 
 vi.mock('../src/services/offerScraper', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/offerScraper')>()
   return {
     ...actual,
-    fetchOffers: vi.fn(),
+    fetchPage: vi.fn(),
   }
 })
 
-import { fetchOffers } from '../src/services/offerScraper'
+import { fetchPage } from '../src/services/offerScraper'
 import { syncOffers } from '../src/jobs/offerSync'
 
-const mockFetch = vi.mocked(fetchOffers)
+const mockFetchPage = vi.mocked(fetchPage)
 
 const TEST_SLUG_PREFIX = 'test-offersync-'
 
@@ -31,7 +31,7 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     remote_interview: true,
     required_skills: ['typescript', 'node.js'],
     nice_to_have_skills: [],
-    employment_types: [{ from: 8000, to: 12000, currency: 'pln', type: 'b2b', unit: 'month', gross: false }],
+    employment_types: [],
     multilocation: null,
     city: 'Warszawa',
     street: null,
@@ -44,6 +44,11 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     published_at: new Date('2026-06-01T00:00:00Z'),
     ...overrides,
   }
+}
+
+// Return a single page of offers then stop
+function mockSinglePage(offers: NormalizedOffer[]): void {
+  mockFetchPage.mockResolvedValueOnce({ offers, nextCursor: null } satisfies FetchPageResult)
 }
 
 function makeDbOffer(slug: string) {
@@ -79,8 +84,7 @@ describe('normalizeOffer', () => {
   })
 
   it('returns null for a record missing slug', () => {
-    const result = normalizeOffer({ title: 'Dev', companyName: 'Corp', employmentTypes: [] })
-    expect(result).toBeNull()
+    expect(normalizeOffer({ title: 'Dev', companyName: 'Corp', employmentTypes: [] })).toBeNull()
   })
 
   it('reads top-level latitude/longitude and stores locations as multilocation', () => {
@@ -112,12 +116,7 @@ describe('normalizeOffer', () => {
   })
 
   it('constructs url from slug', () => {
-    const result = normalizeOffer({
-      slug: 'company-role-city-tech',
-      companyName: 'Corp',
-      title: 'Dev',
-      employmentTypes: [],
-    })
+    const result = normalizeOffer({ slug: 'company-role-city-tech', companyName: 'Corp', title: 'Dev', employmentTypes: [] })
     expect(result?.url).toBe('https://justjoin.it/job-offer/company-role-city-tech')
   })
 })
@@ -127,16 +126,17 @@ describe('normalizeOffer', () => {
 describe('syncOffers', () => {
   beforeEach(async () => {
     await prisma.offer.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })
+    vi.clearAllMocks()
   })
 
   afterEach(async () => {
     await prisma.offer.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })
   })
 
-  it('returns early without deleting anything when fetch returns empty array', async () => {
+  it('returns early without deleting when page returns empty offers', async () => {
     await prisma.offer.create({ data: makeDbOffer('existing') })
 
-    mockFetch.mockResolvedValueOnce([])
+    mockFetchPage.mockResolvedValueOnce({ offers: [], nextCursor: null })
 
     const result = await syncOffers()
 
@@ -144,8 +144,8 @@ describe('syncOffers', () => {
     expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })).not.toBeNull()
   })
 
-  it('inserts new offers', async () => {
-    mockFetch.mockResolvedValueOnce([makeOffer('new-1'), makeOffer('new-2')])
+  it('inserts new offers from a single page', async () => {
+    mockSinglePage([makeOffer('new-1'), makeOffer('new-2')])
 
     const result = await syncOffers()
 
@@ -158,7 +158,7 @@ describe('syncOffers', () => {
   it('updates existing offers', async () => {
     await prisma.offer.create({ data: { ...makeDbOffer('existing'), title: 'Old Title' } })
 
-    mockFetch.mockResolvedValueOnce([makeOffer('existing', { title: 'Updated Title' })])
+    mockSinglePage([makeOffer('existing', { title: 'Updated Title' })])
 
     await syncOffers()
 
@@ -166,14 +166,10 @@ describe('syncOffers', () => {
     expect(offer?.title).toBe('Updated Title')
   })
 
-  it('hard deletes offers absent from the latest fetch', async () => {
+  it('hard deletes offers absent from all fetched pages', async () => {
     await prisma.offer.createMany({ data: [makeDbOffer('stays'), makeDbOffer('gone')] })
 
-    // Mock 1000 offers so the deletion threshold is met.
-    // Only `stays` is in the fetch — `gone` is absent and should be hard deleted.
-    // The 999 padding slugs don't exist in DB so they have no side effects.
-    const padding = Array.from({ length: 999 }, (_, i) => makeOffer(`padding-${i}`))
-    mockFetch.mockResolvedValueOnce([makeOffer('stays'), ...padding])
+    mockSinglePage([makeOffer('stays')])
 
     await syncOffers()
 
@@ -181,9 +177,25 @@ describe('syncOffers', () => {
     expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })).toBeNull()
   })
 
-  it('re-inserts an offer that was previously deleted when it reappears in the fetch', async () => {
-    // Offer not in DB — simulates a previously deleted offer reappearing in the API
-    mockFetch.mockResolvedValueOnce([makeOffer('comeback')])
+  it('upserts across multiple pages and deletes only after all pages are done', async () => {
+    await prisma.offer.create({ data: makeDbOffer('old') })
+
+    // Page 1
+    mockFetchPage.mockResolvedValueOnce({ offers: [makeOffer('p1-a'), makeOffer('p1-b')], nextCursor: 100 })
+    // Page 2
+    mockFetchPage.mockResolvedValueOnce({ offers: [makeOffer('p2-a')], nextCursor: null })
+
+    const result = await syncOffers()
+
+    expect(result.fetched).toBe(3)
+    expect(result.inserted).toBe(3)
+    // 'old' was not in any page — should be deleted
+    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}old` } })).toBeNull()
+    expect(await prisma.offer.count({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })).toBe(3)
+  })
+
+  it('re-inserts an offer that was previously deleted when it reappears', async () => {
+    mockSinglePage([makeOffer('comeback')])
 
     await syncOffers()
 
