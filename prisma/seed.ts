@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 const SEED_SETTINGS = [
   { key: 'call_cost', value: '0.10' },
   { key: 'cronjob_interval_minutes', value: '15' },
-  { key: 'cronjob_schedule', value: '45,0,15,30 7-15 * * 1-5' },
+  { key: 'cronjob_schedule', value: '45 7 * * 1-5|0 8-16 * * 1-5' },
   { key: 'ai_scoring_enabled', value: 'true' },
 ]
 

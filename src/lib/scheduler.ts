@@ -2,16 +2,29 @@ import cron from 'node-cron'
 import { prisma } from './prisma'
 import { syncOffers } from '../jobs/offerSync'
 
-const DEFAULT_SCHEDULE = '45,0,15,30 7-15 * * 1-5'
+// Two expressions separated by '|':
+//   '45 7 * * 1-5'   — 08:45 CET (full scrape)
+//   '0 8-16 * * 1-5' — 09:00-17:00 CET, top of each hour
+const DEFAULT_SCHEDULE = '45 7 * * 1-5|0 8-16 * * 1-5'
 
 let syncInProgress = false
 
-// Mon-Fri 07:00-15:59 UTC = 08:00-16:59 CET, covering the 08:45-17:00 CET window
+// Mon-Fri 07:45-16:59 UTC = 08:45-17:59 CET
 function isWithinSchedule(): boolean {
   const now = new Date()
-  const day = now.getUTCDay()  // 0=Sun … 6=Sat
+  const day = now.getUTCDay()   // 0=Sun … 6=Sat
   const hour = now.getUTCHours()
-  return day >= 1 && day <= 5 && hour >= 7 && hour <= 15
+  const min = now.getUTCMinutes()
+  const afterStart = hour > 7 || (hour === 7 && min >= 45)
+  const beforeEnd = hour <= 16
+  return day >= 1 && day <= 5 && afterStart && beforeEnd
+}
+
+function cetTimeString(): string {
+  const now = new Date()
+  const h = (now.getUTCHours() + 1) % 24
+  const m = now.getUTCMinutes()
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 async function runSync(): Promise<void> {
@@ -23,6 +36,7 @@ async function runSync(): Promise<void> {
     console.log('[scheduler] Previous sync still running — skipping this tick')
     return
   }
+  console.log(`[scheduler] Starting scheduled sync at ${cetTimeString()}`)
   syncInProgress = true
   try {
     await syncOffers()
@@ -38,16 +52,26 @@ export async function startScheduler(): Promise<void> {
     where: { key: 'cronjob_schedule' },
   })
 
-  const schedule = setting?.value ?? DEFAULT_SCHEDULE
+  const raw = setting?.value ?? DEFAULT_SCHEDULE
+  const expressions = raw.split('|').map(e => e.trim()).filter(Boolean)
 
-  if (!cron.validate(schedule)) {
-    console.error(`[scheduler] Invalid cron expression in settings: "${schedule}" — scheduler not started`)
+  let scheduled = 0
+  for (const expr of expressions) {
+    if (!cron.validate(expr)) {
+      console.error(`[scheduler] Invalid cron expression: "${expr}" — skipping`)
+      continue
+    }
+    cron.schedule(expr, runSync)
+    scheduled++
+  }
+
+  if (scheduled === 0) {
+    console.error('[scheduler] No valid cron expressions found — scheduler not started')
     return
   }
 
-  cron.schedule(schedule, runSync)
-  console.log(`[scheduler] Offer sync scheduled: ${schedule}`)
+  console.log(`[scheduler] Scheduled ${scheduled} expression(s): ${expressions.join(' | ')}`)
 
-  // Startup sync — isWithinSchedule() guard applies here too
+  // Startup sync — isWithinSchedule() guard applies
   runSync().catch(err => console.error('[scheduler] Startup sync failed:', err))
 }
