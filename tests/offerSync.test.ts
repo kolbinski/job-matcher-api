@@ -54,43 +54,44 @@ afterAll(async () => {
 // ─── normalizeOffer ───────────────────────────────────────────────────────────
 
 describe('normalizeOffer', () => {
-  it('normalizes required skills to lowercase', () => {
+  it('normalizes required_skills to lowercase (stealth_mode snake_case format)', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
       title: 'Dev',
-      companyName: 'Corp',
-      requiredSkills: ['React', 'TypeScript', 'NODE.JS'],
-      employmentTypes: [],
+      company_name: 'Corp',
+      required_skills: ['React', 'TypeScript', 'NODE.JS'],
+      employment_types: [],
     })
     expect(result?.required_skills).toEqual(['react', 'typescript', 'node.js'])
   })
 
   it('returns null for a record missing slug', () => {
-    const result = normalizeOffer({ title: 'Dev', companyName: 'Corp', employmentTypes: [] })
+    const result = normalizeOffer({ title: 'Dev', company_name: 'Corp', employment_types: [] })
     expect(result).toBeNull()
   })
 
-  it('extracts street from locations[0] (trev0n actor format)', () => {
+  it('extracts street and coordinates from multilocation[0]', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
-      companyName: 'Corp',
+      company_name: 'Corp',
       title: 'Dev',
-      allEmploymentTypes: [],
-      locations: [{ city: 'Wrocław', street: 'Żmigrodzka 81' }],
+      employment_types: [],
+      multilocation: [{ city: 'Wrocław', street: 'Żmigrodzka 81', latitude: 51.14, longitude: 17.03 }],
+      latitude: 51.14,
+      longitude: 17.03,
     })
     expect(result?.street).toBe('Żmigrodzka 81')
-    // trev0n actor does not provide coordinates — always null
-    expect(result?.latitude).toBeNull()
-    expect(result?.longitude).toBeNull()
+    expect(result?.latitude).toBe(51.14)
+    expect(result?.longitude).toBe(17.03)
   })
 
   it('defaults nice_to_have_skills to [] when null', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
-      companyName: 'Corp',
+      company_name: 'Corp',
       title: 'Dev',
-      employmentTypes: [],
-      niceToHaveSkills: null,
+      employment_types: [],
+      nice_to_have_skills: null,
     })
     expect(result?.nice_to_have_skills).toEqual([])
   })
@@ -202,10 +203,10 @@ describe('syncOffers', () => {
     // Only `stays` appears in latest fetch; `gone` is absent
     mockFetch.mockResolvedValueOnce([makeOffer('stays')])
 
-    const result = await syncOffers()
+    await syncOffers()
 
-    expect(result.deactivated).toBe(1)
-
+    // Assert on specific offer states — not the global deactivated count,
+    // which includes any real offers already in the shared DB.
     const stays = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}stays` } })
     const gone = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })
     expect(stays?.is_active).toBe(true)

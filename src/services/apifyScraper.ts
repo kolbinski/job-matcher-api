@@ -1,20 +1,10 @@
 import { ApifyClient } from 'apify-client'
 import { env } from '../lib/env'
 
-const ACTOR_ID = 'trev0n/justjoinit-scraper'
-
-// All JustJoin.it technology categories. Passing each as a separate startUrl gives the
-// actor 24 independent entry points so it doesn't stop at the first listing page (100 offers).
-// The upsert in offerSync.ts deduplicates any offer that appears in multiple categories.
-const JJ_CATEGORIES = [
-  'javascript', 'html', 'php', 'ruby', 'python', 'java', 'net', 'scala',
-  'c', 'mobile', 'testing', 'devops', 'admin', 'ux', 'pm', 'game',
-  'analytics', 'security', 'data', 'go', 'support', 'erp', 'architecture', 'ai', 'other',
-]
-
-const START_URLS = JJ_CATEGORIES.map(cat => ({
-  url: `https://justjoin.it/job-offers/all-locations/${cat}`,
-}))
+// stealth_mode actor has internal pagination (offset + max_items_per_url parameters)
+// and returns all listing results — not capped at 100 like RSC-payload scrapers.
+// Output fields are already snake_case, matching the DB schema closely.
+const ACTOR_ID = 'stealth_mode/justjoin-jobs-search-scraper'
 
 export interface NormalizedOffer {
   slug: string
@@ -54,55 +44,62 @@ function toDate(value: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
+function str(v: unknown): string | null {
+  return typeof v === 'string' ? v : null
+}
+
 export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | null {
-  const slug = typeof raw.slug === 'string' ? raw.slug : null
+  const slug = str(raw.slug)
   if (!slug) return null
 
-  // trev0n actor uses `locations` (not `multilocation`); no coordinates in this actor
+  // stealth_mode uses snake_case field names and a `multilocation` array
   const loc =
-    Array.isArray(raw.locations) && raw.locations.length > 0
-      ? (raw.locations[0] as Record<string, unknown>)
+    Array.isArray(raw.multilocation) && raw.multilocation.length > 0
+      ? (raw.multilocation[0] as Record<string, unknown>)
       : null
 
   return {
     slug,
     source: 'justjoin',
-    title: typeof raw.title === 'string' ? raw.title : '',
-    company_name: typeof raw.companyName === 'string' ? raw.companyName : '',
-    company_logo_url: typeof raw.companyLogoUrl === 'string' ? raw.companyLogoUrl : null,
-    experience_level: typeof raw.experienceLevel === 'string' ? raw.experienceLevel : null,
-    workplace_type: typeof raw.workplaceType === 'string' ? raw.workplaceType : null,
-    working_time: typeof raw.workingTime === 'string' ? raw.workingTime : null,
-    remote_interview: typeof raw.remoteInterview === 'boolean' ? raw.remoteInterview : null,
-    required_skills: normalizeSkills(raw.requiredSkills),
-    nice_to_have_skills: normalizeSkills(raw.niceToHaveSkills),
-    employment_types: Array.isArray(raw.allEmploymentTypes) ? raw.allEmploymentTypes : [],
-    multilocation: Array.isArray(raw.locations) ? raw.locations : null,
-    city: typeof raw.city === 'string' ? raw.city : null,
+    title: str(raw.title) ?? '',
+    company_name: str(raw.company_name) ?? '',
+    company_logo_url: str(raw.company_logo_url),
+    experience_level: str(raw.experience_level),
+    workplace_type: str(raw.workplace_type),
+    working_time: str(raw.working_time),
+    remote_interview: typeof raw.remote_interview === 'boolean' ? raw.remote_interview : null,
+    required_skills: normalizeSkills(raw.required_skills),
+    nice_to_have_skills: normalizeSkills(raw.nice_to_have_skills),
+    employment_types: Array.isArray(raw.employment_types) ? raw.employment_types : [],
+    multilocation: Array.isArray(raw.multilocation) ? raw.multilocation : null,
+    city: str(raw.city),
     street: loc && typeof loc.street === 'string' ? loc.street : null,
-    latitude: null,
-    longitude: null,
-    category_id: typeof raw.categoryId === 'number' ? raw.categoryId : null,
-    open_to_hire_ukrainians: null,
+    latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
+    longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
+    category_id: typeof raw.category_id === 'number' ? raw.category_id : null,
+    open_to_hire_ukrainians:
+      typeof raw.open_to_hire_ukrainians === 'boolean' ? raw.open_to_hire_ukrainians : null,
     languages: normalizeSkills(raw.languages),
-    url: typeof raw.jobUrl === 'string' ? raw.jobUrl : null,
-    published_at: toDate(raw.publishedAt),
+    url: str(raw.job_url) ?? str(raw.url),
+    published_at: toDate(raw.published_at),
   }
 }
 
 export async function fetchOffersFromApify(): Promise<NormalizedOffer[]> {
   const client = new ApifyClient({ token: env.APIFY_API_TOKEN })
 
-  // startUrls: one entry per category so the actor has 24 independent starting points.
-  // Without this, the actor hits the default listing once and stops at 100 offers.
-  // maxItems: 0 = unlimited within each startUrl.
-  const run = await client.actor(ACTOR_ID).call({ startUrls: START_URLS, maxItems: 0 })
+  // Single all-locations URL + high max_items_per_url — the actor paginates internally
+  // via its offset mechanism, unlike RSC-payload actors that are hard-capped at 100.
+  const run = await client.actor(ACTOR_ID).call({
+    urls: [{ url: 'https://justjoin.it/job-offers/all-locations' }],
+    max_items_per_url: 10000,
+  })
 
   const allItems: Record<string, unknown>[] = []
   let offset = 0
   const limit = 1000
 
-  // Paginate through dataset — listItems defaults to 1000 items per page
+  // Paginate through Apify dataset in chunks of 1000
   while (true) {
     const page = await client.dataset(run.defaultDatasetId).listItems({ offset, limit })
     allItems.push(...(page.items as Record<string, unknown>[]))
