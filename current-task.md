@@ -59,10 +59,14 @@ Ship a working `POST /v1/match` endpoint that:
 
 ---
 
-## Cronjob (parallel track)
-- [ ] Implement Apify FalconScrape poller (`node-cron` + `apify-client`)
-- [ ] Upsert logic: slug as primary key, `is_active = false` for missing offers
-- [ ] Test: empty array response from Apify must NOT mark all offers inactive
+## Cronjob (parallel track) ✅
+- [x] Implement Apify FalconScrape poller (`node-cron` + `apify-client`) — `src/services/apifyScraper.ts` + `src/lib/scheduler.ts`
+- [x] Upsert logic: slug as primary key, `is_active = false` for missing offers — `src/jobs/offerSync.ts`
+- [x] Test: empty array response from Apify must NOT mark all offers inactive — `tests/offerSync.test.ts` (9 tests, all green)
+  - Scheduler starts with immediate run on boot, then every `settings.cronjob_interval_minutes` (default 10)
+  - In-progress lock prevents overlapping runs
+  - Paginated dataset fetch (1000 items/page) for large actor results
+  - `NODE_ENV=test` guard prevents scheduler from starting during Vitest runs
 
 ---
 
