@@ -107,9 +107,8 @@ export async function fetchOffers(): Promise<NormalizedOffer[]> {
     const url = `${JJ_API}?from=${from}&itemsCount=${PAGE_SIZE}`
     const res = await fetch(url, { headers: HEADERS })
 
-    if (res.status === 500) {
-      // JustJoin.it returns 500 when from exceeds the total offer count — treat as end of data
-      console.log(`[offerScraper] Got 500 at from=${from} — end of data reached`)
+    if (res.status === 500 || from >= 10_000) {
+      console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
       break
     }
 
