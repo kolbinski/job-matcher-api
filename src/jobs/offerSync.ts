@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
-import { fetchOffersFromApify, NormalizedOffer } from '../services/apifyScraper'
+import { fetchOffers, NormalizedOffer } from '../services/offerScraper'
 
 function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
   return {
@@ -34,19 +34,33 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
   }
 }
 
-export async function syncOffers(): Promise<{ upserted: number; deactivated: number }> {
-  const offers = await fetchOffersFromApify()
+function logSkillBreakdown(offers: NormalizedOffer[]): void {
+  const counts = new Map<string, number>()
+  for (const offer of offers) {
+    const primary = offer.required_skills[0]
+    if (primary) counts.set(primary, (counts.get(primary) ?? 0) + 1)
+  }
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([skill, n]) => `${skill}: ${n}`)
+    .join(', ')
+  console.log(`[offerSync] Top skills: ${top}`)
+}
 
-  // Guard: empty response means Apify was rate-limited or the actor failed silently.
+export async function syncOffers(): Promise<{ fetched: number; upserted: number; deactivated: number }> {
+  const raw = await fetchOffers()
+
+  // Guard: empty response means the API failed or is rate-limited.
   // Never deactivate all offers on an empty fetch (RULE A-4).
-  if (offers.length === 0) {
-    console.warn('[offerSync] Apify returned 0 offers — skipping deactivation')
-    return { upserted: 0, deactivated: 0 }
+  if (raw.length === 0) {
+    console.warn('[offerSync] API returned 0 offers — skipping deactivation')
+    return { fetched: 0, upserted: 0, deactivated: 0 }
   }
 
   const fetchedAt = new Date()
 
-  for (const offer of offers) {
+  for (const offer of raw) {
     const data = toUpsertData(offer, fetchedAt)
     await prisma.offer.upsert({
       where: { slug: offer.slug },
@@ -55,13 +69,17 @@ export async function syncOffers(): Promise<{ upserted: number; deactivated: num
     })
   }
 
-  const fetchedSlugs = offers.map(o => o.slug)
+  const fetchedSlugs = raw.map(o => o.slug)
 
   const deactivated = await prisma.offer.updateMany({
     where: { slug: { notIn: fetchedSlugs }, is_active: true },
     data: { is_active: false },
   })
 
-  console.log(`[offerSync] Upserted ${offers.length} offers, deactivated ${deactivated.count}`)
-  return { upserted: offers.length, deactivated: deactivated.count }
+  console.log(
+    `[offerSync] Sync complete: fetched ${raw.length}, upserted ${raw.length}, deactivated ${deactivated.count}`,
+  )
+  logSkillBreakdown(raw)
+
+  return { fetched: raw.length, upserted: raw.length, deactivated: deactivated.count }
 }

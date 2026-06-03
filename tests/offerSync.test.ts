@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { prisma } from '../src/lib/prisma'
-import { normalizeOffer } from '../src/services/apifyScraper'
-import type { NormalizedOffer } from '../src/services/apifyScraper'
+import { normalizeOffer } from '../src/services/offerScraper'
+import type { NormalizedOffer } from '../src/services/offerScraper'
 
-vi.mock('../src/services/apifyScraper', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/services/apifyScraper')>()
+vi.mock('../src/services/offerScraper', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/offerScraper')>()
   return {
     ...actual,
-    fetchOffersFromApify: vi.fn(),
+    fetchOffers: vi.fn(),
   }
 })
 
-import { fetchOffersFromApify } from '../src/services/apifyScraper'
+import { fetchOffers } from '../src/services/offerScraper'
 import { syncOffers } from '../src/jobs/offerSync'
 
-const mockFetch = vi.mocked(fetchOffersFromApify)
+const mockFetch = vi.mocked(fetchOffers)
 
 const TEST_SLUG_PREFIX = 'test-offersync-'
 
@@ -128,7 +128,7 @@ describe('syncOffers', () => {
 
     const result = await syncOffers()
 
-    expect(result).toEqual({ upserted: 0, deactivated: 0 })
+    expect(result).toEqual({ fetched: 0, upserted: 0, deactivated: 0 })
 
     const offer = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })
     expect(offer?.is_active).toBe(true)
@@ -139,6 +139,7 @@ describe('syncOffers', () => {
 
     const result = await syncOffers()
 
+    expect(result.fetched).toBe(2)
     expect(result.upserted).toBe(2)
 
     const offers = await prisma.offer.findMany({
