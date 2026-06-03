@@ -118,7 +118,7 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
     pageNum++
 
     console.log(
-      `[offerSync] Page ${pageNum}: ${offers.length} offers (inserted ${inserted}, updated ${updated}) — total so far: ${totalFetched}`,
+      `[offerScraper] Page ${pageNum}: fetched ${offers.length} offers (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
     )
 
     if (nextCursor === null) break
