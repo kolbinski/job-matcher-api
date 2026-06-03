@@ -80,7 +80,8 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
 export async function fetchOffersFromApify(): Promise<NormalizedOffer[]> {
   const client = new ApifyClient({ token: env.APIFY_API_TOKEN })
 
-  const run = await client.actor(ACTOR_ID).call({})
+  // maxItems: 0 = unlimited; default is 100 which only returns one page of results
+  const run = await client.actor(ACTOR_ID).call({ maxItems: 0 })
 
   const allItems: Record<string, unknown>[] = []
   let offset = 0
