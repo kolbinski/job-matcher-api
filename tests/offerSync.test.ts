@@ -70,19 +70,18 @@ describe('normalizeOffer', () => {
     expect(result).toBeNull()
   })
 
-  it('extracts street and coordinates from multilocation[0]', () => {
+  it('extracts street from locations[0] (trev0n actor format)', () => {
     const result = normalizeOffer({
       slug: 'test-slug',
       companyName: 'Corp',
       title: 'Dev',
-      employmentTypes: [],
-      multilocation: [
-        { city: 'Wrocław', slug: 'x', street: 'Żmigrodzka 81', latitude: 51.14, longitude: 17.03 },
-      ],
+      allEmploymentTypes: [],
+      locations: [{ city: 'Wrocław', street: 'Żmigrodzka 81' }],
     })
     expect(result?.street).toBe('Żmigrodzka 81')
-    expect(result?.latitude).toBe(51.14)
-    expect(result?.longitude).toBe(17.03)
+    // trev0n actor does not provide coordinates — always null
+    expect(result?.latitude).toBeNull()
+    expect(result?.longitude).toBeNull()
   })
 
   it('defaults nice_to_have_skills to [] when null', () => {

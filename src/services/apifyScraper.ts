@@ -1,7 +1,7 @@
 import { ApifyClient } from 'apify-client'
 import { env } from '../lib/env'
 
-const ACTOR_ID = 'falconscrape/just-join-it-scraper'
+const ACTOR_ID = 'trev0n/justjoinit-scraper'
 
 export interface NormalizedOffer {
   slug: string
@@ -45,9 +45,10 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
   const slug = typeof raw.slug === 'string' ? raw.slug : null
   if (!slug) return null
 
+  // trev0n actor uses `locations` (not `multilocation`); no coordinates in this actor
   const loc =
-    Array.isArray(raw.multilocation) && raw.multilocation.length > 0
-      ? (raw.multilocation[0] as Record<string, unknown>)
+    Array.isArray(raw.locations) && raw.locations.length > 0
+      ? (raw.locations[0] as Record<string, unknown>)
       : null
 
   return {
@@ -55,24 +56,23 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     source: 'justjoin',
     title: typeof raw.title === 'string' ? raw.title : '',
     company_name: typeof raw.companyName === 'string' ? raw.companyName : '',
-    company_logo_url: typeof raw.companyLogoThumbUrl === 'string' ? raw.companyLogoThumbUrl : null,
+    company_logo_url: typeof raw.companyLogoUrl === 'string' ? raw.companyLogoUrl : null,
     experience_level: typeof raw.experienceLevel === 'string' ? raw.experienceLevel : null,
     workplace_type: typeof raw.workplaceType === 'string' ? raw.workplaceType : null,
     working_time: typeof raw.workingTime === 'string' ? raw.workingTime : null,
     remote_interview: typeof raw.remoteInterview === 'boolean' ? raw.remoteInterview : null,
     required_skills: normalizeSkills(raw.requiredSkills),
     nice_to_have_skills: normalizeSkills(raw.niceToHaveSkills),
-    employment_types: Array.isArray(raw.employmentTypes) ? raw.employmentTypes : [],
-    multilocation: Array.isArray(raw.multilocation) ? raw.multilocation : null,
+    employment_types: Array.isArray(raw.allEmploymentTypes) ? raw.allEmploymentTypes : [],
+    multilocation: Array.isArray(raw.locations) ? raw.locations : null,
     city: typeof raw.city === 'string' ? raw.city : null,
     street: loc && typeof loc.street === 'string' ? loc.street : null,
-    latitude: loc && typeof loc.latitude === 'number' ? loc.latitude : null,
-    longitude: loc && typeof loc.longitude === 'number' ? loc.longitude : null,
+    latitude: null,
+    longitude: null,
     category_id: typeof raw.categoryId === 'number' ? raw.categoryId : null,
-    open_to_hire_ukrainians:
-      typeof raw.openToHireUkrainians === 'boolean' ? raw.openToHireUkrainians : null,
+    open_to_hire_ukrainians: null,
     languages: normalizeSkills(raw.languages),
-    url: typeof raw.link === 'string' ? raw.link : null,
+    url: typeof raw.jobUrl === 'string' ? raw.jobUrl : null,
     published_at: toDate(raw.publishedAt),
   }
 }
