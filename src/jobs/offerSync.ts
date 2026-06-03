@@ -2,6 +2,14 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { fetchOffers, NormalizedOffer } from '../services/offerScraper'
 
+const BATCH_SIZE = 500
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
 function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
   return {
     slug: offer.slug,
@@ -48,25 +56,42 @@ function logSkillBreakdown(offers: NormalizedOffer[]): void {
   console.log(`[offerSync] Top skills: ${top}`)
 }
 
-export async function syncOffers(): Promise<{ fetched: number; upserted: number; deactivated: number }> {
+export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deactivated: number }> {
   const raw = await fetchOffers()
 
-  // Guard: empty response means the API failed or is rate-limited.
-  // Never deactivate all offers on an empty fetch (RULE A-4).
   if (raw.length === 0) {
     console.warn('[offerSync] API returned 0 offers — skipping deactivation')
-    return { fetched: 0, upserted: 0, deactivated: 0 }
+    return { fetched: 0, inserted: 0, updated: 0, deactivated: 0 }
   }
 
   const fetchedAt = new Date()
 
-  for (const offer of raw) {
-    const data = toUpsertData(offer, fetchedAt)
-    await prisma.offer.upsert({
-      where: { slug: offer.slug },
-      create: data,
-      update: data,
+  // One query to split inserts from updates
+  const existingSlugs = new Set(
+    (await prisma.offer.findMany({ select: { slug: true } })).map(o => o.slug)
+  )
+
+  const toInsert = raw.filter(o => !existingSlugs.has(o.slug))
+  const toUpdate = raw.filter(o => existingSlugs.has(o.slug))
+
+  // Bulk insert in batches of 500
+  for (const batch of chunk(toInsert, BATCH_SIZE)) {
+    await prisma.offer.createMany({
+      data: batch.map(o => toUpsertData(o, fetchedAt)),
+      skipDuplicates: true,
     })
+  }
+
+  // Bulk update in batches of 500 — each batch runs as one transaction
+  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+    await prisma.$transaction(
+      batch.map(o =>
+        prisma.offer.update({
+          where: { slug: o.slug },
+          data: toUpsertData(o, fetchedAt),
+        })
+      )
+    )
   }
 
   const fetchedSlugs = raw.map(o => o.slug)
@@ -77,9 +102,9 @@ export async function syncOffers(): Promise<{ fetched: number; upserted: number;
   })
 
   console.log(
-    `[offerSync] Sync complete: fetched ${raw.length}, upserted ${raw.length}, deactivated ${deactivated.count}`,
+    `[offerSync] Sync complete: fetched ${raw.length}, inserted ${toInsert.length}, updated ${toUpdate.length}, deactivated ${deactivated.count}`,
   )
   logSkillBreakdown(raw)
 
-  return { fetched: raw.length, upserted: raw.length, deactivated: deactivated.count }
+  return { fetched: raw.length, inserted: toInsert.length, updated: toUpdate.length, deactivated: deactivated.count }
 }

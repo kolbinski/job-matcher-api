@@ -140,7 +140,7 @@ describe('syncOffers', () => {
 
     const result = await syncOffers()
 
-    expect(result).toEqual({ fetched: 0, upserted: 0, deactivated: 0 })
+    expect(result).toEqual({ fetched: 0, inserted: 0, updated: 0, deactivated: 0 })
 
     const offer = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}existing` } })
     expect(offer?.is_active).toBe(true)
@@ -152,7 +152,8 @@ describe('syncOffers', () => {
     const result = await syncOffers()
 
     expect(result.fetched).toBe(2)
-    expect(result.upserted).toBe(2)
+    expect(result.inserted).toBe(2)
+    expect(result.updated).toBe(0)
 
     const offers = await prisma.offer.findMany({
       where: { slug: { startsWith: TEST_SLUG_PREFIX } },
