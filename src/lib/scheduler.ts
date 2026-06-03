@@ -21,10 +21,7 @@ function isWithinSchedule(): boolean {
 }
 
 function cetTimeString(): string {
-  const now = new Date()
-  const h = (now.getUTCHours() + 1) % 24
-  const m = now.getUTCMinutes()
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  return new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' })
 }
 
 async function runSync(): Promise<void> {
