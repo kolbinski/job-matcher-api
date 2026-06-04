@@ -74,9 +74,13 @@ matchRouter.post(
       ? { OR: [{ required_skills: { isEmpty: true } }, { required_skills: { hasSome: candidateTechs } }] }
       : { required_skills: { isEmpty: true } }
 
-    const whereClause = seenIds.size > 0
-      ? { AND: [skillFilter, { NOT: { id: { in: [...seenIds] } } }] }
-      : skillFilter
+    const whereClause = {
+      AND: [
+        { is_active: true },
+        skillFilter,
+        ...(seenIds.size > 0 ? [{ NOT: { id: { in: [...seenIds] } } }] : []),
+      ],
+    }
 
     const offers = await prisma.offer.findMany({ where: whereClause })
 
@@ -107,7 +111,7 @@ matchRouter.post(
     // so user_offers gets a complete record of every offer for this user.
     const processedIds = new Set(offers.map(o => o.id))
     const skillExcluded = await prisma.offer.findMany({
-      where: { id: { notIn: [...seenIds, ...processedIds] } },
+      where: { is_active: true, id: { notIn: [...seenIds, ...processedIds] } },
       select: { id: true },
     })
     for (const { id } of skillExcluded) {

@@ -14,9 +14,9 @@ healthRouter.get('/', async (_req, res) => {
 
     const [offersCount, latestOffer] = await Promise.race([
       Promise.all([
-        prisma.offer.count(),
+        prisma.offer.count({ where: { is_active: true } }),
         prisma.offer.findFirst({
-          where: { fetched_at: { not: null } },
+          where: { is_active: true, fetched_at: { not: null } },
           orderBy: { fetched_at: 'desc' },
           select: { fetched_at: true },
         }),

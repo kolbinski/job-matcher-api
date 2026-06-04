@@ -9,6 +9,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
   return {
     id: 'test-id',
     slug: 'test-slug',
+    is_active: true,
     source: 'justjoin',
     title: 'Software Engineer',
     company_name: 'Acme Corp',

@@ -165,15 +165,19 @@ describe('syncOffers', () => {
     expect(offer?.title).toBe('Updated Title')
   })
 
-  it('hard deletes offers absent from all fetched pages', async () => {
+  it('soft deletes (deactivates) offers absent from all fetched pages', async () => {
     await prisma.offer.createMany({ data: [makeDbOffer('stays'), makeDbOffer('gone')] })
 
     mockSinglePage([makeOffer('stays')])
 
     await syncOffers()
 
-    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}stays` } })).not.toBeNull()
-    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })).toBeNull()
+    const stays = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}stays` } })
+    const gone = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}gone` } })
+    expect(stays).not.toBeNull()
+    expect(stays?.is_active).toBe(true)
+    expect(gone).not.toBeNull()
+    expect(gone?.is_active).toBe(false)
   })
 
   it('upserts across multiple pages and deletes only after all pages are done', async () => {
@@ -188,9 +192,11 @@ describe('syncOffers', () => {
 
     expect(result.fetched).toBe(3)
     expect(result.inserted).toBe(3)
-    // 'old' was not in any page — should be deleted
-    expect(await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}old` } })).toBeNull()
-    expect(await prisma.offer.count({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })).toBe(3)
+    // 'old' was not in any page — should be soft-deleted (is_active: false)
+    const old = await prisma.offer.findUnique({ where: { slug: `${TEST_SLUG_PREFIX}old` } })
+    expect(old).not.toBeNull()
+    expect(old?.is_active).toBe(false)
+    expect(await prisma.offer.count({ where: { slug: { startsWith: TEST_SLUG_PREFIX }, is_active: true } })).toBe(3)
   })
 
   it('re-inserts an offer that was previously deleted when it reappears', async () => {

@@ -41,6 +41,7 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
     url: offer.url,
     published_at: offer.published_at,
     fetched_at: fetchedAt,
+    is_active: true,
   }
 }
 
@@ -169,21 +170,21 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
   }
 
   // Offers not seen in this run retain their pre-sync fetched_at (< fetchedAt) or are null.
-  // Both cases mean they were absent from the current fetch — safe to delete.
-  console.log('[offerSync] About to DELETE old offers — call stack:', new Error().stack)
-  const deleted = await prisma.offer.deleteMany({
+  // Soft-delete: mark is_active = false instead of removing rows so user_offers history is preserved.
+  const deactivated = await prisma.offer.updateMany({
     where: {
       OR: [
         { fetched_at: null },
         { fetched_at: { lt: fetchedAt } },
       ],
     },
+    data: { is_active: false },
   })
 
   console.log(
-    `[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deleted ${deleted.count}`,
+    `[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deactivated ${deactivated.count}`,
   )
   logSkillBreakdown(skillCounts)
 
-  return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: deleted.count }
+  return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: deactivated.count }
 }

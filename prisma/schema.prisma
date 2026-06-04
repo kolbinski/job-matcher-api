@@ -59,6 +59,7 @@ model Offer {
   url                     String?
   published_at            DateTime?
   fetched_at              DateTime?
+  is_active               Boolean   @default(true)
   created_at              DateTime  @default(now())
   updated_at              DateTime  @updatedAt
 
