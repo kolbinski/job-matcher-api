@@ -61,8 +61,16 @@ export interface OfferSalary {
   type: string
 }
 
+export interface ScoreBreakdown {
+  techScore: number
+  salaryScore: number
+  remoteScore: number
+  industryScore: number
+}
+
 export interface MatchedOffer {
   score: number
+  score_breakdown: ScoreBreakdown
   title: string
   company: string
   city: string | null

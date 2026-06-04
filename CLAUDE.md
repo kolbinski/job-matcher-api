@@ -83,6 +83,8 @@ Sum = 1.00. Any change to weights is a breaking change tracked in `memory.md`.
 
 When the user says **"commit"**: run `npm run check` first. If it fails, fix all errors before proceeding. Once check passes, run `git add -A && git commit -m "..." && git push origin main`. Always push to `main` — never to `master` or any other branch.
 
+**Never commit or push automatically after making code changes.** Wait for the user to explicitly say "commit". Code changes and commits are two separate steps — do not combine them.
+
 ---
 
 ## Session End Protocol

@@ -8,7 +8,7 @@ import { scoreOffer } from '../services/scoring'
 import { generateAiSummary } from '../services/aiSummary'
 import { normalizeProfile } from '../services/profileParser'
 import { MatchRequestSchema } from '../types/match'
-import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
+import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, ScoreBreakdown } from '../types/match'
 import { parseEmploymentTypes } from '../lib/offers'
 import { InvalidProfileError } from '../lib/errors'
 
@@ -123,8 +123,15 @@ matchRouter.post(
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): MatchedOffer {
+  const breakdown: ScoreBreakdown = {
+    techScore: scored.techScore,
+    salaryScore: scored.salaryScore,
+    remoteScore: scored.remoteScore,
+    industryScore: scored.experienceLevelScore,
+  }
   return {
     score: scored.score,
+    score_breakdown: breakdown,
     title: offer.title,
     company: offer.company_name,
     city: offer.city,

@@ -1,103 +1,136 @@
-import fs from 'fs'
-import path from 'path'
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
 
-const API_KEY = 'jm_test_homodigital123456789012'
-const BASE_URL = 'http://localhost:3000'
+dotenv.config();
+
+const BASE_URL =
+  process.env.MATCH_ENV === 'production'
+    ? 'https://job-matcher-api-production.up.railway.app'
+    : 'http://localhost:3000';
+
+console.log('MATCH_ENV:', process.env.MATCH_ENV);
+console.log('BASE_URL:', BASE_URL);
+
+const API_KEY = process.env.JOBMATCHER_API_KEY;
+if (!API_KEY) {
+  console.error('Missing JOBMATCHER_API_KEY in .env');
+  process.exit(1);
+}
 
 // ── Raw JSON types (marek-wisniewski-profile.json format) ─────────────────────
 
 interface RawProfile {
   basic_info: {
-    name: string
-    email?: string
-    phone?: string
-    linkedin?: string
-    github?: string
-    location?: string
-    status?: string
-  }
+    name: string;
+    email?: string;
+    phone?: string;
+    linkedin?: string;
+    github?: string;
+    location?: string;
+    status?: string;
+  };
   education?: Array<{
-    institution: string
-    degree?: string
-    field?: string
-    from?: string
-    to?: string
-    gpa?: number
-    thesis?: string
-  }>
+    institution: string;
+    degree?: string;
+    field?: string;
+    from?: string;
+    to?: string;
+    gpa?: number;
+    thesis?: string;
+  }>;
   employment_history?: Array<{
-    company: string
-    role: string
-    from: string
-    to?: string
-    company_type?: string
-    industry?: string
-    work_model?: string
+    company: string;
+    role: string;
+    from: string;
+    to?: string;
+    company_type?: string;
+    industry?: string;
+    work_model?: string;
     projects?: Array<{
-      name: string
-      technologies?: string[]
-      team_size?: number
-      role?: string
-      achievements?: string[]
-    }>
-  }>
+      name: string;
+      technologies?: string[];
+      team_size?: number;
+      role?: string;
+      achievements?: string[];
+    }>;
+  }>;
   personal_projects?: Array<{
-    name: string
-    url?: string
-    technologies?: string[]
-    status?: string
-    users?: number
-    github_stars?: number
-  }>
+    name: string;
+    url?: string;
+    technologies?: string[];
+    status?: string;
+    users?: number;
+    github_stars?: number;
+  }>;
   career_goals?: {
-    target_role?: string
-    salary_min?: number
-    salary_max?: number
-    work_model?: string
-    max_office_days?: number
-    company_type?: string
-    industries?: string[]
-    target_markets?: string[]
-  }
-  technologies: Array<{ name: string; since?: number }>
+    target_role?: string;
+    salary_min?: number;
+    salary_max?: number;
+    work_model?: string;
+    max_office_days?: number;
+    company_type?: string;
+    industries?: string[];
+    target_markets?: string[];
+  };
+  technologies: Array<{ name: string; since?: number }>;
   red_flags?: {
-    rejected_company_types?: string[]
-    rejected_technologies?: string[]
-    rejected_work_models?: string[]
-    other?: string[]
-  }
+    rejected_company_types?: string[];
+    rejected_technologies?: string[];
+    rejected_work_models?: string[];
+    other?: string[];
+  };
 }
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
 interface OfferSalary {
-  from: number
-  to: number
-  currency: string
-  type: string
+  from: number;
+  to: number;
+  currency: string;
+  type: string;
+}
+
+interface ScoreBreakdown {
+  techScore: number;
+  salaryScore: number;
+  remoteScore: number;
+  industryScore: number;
 }
 
 interface MatchedOffer {
-  score: number
-  title: string
-  company: string
-  salary: OfferSalary | null
+  score: number;
+  score_breakdown: ScoreBreakdown;
+  title: string;
+  company: string;
+  salary: OfferSalary | null;
+}
+
+interface UnmatchedOffer {
+  title: string;
+  company: string;
+  rejection_reasons: string[];
 }
 
 interface MatchResponse {
   meta: {
-    matched_count: number
-    total_offers_scanned: number
-    response_ms: number
-  }
-  matched: MatchedOffer[]
+    matched_count: number;
+    unmatched_count: number;
+    total_offers_scanned: number;
+    response_ms: number;
+  };
+  matched: MatchedOffer[];
+  unmatched: UnmatchedOffer[];
 }
 
 // ── Transform raw JSON → CandidateProfile schema ───────────────────────────────
 
 const raw: RawProfile = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, '../data/marek-wisniewski-profile.json'), 'utf-8')
-)
+  fs.readFileSync(
+    path.resolve(__dirname, '../data/marek-wisniewski-profile.json'),
+    'utf-8',
+  ),
+);
 
 const profile = {
   basic_info: {
@@ -112,8 +145,8 @@ const profile = {
     remote_ok: raw.career_goals?.work_model === 'remote',
     job_search_status: raw.basic_info.status,
   },
-  technologies: raw.technologies.map((t) => ({ name: t.name, since: t.since })),
-  education: raw.education?.map((e) => ({
+  technologies: raw.technologies.map(t => ({ name: t.name, since: t.since })),
+  education: raw.education?.map(e => ({
     institution: e.institution,
     degree: e.degree,
     field: e.field,
@@ -122,7 +155,7 @@ const profile = {
     gpa: e.gpa != null ? String(e.gpa) : undefined,
     thesis: e.thesis,
   })),
-  work_experience: raw.employment_history?.map((job) => ({
+  work_experience: raw.employment_history?.map(job => ({
     company: job.company,
     title: job.role,
     date_from: job.from,
@@ -130,7 +163,7 @@ const profile = {
     company_type: job.company_type,
     industry: job.industry,
     work_model: job.work_model,
-    projects: job.projects?.map((p) => ({
+    projects: job.projects?.map(p => ({
       name: p.name,
       technologies: p.technologies,
       team_size: p.team_size,
@@ -138,7 +171,7 @@ const profile = {
       achievements: p.achievements,
     })),
   })),
-  own_projects: raw.personal_projects?.map((p) => ({
+  own_projects: raw.personal_projects?.map(p => ({
     name: p.name,
     demo_url: p.url,
     technologies: p.technologies,
@@ -148,84 +181,122 @@ const profile = {
   })),
   career_goals: {
     short_term: {
-      target_role: raw.career_goals?.target_role ? [raw.career_goals.target_role] : undefined,
+      target_role: raw.career_goals?.target_role
+        ? [raw.career_goals.target_role]
+        : undefined,
       company_type: raw.career_goals?.company_type,
       salary_target_pln_net_b2b:
         raw.career_goals?.salary_min != null
-          ? { min: raw.career_goals.salary_min, max: raw.career_goals.salary_max ?? 0 }
+          ? {
+              min: raw.career_goals.salary_min,
+              max: raw.career_goals.salary_max ?? 0,
+            }
           : undefined,
     },
   },
   preferences: {
     work_model: raw.career_goals?.work_model,
     max_office_days_per_week: raw.career_goals?.max_office_days,
-    company_type: raw.career_goals?.company_type ? [raw.career_goals.company_type] : undefined,
+    company_type: raw.career_goals?.company_type
+      ? [raw.career_goals.company_type]
+      : undefined,
     company_type_excluded: raw.red_flags?.rejected_company_types,
     industries: raw.career_goals?.industries,
     salary_pln_net_b2b:
       raw.career_goals?.salary_min != null
-        ? { min: raw.career_goals.salary_min, max: raw.career_goals.salary_max ?? 0 }
+        ? {
+            min: raw.career_goals.salary_min,
+            max: raw.career_goals.salary_max ?? 0,
+          }
         : undefined,
     markets: raw.career_goals?.target_markets,
   },
   red_flags: [
-    ...(raw.red_flags?.rejected_company_types ?? []).map((v) => ({
+    ...(raw.red_flags?.rejected_company_types ?? []).map(v => ({
       category: 'company_type',
       description: v,
     })),
-    ...(raw.red_flags?.rejected_technologies ?? []).map((v) => ({
+    ...(raw.red_flags?.rejected_technologies ?? []).map(v => ({
       category: 'technology',
       description: v,
     })),
-    ...(raw.red_flags?.rejected_work_models ?? []).map((v) => ({
+    ...(raw.red_flags?.rejected_work_models ?? []).map(v => ({
       category: 'work_model',
       description: v,
     })),
-    ...(raw.red_flags?.other ?? []).map((v) => ({ category: 'other', description: v })),
+    ...(raw.red_flags?.other ?? []).map(v => ({
+      category: 'other',
+      description: v,
+    })),
   ],
-}
+};
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log('Calling POST /v1/match for Marek Wiśniewski...\n')
+  console.log('Calling POST /v1/match for Marek Wiśniewski...\n');
 
-  let res: Response
+  let res: Response;
   try {
     res = await fetch(`${BASE_URL}/v1/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ profile, options: { ai_scoring: false } }),
-    })
+      body: JSON.stringify({ profile, options: { ai_scoring: false, include_unmatched: true } }),
+    });
   } catch {
-    console.error('Connection refused — is the server running? (npm run dev)')
-    process.exit(1)
+    console.error('Connection refused — is the server running? (npm run dev)');
+    process.exit(1);
   }
 
   if (!res.ok) {
-    const body = await res.text()
-    console.error(`HTTP ${res.status}: ${body}`)
-    process.exit(1)
+    const body = await res.text();
+    console.error(`HTTP ${res.status}: ${body}`);
+    process.exit(1);
   }
 
-  const data = (await res.json()) as MatchResponse
-  const { meta, matched } = data
+  const data = (await res.json()) as MatchResponse;
+  const { meta, matched, unmatched } = data;
 
   console.log(
-    `Matched: ${meta.matched_count} offers out of ${meta.total_offers_scanned} scanned (${meta.response_ms}ms)\n`
-  )
-  console.log('Top 5 by score:')
-  console.log('─'.repeat(62))
+    `Matched: ${meta.matched_count} | Unmatched: ${meta.unmatched_count} | Scanned: ${meta.total_offers_scanned} (${meta.response_ms}ms)\n`,
+  );
+
+  // ── Top 5 matched ──────────────────────────────────────────────────────────
+  console.log('Top 5 by score:');
+  console.log('─'.repeat(62));
 
   matched.slice(0, 5).forEach((offer, i) => {
-    const s = offer.salary
+    const s = offer.salary;
     const salary =
       s && s.from != null && s.to != null
         ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})`
-        : 'salary not disclosed'
-    console.log(`${i + 1}. [${offer.score}/100] ${offer.title} @ ${offer.company}`)
-    console.log(`   ${salary}`)
-  })
+        : 'salary not disclosed';
+    console.log(`${i + 1}. [${offer.score}/100] ${offer.title} @ ${offer.company}`);
+    console.log(`   ${salary}`);
+  });
+
+  // ── Score breakdown for #1 ─────────────────────────────────────────────────
+  if (matched.length > 0) {
+    const top = matched[0];
+    const b = top.score_breakdown;
+    console.log(`\nScore breakdown — #1 ${top.title} @ ${top.company}:`);
+    console.log('─'.repeat(62));
+    console.log(`  techScore     ${b.techScore.toString().padStart(3)}/100  × 0.40 = ${(b.techScore * 0.40).toFixed(1)}`);
+    console.log(`  salaryScore   ${b.salaryScore.toString().padStart(3)}/100  × 0.25 = ${(b.salaryScore * 0.25).toFixed(1)}`);
+    console.log(`  remoteScore   ${b.remoteScore.toString().padStart(3)}/100  × 0.20 = ${(b.remoteScore * 0.20).toFixed(1)}`);
+    console.log(`  industryScore ${b.industryScore.toString().padStart(3)}/100  × 0.15 = ${(b.industryScore * 0.15).toFixed(1)}`);
+    console.log(`  ──────────────────────────────────`);
+    console.log(`  total         ${top.score.toString().padStart(3)}/100`);
+  }
+
+  // ── Top 3 unmatched ────────────────────────────────────────────────────────
+  console.log(`\nTop 3 unmatched (${meta.unmatched_count} total):`);
+  console.log('─'.repeat(62));
+
+  unmatched.slice(0, 3).forEach((offer, i) => {
+    console.log(`${i + 1}. ${offer.title} @ ${offer.company}`);
+    console.log(`   Rejected: ${offer.rejection_reasons.join('; ')}`);
+  });
 }
 
-main()
+main();
