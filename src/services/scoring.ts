@@ -1,30 +1,28 @@
 import type { Offer } from '@prisma/client'
-import type { CandidateProfile } from '../types/profile'
-import { normalizeProfile } from './profileParser'
+import type { NormalizedProfile } from './profileParser'
+import { getBestSalary } from '../lib/offers'
 
 // V1-immutable weights — any change is a breaking API change (memory.md)
-export const TECH_WEIGHT = 0.40
-export const SALARY_WEIGHT = 0.25
-export const REMOTE_WEIGHT = 0.20
-export const INDUSTRY_WEIGHT = 0.15
+export const TECH_WEIGHT            = 0.40
+export const SALARY_WEIGHT          = 0.25
+export const REMOTE_WEIGHT          = 0.20
+// Note: V1 has no industry field in offer data — this weight measures seniority match.
+// Rename to INDUSTRY_WEIGHT once JustJoin category-to-industry mapping is implemented.
+export const EXPERIENCE_LEVEL_WEIGHT = 0.15
 
 export interface ScoredOffer {
   score: number
   techScore: number
   salaryScore: number
   remoteScore: number
-  industryScore: number
+  experienceLevelScore: number
   missingSkills: string[]
   matchReasons: string[]
 }
 
-interface EmploymentTypeEntry {
-  type?: string
-  salary?: { from?: number; to?: number; currency?: string }
-}
-
-export function scoreOffer(profile: CandidateProfile, offer: Offer): ScoredOffer {
-  const norm = normalizeProfile(profile)
+// norm is pre-computed by normalizeProfile() in the route handler — do NOT call
+// normalizeProfile() here, it must be called once per request, not once per offer.
+export function scoreOffer(norm: NormalizedProfile, offer: Offer): ScoredOffer {
   const matchReasons: string[] = []
 
   // ── tech score ────────────────────────────────────────────────────────────
@@ -40,7 +38,9 @@ export function scoreOffer(profile: CandidateProfile, offer: Offer): ScoredOffer
     missingSkills = offerSkills.filter((s) => !norm.techs.has(s))
     techScore = Math.round((matched.length / offerSkills.length) * 100)
     if (matched.length > 0) {
-      matchReasons.push(`Matches ${matched.length}/${offerSkills.length} required skills (${matched.slice(0, 3).join(', ')}${matched.length > 3 ? '…' : ''})`)
+      matchReasons.push(
+        `Matches ${matched.length}/${offerSkills.length} required skills (${matched.slice(0, 3).join(', ')}${matched.length > 3 ? '…' : ''})`
+      )
     }
   }
 
@@ -55,7 +55,9 @@ export function scoreOffer(profile: CandidateProfile, offer: Offer): ScoredOffer
       salaryScore = 50
     } else if (offerMax >= norm.salaryMinPln) {
       salaryScore = 100
-      matchReasons.push(`Salary PLN ${offerMax.toLocaleString()} meets your target of ${norm.salaryMinPln.toLocaleString()}+`)
+      matchReasons.push(
+        `Salary PLN ${offerMax.toLocaleString()} meets your target of ${norm.salaryMinPln.toLocaleString()}+`
+      )
     } else {
       salaryScore = Math.min(99, Math.round((offerMax / norm.salaryMinPln) * 100))
     }
@@ -64,56 +66,35 @@ export function scoreOffer(profile: CandidateProfile, offer: Offer): ScoredOffer
   // ── remote score ──────────────────────────────────────────────────────────
   const remoteScore = calcRemoteScore(norm.wantsRemote, offer, matchReasons)
 
-  // ── industry score ────────────────────────────────────────────────────────
-  const industryScore = calcIndustryScore(norm.experienceLevel, offer, matchReasons)
+  // ── experience level score (0.15 weight) ─────────────────────────────────
+  const experienceLevelScore = calcExperienceLevelScore(norm.experienceLevel, offer, matchReasons)
 
   // ── weighted total ────────────────────────────────────────────────────────
   const score = Math.round(
-    techScore * TECH_WEIGHT +
-    salaryScore * SALARY_WEIGHT +
-    remoteScore * REMOTE_WEIGHT +
-    industryScore * INDUSTRY_WEIGHT
+    techScore            * TECH_WEIGHT +
+    salaryScore          * SALARY_WEIGHT +
+    remoteScore          * REMOTE_WEIGHT +
+    experienceLevelScore * EXPERIENCE_LEVEL_WEIGHT
   )
 
-  return { score, techScore, salaryScore, remoteScore, industryScore, missingSkills, matchReasons }
+  return { score, techScore, salaryScore, remoteScore, experienceLevelScore, missingSkills, matchReasons }
 }
 
-function getBestSalary(offer: Offer): number | null {
-  const types = offer.employment_types as unknown as EmploymentTypeEntry[]
-  if (!Array.isArray(types)) return null
-
-  // Prefer B2B
-  for (const t of types) {
-    if (t.type === 'b2b' && t.salary?.to) return t.salary.to
-  }
-  // Fallback: highest to across any type
-  let best: number | null = null
-  for (const t of types) {
-    if (t.salary?.to && t.salary.to > (best ?? 0)) best = t.salary.to
-  }
-  return best
-}
-
-function calcRemoteScore(
-  wantsRemote: boolean,
-  offer: Offer,
-  matchReasons: string[]
-): number {
+function calcRemoteScore(wantsRemote: boolean, offer: Offer, matchReasons: string[]): number {
   const workplaceType = offer.workplace_type?.toLowerCase()
-
-  if (!wantsRemote) return 70 // neutral for in-office preference
-
+  if (!wantsRemote) return 70
   if (!workplaceType) return 50
-
   if (workplaceType === 'remote') {
     matchReasons.push('Fully remote position')
     return 100
   }
   if (workplaceType === 'hybrid' || workplaceType === 'partly_remote') return 60
-  return 0 // office only
+  return 0
 }
 
-function calcIndustryScore(
+// Measures seniority match (junior/mid/senior/expert) between candidate and offer.
+// Named calcExperienceLevelScore because JustJoin offers have no industry field in V1.
+function calcExperienceLevelScore(
   candidateLevel: string | null,
   offer: Offer,
   matchReasons: string[]

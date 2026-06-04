@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
-import { fetchPage, NormalizedOffer, PAGE_SIZE } from '../services/offerScraper'
+import { fetchPage, NormalizedOffer } from '../services/offerScraper'
+import { env } from '../lib/env'
 
 const BATCH_SIZE = 500
 
@@ -45,7 +46,7 @@ async function upsertPage(
   offers: NormalizedOffer[],
   existingSlugs: Set<string>,
   fetchedAt: Date,
-): Promise<{ inserted: number; updated: number }> {
+): Promise<{ inserted: number; updated: number; insertedSlugs: string[] }> {
   const toInsert = offers.filter(o => !existingSlugs.has(o.slug))
   const toUpdate = offers.filter(o => existingSlugs.has(o.slug))
 
@@ -63,14 +64,11 @@ async function upsertPage(
     })
   }
 
-  // Newly inserted slugs are now in DB — add them to the set for later pages
-  for (const o of toInsert) existingSlugs.add(o.slug)
-
-  return { inserted: toInsert.length, updated: toUpdate.length }
+  return { inserted: toInsert.length, updated: toUpdate.length, insertedSlugs: toInsert.map(o => o.slug) }
 }
 
-function logSkillBreakdown(slugCounts: Map<string, number>): void {
-  const top = [...slugCounts.entries()]
+function logSkillBreakdown(skillCounts: Map<string, number>): void {
+  const top = [...skillCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
     .map(([skill, n]) => `${skill}: ${n}`)
@@ -95,7 +93,7 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
   let pageNum = 0
 
   while (true) {
-    if (pageNum > 0) {
+    if (pageNum > 0 && env.NODE_ENV !== 'test') {
       const delay = Math.floor(Math.random() * (60_000 - 20_000 + 1)) + 20_000
       console.log(`[offerScraper] Waiting ${Math.round(delay / 1000)}s before next page...`)
       await new Promise(resolve => setTimeout(resolve, delay))
@@ -106,7 +104,8 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
 
     if (offers.length === 0) break
 
-    const { inserted, updated } = await upsertPage(offers, existingSlugs, fetchedAt)
+    const { inserted, updated, insertedSlugs } = await upsertPage(offers, existingSlugs, fetchedAt)
+    for (const slug of insertedSlugs) existingSlugs.add(slug)
     const pageMs = Date.now() - pageStart
 
     for (const o of offers) {
