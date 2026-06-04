@@ -84,8 +84,8 @@ describe('POST /v1/match', () => {
     expect(typeof res.body.meta.ai_scoring).toBe('boolean')
     if (res.body.matched.length > 0 && res.body.meta.ai_scoring) {
       const offer = res.body.matched[0]
-      expect(['apply', 'consider', 'skip']).toContain(offer.ai_recommendation)
-      expect(typeof offer.ai_summary).toBe('string')
+      expect(typeof offer.recommended).toBe('boolean')
+      expect(typeof offer.role_fit).toBe('string')
     }
   })
 

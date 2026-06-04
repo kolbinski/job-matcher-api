@@ -4,12 +4,8 @@ Last reviewed: 2026-06-03
 
 ## Session Start Protocol
 
-Read these files in order before beginning any work:
-
-1. `PERSONA.md` — adopt expert identity, load SPARK methodology
-2. `memory.md` — load architectural decisions and project knowledge
-3. `current-task.md` — load active work state and next action
-4. `lessons.md` — apply all prevention rules before writing any code
+Read these files at the start of every session before any work:
+PERSONA.md, memory.md, current-task.md, lessons.md
 
 **This file is a router, not a persona.** All expert identity lives in `PERSONA.md`.
 
