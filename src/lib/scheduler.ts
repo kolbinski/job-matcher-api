@@ -83,6 +83,11 @@ export async function startScheduler(): Promise<void> {
 
   console.log(`[scheduler] Scheduled ${scheduled} expression(s): ${expressions.join(' | ')}`)
 
-  // Startup sync always runs; cleanup is skipped if outside working hours.
-  runSync().catch(err => console.error('[scheduler] Startup sync failed:', err))
+  const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })
+  const shouldFetch = fetchRow?.value === 'true'
+  if (shouldFetch) {
+    runSync().catch(err => console.error('[scheduler] Startup sync failed:', err))
+  } else {
+    console.log('[scheduler] Startup sync skipped (fetch_offers_after_build=false)')
+  }
 }
