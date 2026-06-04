@@ -1,61 +1,156 @@
 import type { Offer } from '@prisma/client'
 import type { CandidateProfile } from '../types/profile'
-import { getBestSalary } from '../lib/offers'
+import { parseEmploymentTypes } from '../lib/offers'
 
-// Returns an array of human-readable rejection reasons.
-// Empty array = offer passes all red flags and is eligible for scoring.
-export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[] {
+export interface PreFilterResult {
+  pass: boolean
+  reasons: string[]
+  rejectedByWorkplace: boolean
+  rejectedByEmploymentType: boolean
+  rejectedBySalary: boolean
+  rejectedBySeniority: boolean
+  rejectedByRedFlags: boolean
+}
+
+// Ordered seniority levels — used for ±1 tolerance check.
+// Values come from JustJoin offer data; c_level normalised to c-level.
+const LEVELS = ['junior', 'mid', 'senior', 'expert', 'c-level']
+
+function normalizeLevel(level: string): string {
+  return level.replace('_', '-').toLowerCase()
+}
+
+export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFilterResult {
   const reasons: string[] = []
+  let rejectedByWorkplace = false
+  let rejectedByEmploymentType = false
+  let rejectedBySalary = false
+  let rejectedBySeniority = false
+  let rejectedByRedFlags = false
 
+  // ── 1. Workplace filter ────────────────────────────────────────────────────
+  const acceptedModels = (profile.preferences?.work_model ?? []).map(m => m.toLowerCase())
+  if (acceptedModels.length > 0) {
+    const raw = offer.workplace_type?.toLowerCase() ?? null
+    // partly_remote is treated as hybrid for matching
+    const offerModel = raw === 'partly_remote' ? 'hybrid' : raw
+    if (offerModel && !acceptedModels.includes(offerModel)) {
+      reasons.push(`Workplace '${raw}' not accepted (accepted: ${acceptedModels.join(', ')})`)
+      rejectedByWorkplace = true
+    }
+  }
+
+  // ── 2. Employment type filter ──────────────────────────────────────────────
+  const acceptedTypes = (profile.preferences?.employment_type ?? []).map(t => t.toLowerCase())
+  if (acceptedTypes.length > 0) {
+    const offerTypes = parseEmploymentTypes(offer)
+      .map(e => e.type?.toLowerCase())
+      .filter((t): t is string => Boolean(t))
+    // Only reject if offer has declared types but none match
+    if (offerTypes.length > 0 && !acceptedTypes.some(t => offerTypes.includes(t))) {
+      reasons.push(`Employment type [${offerTypes.join(', ')}] not in accepted [${acceptedTypes.join(', ')}]`)
+      rejectedByEmploymentType = true
+    }
+  }
+
+  // ── 3. Salary filter ───────────────────────────────────────────────────────
+  const salaryPrefs = profile.preferences?.salary ?? []
+  if (salaryPrefs.length > 0) {
+    const entries = parseEmploymentTypes(offer)
+    for (const pref of salaryPrefs) {
+      const matching = entries.filter(
+        e =>
+          e.type?.toLowerCase() === pref.type.toLowerCase() &&
+          e.currency?.toUpperCase() === pref.currency.toUpperCase()
+      )
+      if (matching.length === 0) continue // not disclosed for this type → don't reject
+
+      const monthlyMaxes = matching
+        .map(e => {
+          if (e.to === undefined) return null
+          return e.unit?.toLowerCase() === 'day' ? e.to * 20 : e.to
+        })
+        .filter((v): v is number => v !== null)
+
+      if (monthlyMaxes.length === 0) continue // no ceiling disclosed → don't reject
+
+      const bestMax = Math.max(...monthlyMaxes)
+      if (bestMax < pref.min) {
+        reasons.push(
+          `Best ${pref.type} salary ${bestMax.toLocaleString()} ${pref.currency} < minimum ${pref.min.toLocaleString()} ${pref.currency}`
+        )
+        rejectedBySalary = true
+      }
+    }
+  }
+
+  // ── 4. Seniority filter ────────────────────────────────────────────────────
+  const candidateLevelRaw = profile.basic_info.experience_level
+  if (candidateLevelRaw) {
+    const candidateLevel = normalizeLevel(candidateLevelRaw)
+    const offerLevel = offer.experience_level?.toLowerCase()
+    if (offerLevel) {
+      const ci = LEVELS.indexOf(candidateLevel)
+      const oi = LEVELS.indexOf(offerLevel)
+      if (ci !== -1 && oi !== -1 && Math.abs(ci - oi) > 1) {
+        reasons.push(`Seniority mismatch: candidate is ${candidateLevel}, offer requires ${offerLevel}`)
+        rejectedBySeniority = true
+      }
+    }
+  }
+
+  // ── 5. Technology red flags ────────────────────────────────────────────────
   for (const flag of profile.red_flags) {
     const category = flag.category.toLowerCase()
     const desc = flag.description.toLowerCase()
 
     if (['technology', 'tech', 'stack', 'technologies'].includes(category)) {
-      const forbidden = desc.split(/[,;]/).map((t) => t.trim().toLowerCase()).filter(Boolean)
-      const offerTechs = offer.required_skills.map((s) => s.toLowerCase())
+      const forbidden = desc.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+      const offerTechs = offer.required_skills.map(s => s.toLowerCase())
       for (const tech of forbidden) {
         const pattern = new RegExp(
           `(^|[^a-z0-9])${tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`
         )
-        if (offerTechs.some((o) => o === tech || pattern.test(o))) {
+        if (offerTechs.some(o => o === tech || pattern.test(o))) {
+          reasons.push(`Requires ${tech} (excluded: ${flag.description})`)
+          rejectedByRedFlags = true
+          break
+        }
+      }
+    }
+  }
+
+  return {
+    pass: reasons.length === 0,
+    reasons,
+    rejectedByWorkplace,
+    rejectedByEmploymentType,
+    rejectedBySalary,
+    rejectedBySeniority,
+    rejectedByRedFlags,
+  }
+}
+
+// Kept for backward compatibility with existing tests.
+export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[] {
+  // Only returns tech red flag reasons — structured filters are now in applyPreFilters.
+  const reasons: string[] = []
+  for (const flag of profile.red_flags) {
+    const category = flag.category.toLowerCase()
+    const desc = flag.description.toLowerCase()
+    if (['technology', 'tech', 'stack', 'technologies'].includes(category)) {
+      const forbidden = desc.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+      const offerTechs = offer.required_skills.map(s => s.toLowerCase())
+      for (const tech of forbidden) {
+        const pattern = new RegExp(
+          `(^|[^a-z0-9])${tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`
+        )
+        if (offerTechs.some(o => o === tech || pattern.test(o))) {
           reasons.push(`Requires ${tech} (excluded: ${flag.description})`)
           break
         }
       }
     }
-
-    if (['salary', 'compensation', 'pay'].includes(category)) {
-      const numMatch = desc.match(/(\d[\d\s]*\d|\d+)/)
-      const rawNum = numMatch?.[1]
-      if (rawNum !== undefined) {
-        const minSalary = parseInt(rawNum.replace(/\s/g, ''), 10)
-        const offerMax = getBestSalary(offer)
-        if (offerMax !== null && offerMax < minSalary) {
-          reasons.push(
-            `Salary ${offerMax.toLocaleString()} PLN below minimum ${minSalary.toLocaleString()} PLN`
-          )
-        }
-      }
-    }
-
-    if (['work_model', 'remote', 'location', 'workplace'].includes(category)) {
-      const workplaceType = offer.workplace_type?.toLowerCase()
-      if (!workplaceType) continue
-      if (
-        (desc.includes('no office') || desc.includes('remote only') || desc.includes('only remote')) &&
-        workplaceType === 'office'
-      ) {
-        reasons.push(`Office work required (excluded: ${flag.description})`)
-      }
-      if (
-        (desc.includes('no remote') || desc.includes('office only')) &&
-        workplaceType === 'remote'
-      ) {
-        reasons.push(`Remote-only role (excluded: ${flag.description})`)
-      }
-    }
   }
-
   return reasons
 }

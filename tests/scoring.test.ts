@@ -46,7 +46,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
 
 function makeProfile(overrides: Partial<CandidateProfile> = {}): CandidateProfile {
   return {
-    basic_info: { full_name: 'Test User', remote_ok: false },
+    basic_info: { full_name: 'Test User' },
     technologies: [],
     preferences: {},
     red_flags: [],
@@ -89,18 +89,6 @@ describe('filterRedFlags', () => {
     expect(filterRedFlags(profile, makeOffer({ required_skills: ['php', 'mysql'] })).length).toBeGreaterThan(0)
   })
 
-  it('flags when offer salary is below candidate minimum', () => {
-    const profile = makeProfile({ red_flags: [{ category: 'salary', description: 'minimum 20000' }] })
-    // Correct flat format: from/to are top-level fields, no nested salary object
-    const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 10000, to: 15000, currency: 'PLN' }] })
-    expect(filterRedFlags(profile, offer).length).toBeGreaterThan(0)
-  })
-
-  it('does not flag salary when offer meets minimum', () => {
-    const profile = makeProfile({ red_flags: [{ category: 'salary', description: 'minimum 15000' }] })
-    const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 15000, to: 25000, currency: 'PLN' }] })
-    expect(filterRedFlags(profile, offer)).toHaveLength(0)
-  })
 })
 
 // ─── scoreOffer ───────────────────────────────────────────────────────────────
@@ -140,28 +128,27 @@ describe('scoreOffer — techScore', () => {
 
 describe('scoreOffer — remoteScore', () => {
   it('returns 100 for remote candidate on remote offer', () => {
-    expect(score(makeProfile({ basic_info: { full_name: 'Test', remote_ok: true } }), makeOffer({ workplace_type: 'remote' })).remoteScore).toBe(100)
+    expect(score(makeProfile({ preferences: { work_model: ['remote'] } }), makeOffer({ workplace_type: 'remote' })).remoteScore).toBe(100)
   })
 
   it('returns 0 for remote candidate on office offer', () => {
-    expect(score(makeProfile({ basic_info: { full_name: 'Test', remote_ok: true } }), makeOffer({ workplace_type: 'office' })).remoteScore).toBe(0)
+    expect(score(makeProfile({ preferences: { work_model: ['remote'] } }), makeOffer({ workplace_type: 'office' })).remoteScore).toBe(0)
   })
 
   it('returns 60 for remote candidate on hybrid offer', () => {
-    expect(score(makeProfile({ basic_info: { full_name: 'Test', remote_ok: true } }), makeOffer({ workplace_type: 'hybrid' })).remoteScore).toBe(60)
+    expect(score(makeProfile({ preferences: { work_model: ['remote'] } }), makeOffer({ workplace_type: 'hybrid' })).remoteScore).toBe(60)
   })
 })
 
 describe('scoreOffer — salaryScore', () => {
   it('returns 100 when offer salary meets candidate minimum', () => {
-    const profile = makeProfile({ preferences: { salary_pln_net_b2b: { min: 15000, max: 25000 } } })
-    // Correct flat format: from/to are top-level, not nested under salary
+    const profile = makeProfile({ preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 15000 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 18000, to: 25000, currency: 'PLN' }] })
     expect(score(profile, offer).salaryScore).toBe(100)
   })
 
   it('returns less than 100 when offer salary is below candidate minimum', () => {
-    const profile = makeProfile({ preferences: { salary_pln_net_b2b: { min: 20000, max: 30000 } } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 20000 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 10000, to: 15000, currency: 'PLN' }] })
     const result = score(profile, offer)
     expect(result.salaryScore).toBeLessThan(100)

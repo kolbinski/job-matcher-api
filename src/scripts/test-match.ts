@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const BASE_URL = 'https://job-matcher-api-production.up.railway.app';
+const BASE_URL = 'http://localhost:3000';
 
 const API_KEY = process.env.JOBMATCHER_API_KEY;
 if (!API_KEY) {
@@ -26,6 +26,7 @@ interface OfferSalary {
 
 interface MatchedOffer {
   score: number;
+  rank: number | null;
   title: string;
   company: string;
   salary: OfferSalary | null;
@@ -50,6 +51,7 @@ interface MatchResponse {
     total_offers_scanned: number;
     response_ms: number;
     ai_scoring: boolean;
+    claude_evaluations_count: number;
   };
   matched: MatchedOffer[];
   unmatched: UnmatchedOffer[];
@@ -92,8 +94,8 @@ async function main(): Promise<void> {
     `Matched: ${meta.matched_count} | Unmatched: ${meta.unmatched_count} | Scanned: ${meta.total_offers_scanned} (${meta.response_ms}ms)\n`,
   );
 
-  console.log('AI scoring:', data.meta?.ai_scoring)
-  console.log('Claude evaluations:', (data.meta as Record<string, unknown>)?.claude_evaluations_count ?? 'n/a')
+  console.log('Full meta:', JSON.stringify(data.meta))
+  console.log('AI scoring:', data.meta?.ai_scoring, '| Claude evaluations:', data.meta?.claude_evaluations_count)
 
   // ── Top 5 matched with full Claude evaluation ─────────────────────────────
   console.log('\nTop 5 by score:');

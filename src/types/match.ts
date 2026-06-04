@@ -51,6 +51,7 @@ export interface MatchMeta {
   matched_count: number
   unmatched_count: number
   ai_scoring: boolean
+  claude_evaluations_count: number
 }
 
 export interface OfferSalary {
@@ -72,7 +73,7 @@ export interface MatchedOffer {
   matched_reasons: string[]
   missing_skills: string[]
   red_flags_found: string[]
-  ai_rank: number | null
+  rank: number | null
   salary_comparison: string | null
   role_fit: string | null
   recommended: boolean | null

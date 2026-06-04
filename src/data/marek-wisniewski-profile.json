@@ -11,7 +11,8 @@
       "longitude": 21.0122,
       "max_distance_km": 50
     },
-    "remote_ok": true,
+    "experience_level": "senior",
+    "experience_since": 2014,
     "job_search_status": "actively_looking"
   },
   "education": [
@@ -211,7 +212,9 @@
   ],
   "career_goals": {
     "short_term": {
-      "target_role": ["Senior Fullstack Engineer"],
+      "target_role": [
+        "Senior Fullstack Engineer"
+      ],
       "company_type": "product",
       "salary_target_pln_net_b2b": {
         "min": 22000,
@@ -219,25 +222,73 @@
       }
     },
     "long_term": {
-      "markets_considered": ["poland", "europe"]
+      "markets_considered": [
+        "poland",
+        "europe"
+      ]
     }
   },
   "technologies": [
-    { "name": "typescript", "since": 2018 },
-    { "name": "react", "since": 2016 },
-    { "name": "next.js", "since": 2016 },
-    { "name": "node.js", "since": 2018 },
-    { "name": "express", "since": 2018 },
-    { "name": "nest.js", "since": 2021 },
-    { "name": "graphql", "since": 2020 },
-    { "name": "postgresql", "since": 2016 },
-    { "name": "docker", "since": 2021 },
-    { "name": "kubernetes", "since": 2021 },
-    { "name": "aws", "since": 2021 },
-    { "name": "elasticsearch", "since": 2018 },
-    { "name": "redis", "since": 2020 },
-    { "name": "react native", "since": 2022 },
-    { "name": "vue.js", "since": 2018 }
+    {
+      "name": "typescript",
+      "since": 2018
+    },
+    {
+      "name": "react",
+      "since": 2016
+    },
+    {
+      "name": "next.js",
+      "since": 2016
+    },
+    {
+      "name": "node.js",
+      "since": 2018
+    },
+    {
+      "name": "express",
+      "since": 2018
+    },
+    {
+      "name": "nest.js",
+      "since": 2021
+    },
+    {
+      "name": "graphql",
+      "since": 2020
+    },
+    {
+      "name": "postgresql",
+      "since": 2016
+    },
+    {
+      "name": "docker",
+      "since": 2021
+    },
+    {
+      "name": "kubernetes",
+      "since": 2021
+    },
+    {
+      "name": "aws",
+      "since": 2021
+    },
+    {
+      "name": "elasticsearch",
+      "since": 2018
+    },
+    {
+      "name": "redis",
+      "since": 2020
+    },
+    {
+      "name": "react native",
+      "since": 2022
+    },
+    {
+      "name": "vue.js",
+      "since": 2018
+    }
   ],
   "red_flags": [
     {
@@ -258,15 +309,29 @@
     }
   ],
   "preferences": {
-    "company_type": ["product"],
-    "company_type_excluded": ["outsourcing", "body_leasing", "agency"],
-    "work_model": "remote",
+    "company_type": [
+      "product"
+    ],
+    "company_type_excluded": [
+      "outsourcing",
+      "body_leasing",
+      "agency"
+    ],
+    "work_model": ["remote", "hybrid"],
     "max_office_days_per_week": 2,
-    "industries": ["fintech", "saas", "developer_tools", "proptech"],
-    "salary_pln_net_b2b": {
-      "min": 22000,
-      "max": 28000
-    },
-    "markets": ["poland", "europe"]
+    "employment_type": ["b2b"],
+    "industries": [
+      "fintech",
+      "saas",
+      "developer_tools",
+      "proptech"
+    ],
+    "salary": [
+      { "type": "b2b", "currency": "PLN", "min": 22000 }
+    ],
+    "markets": [
+      "poland",
+      "europe"
+    ]
   }
 }

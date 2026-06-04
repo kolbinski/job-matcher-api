@@ -16,7 +16,8 @@ const BasicInfoSchema = z.object({
   linkedin: z.string().optional(),
   github: z.string().optional(),
   location: LocationSchema.optional(),
-  remote_ok: z.boolean().default(false),
+  experience_level: z.enum(['junior', 'mid', 'senior', 'c_level']).optional(),
+  experience_since: z.number().int().optional(),
   job_search_status: z.string().optional(),
 })
 
@@ -111,14 +112,21 @@ const CertificationSchema = z.object({
   issued_date: z.string().optional(),
 })
 
+const SalaryPreferenceSchema = z.object({
+  type: z.enum(['b2b', 'permanent']),
+  currency: z.string(),
+  min: z.number().nonnegative(),
+})
+
 const PreferencesSchema = z.object({
   company_type: z.array(z.string()).optional(),
   company_type_excluded: z.array(z.string()).optional(),
-  work_model: z.string().optional(),
+  work_model: z.array(z.string()).optional(),
   max_office_days_per_week: z.number().int().nonnegative().optional(),
   team_size: SalaryRangeSchema.optional(),
   industries: z.array(z.string()).optional(),
-  salary_pln_net_b2b: SalaryRangeSchema.optional(),
+  employment_type: z.array(z.string()).optional(),
+  salary: z.array(SalaryPreferenceSchema).optional(),
   markets: z.array(z.string()).optional(),
 })
 
@@ -148,3 +156,4 @@ export type CandidateProfile = z.infer<typeof CandidateProfileSchema>
 export type Technology = z.infer<typeof TechnologySchema>
 export type RedFlag = z.infer<typeof RedFlagSchema>
 export type Preferences = z.infer<typeof PreferencesSchema>
+export type SalaryPreference = z.infer<typeof SalaryPreferenceSchema>

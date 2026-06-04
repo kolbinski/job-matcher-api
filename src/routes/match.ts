@@ -3,7 +3,7 @@ import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateApiKey } from '../middleware/validateApiKey'
 import { rateLimiter } from '../middleware/rateLimiter'
-import { filterRedFlags } from '../services/redFlagFilter'
+import { applyPreFilters } from '../services/redFlagFilter'
 import { scoreOffer } from '../services/scoring'
 import { evaluateOffers } from '../services/claudeEvaluator'
 import { normalizeProfile } from '../services/profileParser'
@@ -49,18 +49,31 @@ matchRouter.post(
 
     const offers = await prisma.offer.findMany({ where: whereClause })
 
-    // ── 4. Red flag filter + scoring ───────────────────────────────────────
+    // ── 4. Pre-filter + scoring ────────────────────────────────────────────
     const pairs: MatchedPair[] = []
     const unmatched: UnmatchedOffer[] = []
+    const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, red_flags: 0 }
 
     for (const offer of offers) {
-      const rejectionReasons = filterRedFlags(profile, offer)
-      if (rejectionReasons.length > 0) {
-        if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, rejectionReasons))
+      const result = applyPreFilters(profile, offer)
+      if (!result.pass) {
+        if (result.rejectedByWorkplace)      rejectCounts.workplace++
+        if (result.rejectedByEmploymentType) rejectCounts.employment_type++
+        if (result.rejectedBySalary)         rejectCounts.salary++
+        if (result.rejectedBySeniority)      rejectCounts.seniority++
+        if (result.rejectedByRedFlags)       rejectCounts.red_flags++
+        if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, result.reasons))
         continue
       }
       pairs.push({ offer: toMatchedOffer(offer, scoreOffer(norm, offer)), original: offer })
     }
+
+    console.log(`[preFilter] workplace: rejected ${rejectCounts.workplace}`)
+    console.log(`[preFilter] employment_type: rejected ${rejectCounts.employment_type}`)
+    console.log(`[preFilter] salary: rejected ${rejectCounts.salary}`)
+    console.log(`[preFilter] seniority: rejected ${rejectCounts.seniority}`)
+    console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`)
+    console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 
     // ── 5. Sort ────────────────────────────────────────────────────────────
     const order = sort?.order ?? 'desc'
@@ -69,27 +82,41 @@ matchRouter.post(
     // ── 6. Post-score filters ──────────────────────────────────────────────
     const filteredPairs = applyPostScoreFilters(pairs, filters)
 
-    // ── 7. Claude batch evaluation — top 30 pre-filtered offers ───────────
+    // ── 7. Claude batch evaluation — all pre-filtered offers ─────────────
     let aiScoring = false
+    let claudeEvaluationsCount = 0
 
     if (opts.ai_scoring) {
-      const top30 = filteredPairs.slice(0, 30)
-      console.log('[match] Calling Claude evaluator for', top30.length, 'offers')
-      const claudeResults = await evaluateOffers(profile, top30.map(p => p.original))
+      const allOffers = filteredPairs
+      console.log('[match] Calling Claude evaluator for', allOffers.length, 'offers')
+      const claudeResults = await evaluateOffers(profile, allOffers.map(p => p.original))
       console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
       if (claudeResults) {
         aiScoring = true
-        for (let i = 0; i < top30.length; i++) {
-          const ev = claudeResults[i]
-          if (!ev) continue
-          const offer = top30[i].offer
-          if (ev.matched_reasons.length > 0) offer.matched_reasons = ev.matched_reasons
-          if (ev.missing_skills.length > 0) offer.missing_skills = ev.missing_skills
-          offer.ai_rank = ev.rank
-          offer.salary_comparison = ev.salary_comparison
-          offer.role_fit = ev.role_fit
-          offer.recommended = ev.recommended
+        claudeEvaluationsCount = claudeResults.length
+
+        // Build slug → evaluation map keyed by offer_index Claude echoed back,
+        // not by array position — Claude may reorder or return extra items.
+        const claudeBySlug = new Map(
+          claudeResults
+            .filter(ev => ev.offer_index >= 0 && ev.offer_index < allOffers.length)
+            .map(ev => [allOffers[ev.offer_index].original.slug, ev])
+        )
+
+        for (const p of filteredPairs) {
+          const claudeData = claudeBySlug.get(p.original.slug)
+          if (!claudeData) continue
+          p.offer.score = claudeData.score
+          p.offer.rank = claudeData.rank
+          p.offer.matched_reasons = claudeData.matched_reasons
+          p.offer.missing_skills = claudeData.missing_skills
+          p.offer.salary_comparison = claudeData.salary_comparison
+          p.offer.role_fit = claudeData.role_fit
+          p.offer.recommended = claudeData.recommended
         }
+
+        // Re-sort by Claude scores so top offers reflect Claude's ranking, not algorithm's
+        filteredPairs.sort((a, b) => b.offer.score - a.offer.score)
       }
     }
 
@@ -109,6 +136,10 @@ matchRouter.post(
     })
 
     // ── 10. Return response ────────────────────────────────────────────────
+    if (limitedMatched.length > 0) {
+      const first = limitedMatched[0]
+      console.log('[match] First offer Claude fields — role_fit:', first.role_fit, '| recommended:', first.recommended)
+    }
     res.json({
       meta: {
         call_id: call.id,
@@ -118,6 +149,7 @@ matchRouter.post(
         matched_count: limitedMatched.length,
         unmatched_count: unmatched.length,
         ai_scoring: aiScoring,
+        claude_evaluations_count: claudeEvaluationsCount,
       },
       matched: limitedMatched,
       unmatched: opts.include_unmatched ? unmatched : [],
@@ -140,7 +172,7 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     matched_reasons: scored.matchReasons,
     missing_skills: scored.missingSkills,
     red_flags_found: [],
-    ai_rank: null,
+    rank: null,
     salary_comparison: null,
     role_fit: null,
     recommended: null,
