@@ -31,6 +31,7 @@ interface MatchedOffer {
   salary: OfferSalary | null;
   matched_reasons: string[];
   missing_skills: string[];
+  salary_comparison: string | null;
   role_fit: string | null;
   recommended: boolean | null;
 }
@@ -48,6 +49,7 @@ interface MatchResponse {
     unmatched_count: number;
     total_offers_scanned: number;
     response_ms: number;
+    ai_scoring: boolean;
   };
   matched: MatchedOffer[];
   unmatched: UnmatchedOffer[];
@@ -70,7 +72,7 @@ async function main(): Promise<void> {
     res = await fetch(`${BASE_URL}/v1/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ profile, options: { include_unmatched: true, ai_scoring: false } }),
+      body: JSON.stringify({ profile, options: { include_unmatched: true, ai_scoring: true } }),
     });
   } catch {
     console.error('Connection refused — is the server running? (npm run dev)');
@@ -90,9 +92,11 @@ async function main(): Promise<void> {
     `Matched: ${meta.matched_count} | Unmatched: ${meta.unmatched_count} | Scanned: ${meta.total_offers_scanned} (${meta.response_ms}ms)\n`,
   );
 
-  // ── Top 5 matched ──────────────────────────────────────────────────────────
-  console.log('Top 5 by score:');
-  console.log('─'.repeat(62));
+  console.log('AI scoring:', data.meta?.ai_scoring)
+  console.log('Claude evaluations:', (data.meta as Record<string, unknown>)?.claude_evaluations_count ?? 'n/a')
+
+  // ── Top 5 matched with full Claude evaluation ─────────────────────────────
+  console.log('\nTop 5 by score:');
 
   matched.slice(0, 5).forEach((offer, i) => {
     const s = offer.salary;
@@ -100,28 +104,27 @@ async function main(): Promise<void> {
       s && s.from != null && s.to != null
         ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})`
         : 'salary not disclosed';
-    console.log(`${i + 1}. [${offer.score}/100] ${offer.title} @ ${offer.company}`);
-    console.log(`   ${salary}`);
-  });
 
-  // ── Claude evaluation for #1 ──────────────────────────────────────────────
-  if (matched.length > 0) {
-    const top = matched[0];
-    console.log(`\n#1 ${top.title} @ ${top.company} — score: ${top.score}/100`);
-    console.log('─'.repeat(62));
-    if (top.role_fit) {
-      console.log(`  role_fit:       ${top.role_fit}`);
+    console.log('\n' + '─'.repeat(62));
+    console.log(`${i + 1}. [${offer.score}/100] ${offer.title} @ ${offer.company}`);
+    console.log(`   salary:          ${salary}`);
+
+    if (offer.role_fit) {
+      console.log(`   role_fit:        ${offer.role_fit}`);
     }
-    if (top.matched_reasons.length > 0) {
-      console.log(`  matched_reasons: ${top.matched_reasons.join(' · ')}`);
+    if (offer.salary_comparison) {
+      console.log(`   salary_vs_target: ${offer.salary_comparison}`);
     }
-    if (top.missing_skills.length > 0) {
-      console.log(`  missing_skills:  ${top.missing_skills.join(', ')}`);
+    if (offer.matched_reasons.length > 0) {
+      offer.matched_reasons.forEach(r => console.log(`   ✓ ${r}`));
     }
-    if (top.recommended !== null) {
-      console.log(`  recommended:    ${top.recommended}`);
+    if (offer.missing_skills.length > 0) {
+      console.log(`   missing:         ${offer.missing_skills.join(', ')}`);
     }
-  }
+    if (offer.recommended !== null) {
+      console.log(`   recommended:     ${offer.recommended}`);
+    }
+  });
 
   // ── Unmatched analysis ────────────────────────────────────────────────────
   console.log(`\nUnmatched analysis (${meta.unmatched_count} total):`);

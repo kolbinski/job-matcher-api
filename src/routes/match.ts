@@ -74,7 +74,9 @@ matchRouter.post(
 
     if (opts.ai_scoring) {
       const top30 = filteredPairs.slice(0, 30)
+      console.log('[match] Calling Claude evaluator for', top30.length, 'offers')
       const claudeResults = await evaluateOffers(profile, top30.map(p => p.original))
+      console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
       if (claudeResults) {
         aiScoring = true
         for (let i = 0; i < top30.length; i++) {
