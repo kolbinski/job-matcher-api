@@ -117,7 +117,7 @@ export async function startScheduler(): Promise<void> {
       setTimeout(
         () => {
           console.log('[scheduler] Grace period over — running initial sync (fetch_offers_after_build=true)')
-          runSync().catch(err => console.error('[scheduler] Initial sync failed:', err))
+          syncOffers(false).catch(err => console.error('[scheduler] Initial sync failed:', err))
         },
         STARTUP_GRACE_MS + 1_000
       )

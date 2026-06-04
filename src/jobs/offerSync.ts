@@ -89,7 +89,7 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
 
   // Load max_pages and existing slugs in parallel
   const [maxPagesRow, existingSlugsRaw] = await Promise.all([
-    prisma.settings.findUnique({ where: { key: 'max_pages' } }),
+    prisma.settings.findUnique({ where: { key: 'justjoin_max_pages' } }),
     prisma.offer.findMany({ select: { slug: true } }),
   ])
   const maxPages = parseInt(maxPagesRow?.value ?? '3', 10)
