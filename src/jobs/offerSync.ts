@@ -99,10 +99,12 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
   let totalUpdated = 0
   let from = 0
   let pageNum = 0
+  let hitPageLimit = false
 
   while (true) {
     if (pageNum >= maxPages) {
       console.log(`[offerSync] Reached max_pages limit (${maxPages}) — stopping`)
+      hitPageLimit = true
       break
     }
 
@@ -143,6 +145,15 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
   if (totalFetched === 0) {
     console.warn('[offerSync] No offers fetched — skipping deletion')
     return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
+  }
+
+  // Never delete when we stopped early due to max_pages — we only saw a fraction
+  // of live offers, so anything not in this partial scrape is still valid.
+  if (hitPageLimit) {
+    console.warn(`[offerSync] Partial scrape (max_pages=${maxPages}) — skipping deletion to protect existing offers`)
+    console.log(`[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deleted 0`)
+    logSkillBreakdown(skillCounts)
+    return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: 0 }
   }
 
   if (!cleanupEnabled) {
