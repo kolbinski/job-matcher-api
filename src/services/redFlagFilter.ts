@@ -35,7 +35,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
     // partly_remote is treated as hybrid for matching
     const offerModel = raw === 'partly_remote' ? 'hybrid' : raw
     if (offerModel && !acceptedModels.includes(offerModel)) {
-      reasons.push(`Workplace '${raw}' not accepted (accepted: ${acceptedModels.join(', ')})`)
+      reasons.push(`Offer requires ${offerModel} work but candidate only accepts ${acceptedModels.join('/')}`)
       rejectedByWorkplace = true
     }
   }
@@ -48,7 +48,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
       .filter((t): t is string => Boolean(t))
     // Only reject if offer has declared types but none match
     if (offerTypes.length > 0 && !acceptedTypes.some(t => offerTypes.includes(t))) {
-      reasons.push(`Employment type [${offerTypes.join(', ')}] not in accepted [${acceptedTypes.join(', ')}]`)
+      reasons.push(`Offer only provides ${offerTypes.join('/')} contract but candidate wants ${acceptedTypes.join('/')}`)
       rejectedByEmploymentType = true
     }
   }
@@ -77,7 +77,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
       const bestMax = Math.max(...monthlyMaxes)
       if (bestMax < pref.min) {
         reasons.push(
-          `Best ${pref.type} salary ${bestMax.toLocaleString()} ${pref.currency} < minimum ${pref.min.toLocaleString()} ${pref.currency}`
+          `Best ${pref.type} salary ${bestMax.toLocaleString()} ${pref.currency} is below candidate's minimum of ${pref.min.toLocaleString()} ${pref.currency}`
         )
         rejectedBySalary = true
       }
@@ -93,7 +93,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
       const ci = LEVELS.indexOf(candidateLevel)
       const oi = LEVELS.indexOf(offerLevel)
       if (ci !== -1 && oi !== -1 && Math.abs(ci - oi) > 1) {
-        reasons.push(`Seniority mismatch: candidate is ${candidateLevel}, offer requires ${offerLevel}`)
+        reasons.push(`Offer is for ${offerLevel} level but candidate is ${candidateLevel}`)
         rejectedBySeniority = true
       }
     }
@@ -112,7 +112,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
           `(^|[^a-z0-9])${tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`
         )
         if (offerTechs.some(o => o === tech || pattern.test(o))) {
-          reasons.push(`Requires ${tech} (excluded: ${flag.description})`)
+          reasons.push(`Offer requires ${tech} which is on candidate's rejected technologies list`)
           rejectedByRedFlags = true
           break
         }
@@ -146,7 +146,7 @@ export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[
           `(^|[^a-z0-9])${tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`
         )
         if (offerTechs.some(o => o === tech || pattern.test(o))) {
-          reasons.push(`Requires ${tech} (excluded: ${flag.description})`)
+          reasons.push(`Offer requires ${tech} which is on candidate's rejected technologies list`)
           break
         }
       }

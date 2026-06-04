@@ -132,31 +132,15 @@ async function main(): Promise<void> {
   console.log(`\nUnmatched analysis (${meta.unmatched_count} total):`);
   console.log('─'.repeat(62));
 
-  // Group offers by each individual rejection reason
-  const byReason = new Map<string, UnmatchedOffer[]>();
-  for (const offer of unmatched) {
-    for (const reason of offer.rejection_reasons) {
-      const group = byReason.get(reason) ?? [];
-      group.push(offer);
-      byReason.set(reason, group);
-    }
-  }
-
-  // Sort by count descending, take top 10
-  const ranked = [...byReason.entries()]
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 10);
-
-  ranked.forEach(([reason, offers], i) => {
-    console.log(`\n${i + 1}. "${reason}" — ${offers.length} offer${offers.length === 1 ? '' : 's'}`);
-    offers.slice(0, 3).forEach(offer => {
-      const reqSkills = offer.required_skills ?? [];
-      const skills = reqSkills.length > 0
-        ? reqSkills.slice(0, 6).join(', ') + (reqSkills.length > 6 ? '…' : '')
-        : 'none listed';
-      console.log(`   • ${offer.title} @ ${offer.company}`);
-      console.log(`     skills: ${skills}`);
-    });
+  unmatched.slice(0, 30).forEach(offer => {
+    const reqSkills = offer.required_skills ?? [];
+    const skills = reqSkills.length > 0
+      ? reqSkills.slice(0, 6).join(', ') + (reqSkills.length > 6 ? '…' : '')
+      : 'none listed';
+    const reason = offer.rejection_reasons[0] ?? 'unknown';
+    console.log(`\n- ${offer.title} @ ${offer.company}`);
+    console.log(`  reason: ${reason}`);
+    console.log(`  skills: ${skills}`);
   });
 }
 
