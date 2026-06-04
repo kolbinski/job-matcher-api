@@ -14,7 +14,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:sync-settings": "tsx prisma/sync-settings.ts",
     "db:studio": "prisma studio",
-    "check": "tsc --noEmit && eslint src && vitest run && prisma validate"
+    "check": "tsc --noEmit && tsc -p tsconfig.test.json && eslint src && vitest run && prisma validate"
   },
   "repository": {
     "type": "git",

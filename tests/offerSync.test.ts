@@ -37,7 +37,6 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     street: null,
     latitude: null,
     longitude: null,
-    category_id: null,
     open_to_hire_ukrainians: null,
     languages: [],
     url: 'https://justjoin.it/test',
