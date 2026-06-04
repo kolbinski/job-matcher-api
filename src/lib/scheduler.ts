@@ -2,11 +2,6 @@ import cron from 'node-cron'
 import { prisma } from './prisma'
 import { syncOffers } from '../jobs/offerSync'
 
-// Two expressions separated by '|' — tuned for CEST (UTC+2, summer):
-//   '45 6 * * 1-5'   — 06:45 UTC = 08:45 CEST (full scrape)
-//   '0 7-15 * * 1-5' — 07:00-15:00 UTC = 09:00-17:00 CEST, top of each hour
-// In October (CET, UTC+1): change to '45 7 * * 1-5|0 8-16 * * 1-5'
-const DEFAULT_SCHEDULE = '45 6 * * 1-5|0 7-15 * * 1-5'
 const STARTUP_GRACE_MS = 5 * 60 * 1000
 const startupTime = Date.now()
 
@@ -66,16 +61,27 @@ async function runSync(): Promise<void> {
   }
 }
 
-// cronjob_schedule controls WHEN the cron fires — read once at startup, requires redeploy to change.
-// work_start_utc / work_end_utc / work_days control WHETHER the sync runs — read on every tick,
-// so DB changes take effect immediately without redeploying.
-export async function startScheduler(): Promise<void> {
-  const setting = await prisma.settings.findUnique({
-    where: { key: 'cronjob_schedule' },
-  })
+// Builds two cron expressions from work_start_utc, work_end_utc, work_days settings:
+//   '45 {start} * * {days}'          — full scrape 15min into the first working hour
+//   '0 {start+1}-{end} * * {days}'   — incremental scrape every hour during working hours
+async function buildExpressions(): Promise<string[]> {
+  const [startRow, endRow, daysRow] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'work_start_utc' } }),
+    prisma.settings.findUnique({ where: { key: 'work_end_utc' } }),
+    prisma.settings.findUnique({ where: { key: 'work_days' } }),
+  ])
+  const start = parseInt(startRow?.value ?? '6', 10)
+  const end   = parseInt(endRow?.value   ?? '15', 10)
+  const days  = daysRow?.value ?? '1-5'
+  return [
+    `45 ${start} * * ${days}`,
+    `0 ${start + 1}-${end} * * ${days}`,
+  ]
+}
 
-  const raw = setting?.value ?? DEFAULT_SCHEDULE
-  const expressions = raw.split('|').map(e => e.trim()).filter(Boolean)
+export async function startScheduler(): Promise<void> {
+  const expressions = await buildExpressions()
+  console.log(`[scheduler] Built expressions from settings: ${expressions.join(' | ')}`)
 
   let scheduled = 0
   for (const expr of expressions) {
@@ -88,13 +94,16 @@ export async function startScheduler(): Promise<void> {
   }
 
   if (scheduled === 0) {
-    throw new Error('[scheduler] No valid cron expressions found — scheduler not started')
+    throw new Error('[scheduler] No valid cron expressions — scheduler not started')
   }
 
-  console.log(`[scheduler] Scheduled ${scheduled} expression(s): ${expressions.join(' | ')}`)
+  console.log(`[scheduler] Scheduled ${scheduled} expression(s)`)
 
+  console.log('[scheduler] Reading fetch_offers_after_build from DB...')
   const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })
   const shouldFetch = fetchRow?.value === 'true'
+  console.log(`[scheduler] fetch_offers_after_build=${fetchRow?.value ?? '(not set)'}`)
+
   if (shouldFetch) {
     setTimeout(
       () => {
@@ -103,6 +112,7 @@ export async function startScheduler(): Promise<void> {
       },
       STARTUP_GRACE_MS + 1_000
     )
+    console.log(`[scheduler] setTimeout registered for ${STARTUP_GRACE_MS + 1_000}ms`)
   } else {
     console.log('[scheduler] Startup sync skipped (fetch_offers_after_build=false)')
   }
