@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client'
 
 declare global {
   // Prevent multiple PrismaClient instances in development (tsx watch reloads)
-  // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined
 }
 

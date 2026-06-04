@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:sync-settings": "tsx prisma/sync-settings.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "check": "tsc --noEmit && eslint src && vitest run && prisma validate"
   },
   "repository": {
     "type": "git",
@@ -39,15 +40,18 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
     "@types/node-cron": "^3.0.11",
     "@types/supertest": "^7.2.0",
     "dotenv": "^17.4.2",
+    "eslint": "^10.4.1",
     "prisma": "5.22.0",
     "supertest": "^7.2.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1",
     "vitest": "^4.1.8"
   }
 }

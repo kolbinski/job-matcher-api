@@ -81,7 +81,7 @@ Sum = 1.00. Any change to weights is a breaking change tracked in `memory.md`.
 
 ## Git Workflow
 
-When the user says **"commit"**: run `git add -A && git commit -m "..." && git push origin main`. Always push to `main` — never to `master` or any other branch.
+When the user says **"commit"**: run `npm run check` first. If it fails, fix all errors before proceeding. Once check passes, run `git add -A && git commit -m "..." && git push origin main`. Always push to `main` — never to `master` or any other branch.
 
 ---
 

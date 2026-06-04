@@ -27,7 +27,7 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
     remote_interview: offer.remote_interview,
     required_skills: offer.required_skills,
     nice_to_have_skills: offer.nice_to_have_skills,
-    employment_types: offer.employment_types as Prisma.InputJsonValue,
+    employment_types: offer.employment_types as unknown as Prisma.InputJsonValue,
     multilocation:
       offer.multilocation !== null
         ? (offer.multilocation as Prisma.InputJsonValue)
