@@ -18,6 +18,20 @@ const mockFetchPage = vi.mocked(fetchPage)
 
 const TEST_SLUG_PREFIX = 'test-offersync-'
 
+// Capture the real updateMany before spying so the mock can delegate to it.
+const _realUpdateMany = prisma.offer.updateMany.bind(prisma.offer)
+
+// Scope every prisma.offer.updateMany call to test-prefixed slugs only.
+// Prevents the soft-delete step in syncOffers() from touching production offers.
+vi.spyOn(prisma.offer, 'updateMany').mockImplementation(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (args?: any) =>
+    _realUpdateMany({
+      ...args,
+      where: { AND: [args?.where ?? {}, { slug: { startsWith: TEST_SLUG_PREFIX } }] },
+    })
+)
+
 function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): NormalizedOffer {
   return {
     slug: `${TEST_SLUG_PREFIX}${slug}`,
@@ -64,6 +78,7 @@ function makeDbOffer(slug: string) {
 }
 
 afterAll(async () => {
+  vi.restoreAllMocks()
   await prisma.offer.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } })
   await prisma.$disconnect()
 })

@@ -92,7 +92,7 @@ describe('POST /v1/match', () => {
       expect(typeof offer.recommended).toBe('boolean')
       expect(typeof offer.role_fit).toBe('string')
     }
-  })
+  }, 120_000) // Claude API can take up to 120 s for a full batch
 
   it('writes an api_calls row on success', async () => {
     await request(app)
