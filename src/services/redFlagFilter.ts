@@ -43,12 +43,16 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   // ── 2. Employment type filter ──────────────────────────────────────────────
   const acceptedTypes = (profile.preferences?.employment_type ?? []).map(t => t.toLowerCase())
   if (acceptedTypes.length > 0) {
-    const offerTypes = parseEmploymentTypes(offer)
-      .map(e => e.type?.toLowerCase())
-      .filter((t): t is string => Boolean(t))
-    // Only reject if offer has declared types but none match
-    if (offerTypes.length > 0 && !acceptedTypes.some(t => offerTypes.includes(t))) {
-      reasons.push(`Offer only provides ${offerTypes.join('/')} contract but candidate wants ${acceptedTypes.join('/')}`)
+    const offerTypes = [...new Set(
+      parseEmploymentTypes(offer)
+        .map(e => e.type?.toLowerCase())
+        .filter((t): t is string => Boolean(t))
+    )]
+    // "any" means employer accepts all contract forms — never reject
+    const hasAny = offerTypes.includes('any')
+    // Only reject if offer has declared types, none match, and none is "any"
+    if (!hasAny && offerTypes.length > 0 && !acceptedTypes.some(t => offerTypes.includes(t))) {
+      reasons.push(`Offer only provides ${offerTypes.join(', ')} contract but candidate wants ${acceptedTypes.join('/')}`)
       rejectedByEmploymentType = true
     }
   }

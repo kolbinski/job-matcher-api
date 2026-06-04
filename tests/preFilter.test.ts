@@ -144,6 +144,27 @@ describe('employment type filter', () => {
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
+
+  it('passes offer with type "any" even when candidate wants b2b', () => {
+    const profile = makeProfile({ preferences: { employment_type: ['b2b'] } })
+    const offer = makeOffer({ employment_types: [{ type: 'any', currency: 'PLN' }] })
+    const result = applyPreFilters(profile, offer)
+    expect(result.rejectedByEmploymentType).toBe(false)
+  })
+
+  it('deduplicates repeated types in rejection reason', () => {
+    const profile = makeProfile({ preferences: { employment_type: ['b2b'] } })
+    const offer = makeOffer({
+      employment_types: [
+        { type: 'permanent', currency: 'PLN' },
+        { type: 'permanent', currency: 'EUR' },
+        { type: 'permanent', currency: 'USD' },
+      ],
+    })
+    const result = applyPreFilters(profile, offer)
+    expect(result.rejectedByEmploymentType).toBe(true)
+    expect(result.reasons[0]).toBe('Offer only provides permanent contract but candidate wants b2b')
+  })
 })
 
 // ─── SALARY FILTER ────────────────────────────────────────────────────────────
