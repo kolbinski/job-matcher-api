@@ -29,7 +29,6 @@ matchRouter.post(
 
     const { profile, filters, sort, options } = parsed.data
     const opts = {
-      limit: options?.limit ?? 20,
       include_unmatched: options?.include_unmatched ?? false,
       ai_scoring: options?.ai_scoring ?? true,
     }
@@ -75,7 +74,7 @@ matchRouter.post(
     let aiScoring = false
 
     if (opts.ai_scoring) {
-      const aiCount = Math.min(opts.limit, 10)
+      const aiCount = 10
       for (const offer of filteredMatched.slice(0, aiCount)) {
         const original = offer.url ? offerToOriginal.get(offer.url) : undefined
         if (!original) continue
@@ -88,8 +87,8 @@ matchRouter.post(
       }
     }
 
-    // ── 8. Apply limit ─────────────────────────────────────────────────────
-    const limitedMatched = filteredMatched.slice(0, opts.limit)
+    // ── 8. Return all scored offers ────────────────────────────────────────
+    const limitedMatched = filteredMatched
 
     // ── 9. Log api_calls row ───────────────────────────────────────────────
     const responseMs = Date.now() - startTime
@@ -127,7 +126,7 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     techScore: scored.techScore,
     salaryScore: scored.salaryScore,
     remoteScore: scored.remoteScore,
-    industryScore: scored.experienceLevelScore,
+    industryScore: scored.industryScore,
   }
   return {
     score: scored.score,
@@ -160,6 +159,7 @@ function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOf
     hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
     salary: extractSalary(offer),
     rejection_reasons: rejectionReasons,
+    required_skills: offer.required_skills,
     url: offer.url,
     source: offer.source,
   }

@@ -15,7 +15,7 @@ export interface ScoredOffer {
   techScore: number
   salaryScore: number
   remoteScore: number
-  experienceLevelScore: number
+  industryScore: number
   missingSkills: string[]
   matchReasons: string[]
 }
@@ -66,18 +66,18 @@ export function scoreOffer(norm: NormalizedProfile, offer: Offer): ScoredOffer {
   // ── remote score ──────────────────────────────────────────────────────────
   const remoteScore = calcRemoteScore(norm.wantsRemote, offer, matchReasons)
 
-  // ── experience level score (0.15 weight) ─────────────────────────────────
-  const experienceLevelScore = calcExperienceLevelScore(norm.experienceLevel, offer, matchReasons)
+  // ── industry score: role category + seniority (0.15 weight) ─────────────
+  const industryScore = calcIndustryScore(norm, offer, matchReasons)
 
   // ── weighted total ────────────────────────────────────────────────────────
   const score = Math.round(
-    techScore            * TECH_WEIGHT +
-    salaryScore          * SALARY_WEIGHT +
-    remoteScore          * REMOTE_WEIGHT +
-    experienceLevelScore * EXPERIENCE_LEVEL_WEIGHT
+    techScore     * TECH_WEIGHT +
+    salaryScore   * SALARY_WEIGHT +
+    remoteScore   * REMOTE_WEIGHT +
+    industryScore * EXPERIENCE_LEVEL_WEIGHT
   )
 
-  return { score, techScore, salaryScore, remoteScore, experienceLevelScore, missingSkills, matchReasons }
+  return { score, techScore, salaryScore, remoteScore, industryScore, missingSkills, matchReasons }
 }
 
 function calcRemoteScore(wantsRemote: boolean, offer: Offer, matchReasons: string[]): number {
@@ -92,9 +92,48 @@ function calcRemoteScore(wantsRemote: boolean, offer: Offer, matchReasons: strin
   return 0
 }
 
-// Measures seniority match (junior/mid/senior/expert) between candidate and offer.
-// Named calcExperienceLevelScore because JustJoin offers have no industry field in V1.
-function calcExperienceLevelScore(
+// Infer role domain from offer title keywords.
+// category_id is null in all JustJoin offers — title is the only signal.
+function inferOfferCategory(offer: Offer): string | null {
+  const t = offer.title.toLowerCase()
+  if (/devops|site reliability|sre|platform engineer|infrastructure|network engineer|cloud engineer|systems admin|system admin/.test(t)) return 'devops'
+  if (/data engineer|data scientist|machine learning|ml engineer|data analyst|bi developer|business intelligence/.test(t)) return 'data'
+  if (/\bqa\b|quality assurance|test engineer|automation engineer|\btester\b/.test(t)) return 'qa'
+  if (/\bios\b|\bandroid\b|mobile developer|flutter developer/.test(t)) return 'mobile'
+  if (/fullstack|full[- ]stack/.test(t)) return 'fullstack'
+  if (/frontend|front[- ]end/.test(t)) return 'frontend'
+  if (/backend|back[- ]end/.test(t)) return 'backend'
+  return null
+}
+
+const WEB_CATEGORIES = new Set(['fullstack', 'frontend', 'backend'])
+
+function calcRoleCategoryScore(
+  targetCategory: string | null,
+  offerCategory: string | null,
+  matchReasons: string[]
+): number {
+  if (!targetCategory || !offerCategory) return 75
+
+  if (targetCategory === offerCategory) {
+    matchReasons.push(`Role category match: ${offerCategory}`)
+    return 100
+  }
+
+  // Crossover within web (fullstack ↔ frontend ↔ backend) — acceptable
+  if (WEB_CATEGORIES.has(targetCategory) && WEB_CATEGORIES.has(offerCategory)) return 70
+
+  // DevOps/infra offer for a web dev (or vice versa) — strong mismatch
+  if (offerCategory === 'devops' && WEB_CATEGORIES.has(targetCategory)) return 10
+  if (targetCategory === 'devops' && WEB_CATEGORIES.has(offerCategory)) return 10
+
+  // Data/QA/mobile offer for web dev — moderate mismatch
+  if (WEB_CATEGORIES.has(targetCategory)) return 25
+
+  return 50
+}
+
+function calcSeniorityScore(
   candidateLevel: string | null,
   offer: Offer,
   matchReasons: string[]
@@ -115,4 +154,21 @@ function calcExperienceLevelScore(
   }
   if (diff === 1) return 65
   return 30
+}
+
+// Combines role category match (60%) with seniority match (40%).
+// Severe role mismatch (≤20) overrides seniority — being the right level
+// for the wrong job domain is not a positive signal.
+function calcIndustryScore(
+  norm: NormalizedProfile,
+  offer: Offer,
+  matchReasons: string[]
+): number {
+  const offerCategory = inferOfferCategory(offer)
+  const roleScore = calcRoleCategoryScore(norm.targetRoleCategory, offerCategory, matchReasons)
+
+  if (roleScore <= 20) return roleScore
+
+  const seniorityScore = calcSeniorityScore(norm.experienceLevel, offer, matchReasons)
+  return Math.round(roleScore * 0.6 + seniorityScore * 0.4)
 }

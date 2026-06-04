@@ -27,7 +27,6 @@ export const MatchSortSchema = z.object({
 })
 
 export const MatchOptionsSchema = z.object({
-  limit: z.number().int().min(1).max(100).default(20),
   include_unmatched: z.boolean().default(false),
   ai_scoring: z.boolean().default(true),
 })
@@ -97,6 +96,7 @@ export interface UnmatchedOffer {
   hybrid: boolean
   salary: OfferSalary | null
   rejection_reasons: string[]
+  required_skills: string[]
   url: string | null
   source: string
 }

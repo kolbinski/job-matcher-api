@@ -4,13 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const BASE_URL =
-  process.env.MATCH_ENV === 'production'
-    ? 'https://job-matcher-api-production.up.railway.app'
-    : 'http://localhost:3000';
-
-console.log('MATCH_ENV:', process.env.MATCH_ENV);
-console.log('BASE_URL:', BASE_URL);
+const BASE_URL = 'https://job-matcher-api-production.up.railway.app';
 
 const API_KEY = process.env.JOBMATCHER_API_KEY;
 if (!API_KEY) {
@@ -110,6 +104,7 @@ interface UnmatchedOffer {
   title: string;
   company: string;
   rejection_reasons: string[];
+  required_skills: string[];
 }
 
 interface MatchResponse {
@@ -241,7 +236,7 @@ async function main(): Promise<void> {
     res = await fetch(`${BASE_URL}/v1/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ profile, options: { ai_scoring: false, include_unmatched: true } }),
+      body: JSON.stringify({ profile, options: { include_unmatched: true, ai_scoring: false } }),
     });
   } catch {
     console.error('Connection refused — is the server running? (npm run dev)');
@@ -289,13 +284,35 @@ async function main(): Promise<void> {
     console.log(`  total         ${top.score.toString().padStart(3)}/100`);
   }
 
-  // ── Top 3 unmatched ────────────────────────────────────────────────────────
-  console.log(`\nTop 3 unmatched (${meta.unmatched_count} total):`);
+  // ── Unmatched analysis ────────────────────────────────────────────────────
+  console.log(`\nUnmatched analysis (${meta.unmatched_count} total):`);
   console.log('─'.repeat(62));
 
-  unmatched.slice(0, 3).forEach((offer, i) => {
-    console.log(`${i + 1}. ${offer.title} @ ${offer.company}`);
-    console.log(`   Rejected: ${offer.rejection_reasons.join('; ')}`);
+  // Group offers by each individual rejection reason
+  const byReason = new Map<string, UnmatchedOffer[]>();
+  for (const offer of unmatched) {
+    for (const reason of offer.rejection_reasons) {
+      const group = byReason.get(reason) ?? [];
+      group.push(offer);
+      byReason.set(reason, group);
+    }
+  }
+
+  // Sort by count descending, take top 10
+  const ranked = [...byReason.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 10);
+
+  ranked.forEach(([reason, offers], i) => {
+    console.log(`\n${i + 1}. "${reason}" — ${offers.length} offer${offers.length === 1 ? '' : 's'}`);
+    offers.slice(0, 3).forEach(offer => {
+      const reqSkills = offer.required_skills ?? [];
+      const skills = reqSkills.length > 0
+        ? reqSkills.slice(0, 6).join(', ') + (reqSkills.length > 6 ? '…' : '')
+        : 'none listed';
+      console.log(`   • ${offer.title} @ ${offer.company}`);
+      console.log(`     skills: ${skills}`);
+    });
   });
 }
 

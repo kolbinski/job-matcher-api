@@ -7,6 +7,7 @@ export interface NormalizedProfile {
   salaryMinPln: number | null
   wantsRemote: boolean
   experienceLevel: string | null // inferred from technologies.since
+  targetRoleCategory: string | null // inferred from career_goals.short_term.target_role
 }
 
 export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
@@ -25,7 +26,24 @@ export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
 
   const experienceLevel = inferExperienceLevel(profile)
 
-  return { techs, salaryMinPln, wantsRemote, experienceLevel }
+  const targetRoleCategory = inferCandidateCategory(
+    profile.career_goals?.short_term?.target_role?.[0] ?? null
+  )
+
+  return { techs, salaryMinPln, wantsRemote, experienceLevel, targetRoleCategory }
+}
+
+export function inferCandidateCategory(targetRole: string | null): string | null {
+  if (!targetRole) return null
+  const r = targetRole.toLowerCase()
+  if (/fullstack|full[- ]stack/.test(r)) return 'fullstack'
+  if (/frontend|front[- ]end/.test(r)) return 'frontend'
+  if (/backend|back[- ]end/.test(r)) return 'backend'
+  if (/devops|sre|platform|infrastructure/.test(r)) return 'devops'
+  if (/data|machine learning|ml engineer/.test(r)) return 'data'
+  if (/mobile|ios|android/.test(r)) return 'mobile'
+  if (/\bqa\b|quality assurance|test/.test(r)) return 'qa'
+  return null
 }
 
 function inferExperienceLevel(profile: CandidateProfile): string | null {

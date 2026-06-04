@@ -78,7 +78,7 @@ describe('POST /v1/match', () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
-      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: true, limit: 1 } })
+      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: true } })
 
     expect(res.status).toBe(200)
     expect(typeof res.body.meta.ai_scoring).toBe('boolean')
