@@ -5,11 +5,13 @@ import { validateApiKey } from '../middleware/validateApiKey'
 import { rateLimiter } from '../middleware/rateLimiter'
 import { filterRedFlags } from '../services/redFlagFilter'
 import { scoreOffer } from '../services/scoring'
-import { generateAiSummary } from '../services/aiSummary'
+import { evaluateOffers } from '../services/claudeEvaluator'
 import { normalizeProfile } from '../services/profileParser'
 import { MatchRequestSchema } from '../types/match'
-import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, ScoreBreakdown } from '../types/match'
+import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
 import { parseEmploymentTypes } from '../lib/offers'
+
+type MatchedPair = { offer: MatchedOffer; original: Offer }
 
 export const matchRouter = Router()
 
@@ -48,9 +50,8 @@ matchRouter.post(
     const offers = await prisma.offer.findMany({ where: whereClause })
 
     // ── 4. Red flag filter + scoring ───────────────────────────────────────
-    const matched: MatchedOffer[] = []
+    const pairs: MatchedPair[] = []
     const unmatched: UnmatchedOffer[] = []
-    const offerToOriginal = new Map<string, Offer>()
 
     for (const offer of offers) {
       const rejectionReasons = filterRedFlags(profile, offer)
@@ -58,37 +59,40 @@ matchRouter.post(
         if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, rejectionReasons))
         continue
       }
-      const matchedOffer = toMatchedOffer(offer, scoreOffer(norm, offer))
-      if (offer.url) offerToOriginal.set(offer.url, offer) // url derived from PK slug — unique
-      matched.push(matchedOffer)
+      pairs.push({ offer: toMatchedOffer(offer, scoreOffer(norm, offer)), original: offer })
     }
 
     // ── 5. Sort ────────────────────────────────────────────────────────────
     const order = sort?.order ?? 'desc'
-    matched.sort((a, b) => order === 'asc' ? a.score - b.score : b.score - a.score)
+    pairs.sort((a, b) => order === 'asc' ? a.offer.score - b.offer.score : b.offer.score - a.offer.score)
 
     // ── 6. Post-score filters ──────────────────────────────────────────────
-    const filteredMatched = applyPostScoreFilters(matched, filters)
+    const filteredPairs = applyPostScoreFilters(pairs, filters)
 
-    // ── 7. AI summaries — only for offers that will be in the response ─────
+    // ── 7. Claude batch evaluation — top 30 pre-filtered offers ───────────
     let aiScoring = false
 
     if (opts.ai_scoring) {
-      const aiCount = 10
-      for (const offer of filteredMatched.slice(0, aiCount)) {
-        const original = offer.url ? offerToOriginal.get(offer.url) : undefined
-        if (!original) continue
-        const summary = await generateAiSummary(original, offer.score, offer.matched_reasons, offer.missing_skills)
-        if (summary) {
-          offer.ai_summary = summary.aiSummary
-          offer.ai_recommendation = summary.aiRecommendation
-          aiScoring = true
+      const top30 = filteredPairs.slice(0, 30)
+      const claudeResults = await evaluateOffers(profile, top30.map(p => p.original))
+      if (claudeResults) {
+        aiScoring = true
+        for (let i = 0; i < top30.length; i++) {
+          const ev = claudeResults[i]
+          if (!ev) continue
+          const offer = top30[i].offer
+          if (ev.matched_reasons.length > 0) offer.matched_reasons = ev.matched_reasons
+          if (ev.missing_skills.length > 0) offer.missing_skills = ev.missing_skills
+          offer.ai_rank = ev.rank
+          offer.salary_comparison = ev.salary_comparison
+          offer.role_fit = ev.role_fit
+          offer.recommended = ev.recommended
         }
       }
     }
 
     // ── 8. Return all scored offers ────────────────────────────────────────
-    const limitedMatched = filteredMatched
+    const limitedMatched = filteredPairs.map(p => p.offer)
 
     // ── 9. Log api_calls row ───────────────────────────────────────────────
     const responseMs = Date.now() - startTime
@@ -122,15 +126,8 @@ matchRouter.post(
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): MatchedOffer {
-  const breakdown: ScoreBreakdown = {
-    techScore: scored.techScore,
-    salaryScore: scored.salaryScore,
-    remoteScore: scored.remoteScore,
-    industryScore: scored.industryScore,
-  }
   return {
     score: scored.score,
-    score_breakdown: breakdown,
     title: offer.title,
     company: offer.company_name,
     city: offer.city,
@@ -141,8 +138,10 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     matched_reasons: scored.matchReasons,
     missing_skills: scored.missingSkills,
     red_flags_found: [],
-    ai_summary: null,
-    ai_recommendation: null,
+    ai_rank: null,
+    salary_comparison: null,
+    role_fit: null,
+    recommended: null,
     url: offer.url,
     source: offer.source,
     fetched_at: offer.fetched_at?.toISOString() ?? null,
@@ -183,10 +182,10 @@ function extractSalary(offer: Offer): OfferSalary | null {
   return null
 }
 
-function applyPostScoreFilters(offers: MatchedOffer[], filters?: MatchFilters): MatchedOffer[] {
-  if (!filters) return offers
+function applyPostScoreFilters(pairs: MatchedPair[], filters?: MatchFilters): MatchedPair[] {
+  if (!filters) return pairs
 
-  return offers.filter((o) => {
+  return pairs.filter(({ offer: o }) => {
     if (filters.min_score !== undefined && o.score < filters.min_score) return false
     if (filters.remote && !o.remote) return false
     if (filters.hybrid && !o.hybrid) return false

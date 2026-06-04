@@ -60,16 +60,8 @@ export interface OfferSalary {
   type: string
 }
 
-export interface ScoreBreakdown {
-  techScore: number
-  salaryScore: number
-  remoteScore: number
-  industryScore: number
-}
-
 export interface MatchedOffer {
   score: number
-  score_breakdown: ScoreBreakdown
   title: string
   company: string
   city: string | null
@@ -80,8 +72,10 @@ export interface MatchedOffer {
   matched_reasons: string[]
   missing_skills: string[]
   red_flags_found: string[]
-  ai_summary: string | null
-  ai_recommendation: 'apply' | 'consider' | 'skip' | null
+  ai_rank: number | null
+  salary_comparison: string | null
+  role_fit: string | null
+  recommended: boolean | null
   url: string | null
   source: string
   fetched_at: string | null
