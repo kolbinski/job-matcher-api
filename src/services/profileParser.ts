@@ -8,6 +8,9 @@ export interface NormalizedProfile {
   wantsRemote: boolean
   experienceLevel: string | null // inferred from technologies.since
   targetRoleCategory: string | null // inferred from career_goals.short_term.target_role
+  maxOfficeDays: number | null
+  candidateLocation: { lat: number; lon: number; maxDistanceKm: number } | null
+  rejectedTechs: Set<string>
 }
 
 export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
@@ -30,7 +33,29 @@ export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
     profile.career_goals?.short_term?.target_role?.[0] ?? null
   )
 
-  return { techs, salaryMinPln, wantsRemote, experienceLevel, targetRoleCategory }
+  const maxOfficeDays = profile.preferences?.max_office_days_per_week ?? null
+
+  const loc = profile.basic_info.location
+  const candidateLocation =
+    loc &&
+    typeof loc.latitude === 'number' &&
+    typeof loc.longitude === 'number' &&
+    typeof loc.max_distance_km === 'number'
+      ? { lat: loc.latitude, lon: loc.longitude, maxDistanceKm: loc.max_distance_km }
+      : null
+
+  const rejectedTechs = new Set(
+    profile.red_flags
+      .filter((f) => ['technology', 'tech', 'stack', 'technologies'].includes(f.category.toLowerCase()))
+      .flatMap((f) =>
+        f.description
+          .split(/[,;]/)
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean)
+      )
+  )
+
+  return { techs, salaryMinPln, wantsRemote, experienceLevel, targetRoleCategory, maxOfficeDays, candidateLocation, rejectedTechs }
 }
 
 export function inferCandidateCategory(targetRole: string | null): string | null {

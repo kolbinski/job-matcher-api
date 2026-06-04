@@ -12,69 +12,8 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// ── Raw JSON types (marek-wisniewski-profile.json format) ─────────────────────
-
-interface RawProfile {
-  basic_info: {
-    name: string;
-    email?: string;
-    phone?: string;
-    linkedin?: string;
-    github?: string;
-    location?: string;
-    status?: string;
-  };
-  education?: Array<{
-    institution: string;
-    degree?: string;
-    field?: string;
-    from?: string;
-    to?: string;
-    gpa?: number;
-    thesis?: string;
-  }>;
-  employment_history?: Array<{
-    company: string;
-    role: string;
-    from: string;
-    to?: string;
-    company_type?: string;
-    industry?: string;
-    work_model?: string;
-    projects?: Array<{
-      name: string;
-      technologies?: string[];
-      team_size?: number;
-      role?: string;
-      achievements?: string[];
-    }>;
-  }>;
-  personal_projects?: Array<{
-    name: string;
-    url?: string;
-    technologies?: string[];
-    status?: string;
-    users?: number;
-    github_stars?: number;
-  }>;
-  career_goals?: {
-    target_role?: string;
-    salary_min?: number;
-    salary_max?: number;
-    work_model?: string;
-    max_office_days?: number;
-    company_type?: string;
-    industries?: string[];
-    target_markets?: string[];
-  };
-  technologies: Array<{ name: string; since?: number }>;
-  red_flags?: {
-    rejected_company_types?: string[];
-    rejected_technologies?: string[];
-    rejected_work_models?: string[];
-    other?: string[];
-  };
-}
+// marek-wisniewski-profile.json is already in CandidateProfile schema format —
+// no transformation needed, send it directly.
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -118,113 +57,12 @@ interface MatchResponse {
   unmatched: UnmatchedOffer[];
 }
 
-// ── Transform raw JSON → CandidateProfile schema ───────────────────────────────
-
-const raw: RawProfile = JSON.parse(
+const profile = JSON.parse(
   fs.readFileSync(
     path.resolve(__dirname, '../data/marek-wisniewski-profile.json'),
     'utf-8',
   ),
 );
-
-const profile = {
-  basic_info: {
-    full_name: raw.basic_info.name,
-    email: raw.basic_info.email,
-    phone: raw.basic_info.phone,
-    linkedin: raw.basic_info.linkedin,
-    github: raw.basic_info.github,
-    location: raw.basic_info.location
-      ? { city: raw.basic_info.location, country_code: 'PL' }
-      : undefined,
-    remote_ok: raw.career_goals?.work_model === 'remote',
-    job_search_status: raw.basic_info.status,
-  },
-  technologies: raw.technologies.map(t => ({ name: t.name, since: t.since })),
-  education: raw.education?.map(e => ({
-    institution: e.institution,
-    degree: e.degree,
-    field: e.field,
-    date_from: e.from,
-    date_to: e.to,
-    gpa: e.gpa != null ? String(e.gpa) : undefined,
-    thesis: e.thesis,
-  })),
-  work_experience: raw.employment_history?.map(job => ({
-    company: job.company,
-    title: job.role,
-    date_from: job.from,
-    date_to: job.to,
-    company_type: job.company_type,
-    industry: job.industry,
-    work_model: job.work_model,
-    projects: job.projects?.map(p => ({
-      name: p.name,
-      technologies: p.technologies,
-      team_size: p.team_size,
-      role: p.role,
-      achievements: p.achievements,
-    })),
-  })),
-  own_projects: raw.personal_projects?.map(p => ({
-    name: p.name,
-    demo_url: p.url,
-    technologies: p.technologies,
-    status: p.status,
-    users: p.users,
-    github_stars: p.github_stars,
-  })),
-  career_goals: {
-    short_term: {
-      target_role: raw.career_goals?.target_role
-        ? [raw.career_goals.target_role]
-        : undefined,
-      company_type: raw.career_goals?.company_type,
-      salary_target_pln_net_b2b:
-        raw.career_goals?.salary_min != null
-          ? {
-              min: raw.career_goals.salary_min,
-              max: raw.career_goals.salary_max ?? 0,
-            }
-          : undefined,
-    },
-  },
-  preferences: {
-    work_model: raw.career_goals?.work_model,
-    max_office_days_per_week: raw.career_goals?.max_office_days,
-    company_type: raw.career_goals?.company_type
-      ? [raw.career_goals.company_type]
-      : undefined,
-    company_type_excluded: raw.red_flags?.rejected_company_types,
-    industries: raw.career_goals?.industries,
-    salary_pln_net_b2b:
-      raw.career_goals?.salary_min != null
-        ? {
-            min: raw.career_goals.salary_min,
-            max: raw.career_goals.salary_max ?? 0,
-          }
-        : undefined,
-    markets: raw.career_goals?.target_markets,
-  },
-  red_flags: [
-    ...(raw.red_flags?.rejected_company_types ?? []).map(v => ({
-      category: 'company_type',
-      description: v,
-    })),
-    ...(raw.red_flags?.rejected_technologies ?? []).map(v => ({
-      category: 'technology',
-      description: v,
-    })),
-    ...(raw.red_flags?.rejected_work_models ?? []).map(v => ({
-      category: 'work_model',
-      description: v,
-    })),
-    ...(raw.red_flags?.other ?? []).map(v => ({
-      category: 'other',
-      description: v,
-    })),
-  ],
-};
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 

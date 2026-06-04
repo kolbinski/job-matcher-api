@@ -1,13 +1,18 @@
 {
   "basic_info": {
-    "name": "Marek Wiśniewski",
+    "full_name": "Marek Wiśniewski",
     "email": "marek.wisniewski.it@gmail.com",
     "phone": "+48 600 123 456",
     "linkedin": "linkedin.com/in/marek-wisniewski-dev",
     "github": "github.com/marek-wisniewski",
-    "location": "Warszawa",
-    "experience_years": 10,
-    "status": "actively_looking"
+    "location": {
+      "city": "Warszawa",
+      "latitude": 52.2297,
+      "longitude": 21.0122,
+      "max_distance_km": 50
+    },
+    "remote_ok": true,
+    "job_search_status": "actively_looking"
   },
   "education": [
     {
@@ -15,20 +20,19 @@
       "degree": "Magister Inżynier",
       "field": "Informatyka — Inżynieria Oprogramowania",
       "thesis": "Projektowanie i implementacja skalowalnej architektury mikroserwisów dla systemów płatności online",
-      "gpa": 4.3,
-      "from": "2009-09",
-      "to": "2014-06"
+      "gpa": "4.3",
+      "date_from": "2009-09",
+      "date_to": "2014-06"
     }
   ],
-  "employment_history": [
+  "work_experience": [
     {
       "company": "PayFlow Sp. z o.o.",
-      "role": "Tech Lead / Senior Fullstack Engineer",
-      "from": "2021-03",
-      "to": "2024-08",
+      "title": "Tech Lead / Senior Fullstack Engineer",
+      "date_from": "2021-03",
+      "date_to": "2024-08",
       "company_type": "product",
       "industry": "fintech",
-      "team_size": 6,
       "work_model": "remote",
       "projects": [
         {
@@ -44,7 +48,6 @@
             "docker"
           ],
           "team_size": 6,
-          "methodology": "scrum",
           "role": "tech lead",
           "achievements": [
             "Czas przetwarzania: 4.2s → 380ms (91% szybciej)",
@@ -63,7 +66,6 @@
             "material ui"
           ],
           "team_size": 3,
-          "methodology": "kanban",
           "role": "lead",
           "achievements": [
             "Czas integracji partnera: 3 tygodnie → 4 dni",
@@ -74,9 +76,9 @@
     },
     {
       "company": "SoftHouse Warsaw",
-      "role": "Senior Fullstack Developer",
-      "from": "2018-02",
-      "to": "2021-02",
+      "title": "Senior Fullstack Developer",
+      "date_from": "2018-02",
+      "date_to": "2021-02",
       "company_type": "outsourcing",
       "industry": "e-commerce",
       "work_model": "hybrid",
@@ -109,9 +111,9 @@
     },
     {
       "company": "Rentalify (StartupHub)",
-      "role": "Fullstack Developer → Tech Lead",
-      "from": "2016-04",
-      "to": "2018-11",
+      "title": "Fullstack Developer → Tech Lead",
+      "date_from": "2016-04",
+      "date_to": "2018-11",
       "company_type": "product",
       "industry": "proptech",
       "work_model": "onsite",
@@ -132,9 +134,9 @@
     },
     {
       "company": "Pixelmachine",
-      "role": "Junior/Mid Fullstack Developer",
-      "from": "2014-07",
-      "to": "2016-03",
+      "title": "Junior/Mid Fullstack Developer",
+      "date_from": "2014-07",
+      "date_to": "2016-03",
       "company_type": "agency",
       "industry": "digital",
       "projects": [
@@ -154,9 +156,9 @@
     },
     {
       "company": "Freelance",
-      "role": "Fullstack Developer",
-      "from": "2013-09",
-      "to": "2014-06",
+      "title": "Fullstack Developer",
+      "date_from": "2013-09",
+      "date_to": "2014-06",
       "projects": [
         {
           "name": "System rezerwacji siłowni",
@@ -172,10 +174,10 @@
       ]
     }
   ],
-  "personal_projects": [
+  "own_projects": [
     {
       "name": "BudgetFlow",
-      "url": "budgetflow.app",
+      "demo_url": "budgetflow.app",
       "technologies": [
         "next.js",
         "typescript",
@@ -183,7 +185,6 @@
         "prisma",
         "openai"
       ],
-      "description": "Tracker finansów z AI kategoryzacją transakcji i integracją bankową przez Plaid API",
       "status": "active",
       "users": 40
     },
@@ -195,145 +196,77 @@
         "puppeteer",
         "redis"
       ],
-      "description": "Bot scrapujący JustJoin.it, NoFluffJobs i LinkedIn z filtrowaniem po stacku i wynagrodzeniu",
       "status": "private"
     },
     {
       "name": "pg-migrate-cli",
-      "url": "npmjs.com/package/pg-migrate-cli",
+      "npm": "npmjs.com/package/pg-migrate-cli",
       "technologies": [
         "node.js",
         "typescript"
       ],
-      "description": "CLI tool do migracji PostgreSQL z rollback, dry-run i diff",
       "status": "open_source",
       "github_stars": 180
     }
   ],
   "career_goals": {
-    "target_role": "Senior Fullstack Engineer",
-    "salary_min": 22000,
-    "salary_max": 28000,
-    "currency": "PLN",
-    "employment_type": "b2b",
-    "work_model": "remote",
-    "max_office_days": 2,
-    "target_markets": [
-      "poland",
-      "europe"
-    ],
-    "industries": [
-      "fintech",
-      "saas",
-      "developer_tools",
-      "proptech"
-    ],
-    "company_type": "product",
-    "team_size_min": 5,
-    "team_size_max": 15
+    "short_term": {
+      "target_role": ["Senior Fullstack Engineer"],
+      "company_type": "product",
+      "salary_target_pln_net_b2b": {
+        "min": 22000,
+        "max": 28000
+      }
+    },
+    "long_term": {
+      "markets_considered": ["poland", "europe"]
+    }
   },
   "technologies": [
+    { "name": "typescript", "since": 2018 },
+    { "name": "react", "since": 2016 },
+    { "name": "next.js", "since": 2016 },
+    { "name": "node.js", "since": 2018 },
+    { "name": "express", "since": 2018 },
+    { "name": "nest.js", "since": 2021 },
+    { "name": "graphql", "since": 2020 },
+    { "name": "postgresql", "since": 2016 },
+    { "name": "docker", "since": 2021 },
+    { "name": "kubernetes", "since": 2021 },
+    { "name": "aws", "since": 2021 },
+    { "name": "elasticsearch", "since": 2018 },
+    { "name": "redis", "since": 2020 },
+    { "name": "react native", "since": 2022 },
+    { "name": "vue.js", "since": 2018 }
+  ],
+  "red_flags": [
     {
-      "name": "typescript",
-      "since": 2018,
-      "level": "expert"
+      "category": "company_type",
+      "description": "outsourcing, body_leasing, agency"
     },
     {
-      "name": "react",
-      "since": 2016,
-      "level": "expert"
+      "category": "technology",
+      "description": "php, jquery, legacy"
     },
     {
-      "name": "next.js",
-      "since": 2016,
-      "level": "expert"
+      "category": "work_model",
+      "description": "no office"
     },
     {
-      "name": "node.js",
-      "since": 2018,
-      "level": "expert"
-    },
-    {
-      "name": "express",
-      "since": 2018,
-      "level": "expert"
-    },
-    {
-      "name": "nest.js",
-      "since": 2021,
-      "level": "advanced"
-    },
-    {
-      "name": "graphql",
-      "since": 2020,
-      "level": "advanced"
-    },
-    {
-      "name": "postgresql",
-      "since": 2016,
-      "level": "expert"
-    },
-    {
-      "name": "docker",
-      "since": 2021,
-      "level": "advanced"
-    },
-    {
-      "name": "kubernetes",
-      "since": 2021,
-      "level": "advanced"
-    },
-    {
-      "name": "aws",
-      "since": 2021,
-      "level": "advanced"
-    },
-    {
-      "name": "elasticsearch",
-      "since": 2018,
-      "level": "advanced"
-    },
-    {
-      "name": "redis",
-      "since": 2020,
-      "level": "advanced"
-    },
-    {
-      "name": "react native",
-      "since": 2022,
-      "level": "intermediate"
-    },
-    {
-      "name": "vue.js",
-      "since": 2018,
-      "level": "intermediate"
+      "category": "other",
+      "description": "no code review, no automated tests, micromanagement, take-home task over 2 hours"
     }
   ],
-  "red_flags": {
-    "rejected_company_types": [
-      "outsourcing",
-      "body_leasing",
-      "agency"
-    ],
-    "rejected_technologies": [
-      "php",
-      "jquery",
-      "legacy"
-    ],
-    "rejected_work_models": [
-      "onsite"
-    ],
-    "other": [
-      "no code review",
-      "no automated tests",
-      "micromanagement",
-      "take-home task over 2 hours"
-    ]
-  },
   "preferences": {
-    "async_first": true,
-    "deep_work": true,
-    "mentoring": true,
-    "architecture_ownership": true
+    "company_type": ["product"],
+    "company_type_excluded": ["outsourcing", "body_leasing", "agency"],
+    "work_model": "remote",
+    "max_office_days_per_week": 2,
+    "industries": ["fintech", "saas", "developer_tools", "proptech"],
+    "salary_pln_net_b2b": {
+      "min": 22000,
+      "max": 28000
+    },
+    "markets": ["poland", "europe"]
   }
 }

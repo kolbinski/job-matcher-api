@@ -77,7 +77,7 @@ export interface MatchedOffer {
   hybrid: boolean
   experience_level: string | null
   salary: OfferSalary | null
-  match_reasons: string[]
+  matched_reasons: string[]
   missing_skills: string[]
   red_flags_found: string[]
   ai_summary: string | null

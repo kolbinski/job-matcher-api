@@ -10,7 +10,6 @@ import { normalizeProfile } from '../services/profileParser'
 import { MatchRequestSchema } from '../types/match'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, ScoreBreakdown } from '../types/match'
 import { parseEmploymentTypes } from '../lib/offers'
-import { InvalidProfileError } from '../lib/errors'
 
 export const matchRouter = Router()
 
@@ -24,7 +23,8 @@ matchRouter.post(
     // ── 1. Validate request body ───────────────────────────────────────────
     const parsed = MatchRequestSchema.safeParse(req.body)
     if (!parsed.success) {
-      throw new InvalidProfileError('Invalid request body')
+      console.error('[match] Validation errors:', JSON.stringify(parsed.error.issues, null, 2))
+      return res.status(422).json({ error: 'INVALID_PROFILE', message: 'Invalid request body', issues: parsed.error.issues })
     }
 
     const { profile, filters, sort, options } = parsed.data
@@ -78,7 +78,7 @@ matchRouter.post(
       for (const offer of filteredMatched.slice(0, aiCount)) {
         const original = offer.url ? offerToOriginal.get(offer.url) : undefined
         if (!original) continue
-        const summary = await generateAiSummary(original, offer.score, offer.match_reasons, offer.missing_skills)
+        const summary = await generateAiSummary(original, offer.score, offer.matched_reasons, offer.missing_skills)
         if (summary) {
           offer.ai_summary = summary.aiSummary
           offer.ai_recommendation = summary.aiRecommendation
@@ -138,7 +138,7 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
     experience_level: offer.experience_level,
     salary: extractSalary(offer),
-    match_reasons: scored.matchReasons,
+    matched_reasons: scored.matchReasons,
     missing_skills: scored.missingSkills,
     red_flags_found: [],
     ai_summary: null,

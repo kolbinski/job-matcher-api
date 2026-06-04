@@ -1,8 +1,11 @@
 import { z } from 'zod'
 
 const LocationSchema = z.object({
-  city: z.string(),
-  country_code: z.string().min(2).max(2),
+  country_code: z.string().optional(),
+  city: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  max_distance_km: z.number().optional(),
 })
 
 const BasicInfoSchema = z.object({
