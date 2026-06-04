@@ -6,6 +6,7 @@ const STARTUP_GRACE_MS = 5 * 60 * 1000
 const startupTime = Date.now()
 
 let syncInProgress = false
+let skipGracePeriod = false
 
 // Reads work_start_utc, work_end_utc, work_days from settings on every call
 // so DB changes take effect immediately without redeploy.
@@ -41,10 +42,11 @@ function cetTimeString(): string {
 }
 
 async function runSync(): Promise<void> {
-  if (Date.now() - startupTime < STARTUP_GRACE_MS) {
+  if (!skipGracePeriod && Date.now() - startupTime < STARTUP_GRACE_MS) {
     console.log('[scheduler] Skipping first tick — within 5min grace period after startup')
     return
   }
+  skipGracePeriod = false
   if (syncInProgress) {
     console.log('[scheduler] Previous sync still running — skipping this tick')
     return
@@ -105,14 +107,22 @@ export async function startScheduler(): Promise<void> {
   console.log(`[scheduler] fetch_offers_after_build=${fetchRow?.value ?? '(not set)'}`)
 
   if (shouldFetch) {
-    setTimeout(
-      () => {
-        console.log('[scheduler] Grace period over — running initial sync (fetch_offers_after_build=true)')
-        runSync().catch(err => console.error('[scheduler] Initial sync failed:', err))
-      },
-      STARTUP_GRACE_MS + 1_000
-    )
-    console.log(`[scheduler] setTimeout registered for ${STARTUP_GRACE_MS + 1_000}ms`)
+    const offerCount = await prisma.offer.count()
+    console.log(`[scheduler] Offers table count: ${offerCount}`)
+    if (offerCount === 0) {
+      console.log('[scheduler] Offers table empty — running sync immediately (no grace period)')
+      skipGracePeriod = true
+      runSync().catch(err => console.error('[scheduler] Initial sync failed:', err))
+    } else {
+      setTimeout(
+        () => {
+          console.log('[scheduler] Grace period over — running initial sync (fetch_offers_after_build=true)')
+          runSync().catch(err => console.error('[scheduler] Initial sync failed:', err))
+        },
+        STARTUP_GRACE_MS + 1_000
+      )
+      console.log(`[scheduler] setTimeout registered for ${STARTUP_GRACE_MS + 1_000}ms`)
+    }
   } else {
     console.log('[scheduler] Startup sync skipped (fetch_offers_after_build=false)')
   }
