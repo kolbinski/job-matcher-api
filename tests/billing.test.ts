@@ -10,7 +10,7 @@ afterAll(async () => {
 })
 
 describe('validateApiKey', () => {
-  let userId: string
+  let userId = ''
   let apiKey: string
 
   beforeEach(async () => {
@@ -25,7 +25,7 @@ describe('validateApiKey', () => {
   })
 
   afterEach(async () => {
-    await prisma.user.deleteMany({ where: { id: userId } })
+    if (userId) await prisma.user.deleteMany({ where: { id: userId } })
   })
 
   it('attaches user to req for a valid key', async () => {

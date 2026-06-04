@@ -2,10 +2,12 @@ import { z } from 'zod'
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(1),
+  ANTHROPIC_API_KEY: z.string().default(''),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 })
+
+const requireInProduction = ['ANTHROPIC_API_KEY'] as const
 
 const parsed = EnvSchema.safeParse(process.env)
 
@@ -15,6 +17,15 @@ if (!parsed.success) {
     console.error(`  ${issue.path.join('.')}: ${issue.message}`)
   }
   process.exit(1)
+}
+
+if (parsed.data.NODE_ENV === 'production') {
+  for (const key of requireInProduction) {
+    if (!parsed.data[key]) {
+      console.error(`Missing required production environment variable: ${key}`)
+      process.exit(1)
+    }
+  }
 }
 
 export const env = parsed.data

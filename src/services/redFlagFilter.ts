@@ -12,10 +12,13 @@ export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[
     const desc = flag.description.toLowerCase()
 
     if (['technology', 'tech', 'stack', 'technologies'].includes(category)) {
-      const forbidden = desc.split(/[,;]/).map((t) => t.trim()).filter(Boolean)
+      const forbidden = desc.split(/[,;]/).map((t) => t.trim().toLowerCase()).filter(Boolean)
       const offerTechs = offer.required_skills.map((s) => s.toLowerCase())
       for (const tech of forbidden) {
-        if (offerTechs.some((o) => o.includes(tech) || tech.includes(o))) {
+        const pattern = new RegExp(
+          `(^|[^a-z0-9])${tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`
+        )
+        if (offerTechs.some((o) => o === tech || pattern.test(o))) {
           reasons.push(`Requires ${tech} (excluded: ${flag.description})`)
           break
         }

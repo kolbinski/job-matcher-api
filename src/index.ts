@@ -12,8 +12,13 @@ if (env.NODE_ENV !== 'test') {
 }
 
 process.on('SIGTERM', () => {
-  server.close(async () => {
-    await prisma.$disconnect()
-    process.exit(0)
+  server.close(() => {
+    void (async () => {
+      try {
+        await prisma.$disconnect()
+      } finally {
+        process.exit(0)
+      }
+    })()
   })
 })

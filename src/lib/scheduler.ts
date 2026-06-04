@@ -39,14 +39,14 @@ function cetTimeString(): string {
 }
 
 async function runSync(): Promise<void> {
-  const withinSchedule = await isWithinSchedule()
   if (syncInProgress) {
     console.log('[scheduler] Previous sync still running — skipping this tick')
     return
   }
-  console.log(`[scheduler] Starting sync at ${cetTimeString()} (cleanup: ${withinSchedule})`)
   syncInProgress = true
   try {
+    const withinSchedule = await isWithinSchedule()
+    console.log(`[scheduler] Starting sync at ${cetTimeString()} (cleanup: ${withinSchedule})`)
     await syncOffers(withinSchedule)
   } catch (err) {
     console.error('[scheduler] Offer sync failed:', err)

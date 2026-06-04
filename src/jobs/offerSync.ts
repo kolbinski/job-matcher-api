@@ -36,7 +36,6 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
     street: offer.street,
     latitude: offer.latitude,
     longitude: offer.longitude,
-    category_id: offer.category_id,
     open_to_hire_ukrainians: offer.open_to_hire_ukrainians,
     languages: offer.languages,
     url: offer.url,
@@ -60,11 +59,15 @@ async function upsertPage(
     })
   }
 
-  for (const offer of toUpdate) {
-    await prisma.offer.update({
-      where: { slug: offer.slug },
-      data: toUpsertData(offer, fetchedAt),
-    })
+  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+    await prisma.$transaction(
+      batch.map(offer =>
+        prisma.offer.update({
+          where: { slug: offer.slug },
+          data: toUpsertData(offer, fetchedAt),
+        })
+      )
+    )
   }
 
   return { inserted: toInsert.length, updated: toUpdate.length, insertedSlugs: toInsert.map(o => o.slug) }

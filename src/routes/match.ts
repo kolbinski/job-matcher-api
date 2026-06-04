@@ -9,7 +9,7 @@ import { generateAiSummary } from '../services/aiSummary'
 import { normalizeProfile } from '../services/profileParser'
 import { MatchRequestSchema } from '../types/match'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
-import type { EmploymentTypeEntry } from '../lib/offers'
+import { parseEmploymentTypes } from '../lib/offers'
 import { InvalidProfileError } from '../lib/errors'
 
 export const matchRouter = Router()
@@ -24,7 +24,7 @@ matchRouter.post(
     // ── 1. Validate request body ───────────────────────────────────────────
     const parsed = MatchRequestSchema.safeParse(req.body)
     if (!parsed.success) {
-      throw new InvalidProfileError(parsed.error.issues[0]?.message ?? 'Invalid request body')
+      throw new InvalidProfileError('Invalid request body')
     }
 
     const { profile, filters, sort, options } = parsed.data
@@ -51,7 +51,7 @@ matchRouter.post(
     // ── 4. Red flag filter + scoring ───────────────────────────────────────
     const matched: MatchedOffer[] = []
     const unmatched: UnmatchedOffer[] = []
-    const offerToOriginal = new Map<MatchedOffer, Offer>()
+    const offerToOriginal = new Map<string, Offer>()
 
     for (const offer of offers) {
       const rejectionReasons = filterRedFlags(profile, offer)
@@ -60,7 +60,7 @@ matchRouter.post(
         continue
       }
       const matchedOffer = toMatchedOffer(offer, scoreOffer(norm, offer))
-      offerToOriginal.set(matchedOffer, offer)
+      if (offer.url) offerToOriginal.set(offer.url, offer)
       matched.push(matchedOffer)
     }
 
@@ -77,7 +77,7 @@ matchRouter.post(
     if (opts.ai_scoring) {
       const aiCount = Math.min(opts.limit, 10)
       for (const offer of filteredMatched.slice(0, aiCount)) {
-        const original = offerToOriginal.get(offer)
+        const original = offer.url ? offerToOriginal.get(offer.url) : undefined
         if (!original) continue
         const summary = await generateAiSummary(original, offer.score, offer.match_reasons, offer.missing_skills)
         if (summary) {
@@ -92,10 +92,14 @@ matchRouter.post(
     const limitedMatched = filteredMatched.slice(0, opts.limit)
 
     // ── 9. Log api_calls row ───────────────────────────────────────────────
+    if (!req.user) {
+      res.status(401).json({ error: 'INVALID_API_KEY', message: 'Authentication required' })
+      return
+    }
     const responseMs = Date.now() - startTime
     const call = await prisma.apiCall.create({
       data: {
-        user_id: req.user!.id,
+        user_id: req.user.id,
         offers_matched: limitedMatched.length,
         offers_total: offers.length,
         response_ms: responseMs,
@@ -127,8 +131,6 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     score: scored.score,
     title: offer.title,
     company: offer.company_name,
-    company_size: null,
-    company_type: null,
     city: offer.city,
     remote: offer.workplace_type === 'remote',
     hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
@@ -160,8 +162,8 @@ function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOf
 }
 
 function extractSalary(offer: Offer): OfferSalary | null {
-  const types = offer.employment_types as unknown as EmploymentTypeEntry[]
-  if (!Array.isArray(types)) return null
+  const types = parseEmploymentTypes(offer)
+  if (types.length === 0) return null
 
   // Prefer B2B; from/to are top-level fields (no nested salary object)
   for (const t of types) {

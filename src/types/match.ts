@@ -65,8 +65,6 @@ export interface MatchedOffer {
   score: number
   title: string
   company: string
-  company_size: string | null
-  company_type: string | null
   city: string | null
   remote: boolean
   hybrid: boolean

@@ -16,7 +16,7 @@ const MINIMAL_PROFILE = {
 }
 
 describe('POST /v1/match', () => {
-  let userId: string
+  let userId = ''
   let apiKey: string
 
   beforeEach(async () => {
@@ -31,8 +31,10 @@ describe('POST /v1/match', () => {
   })
 
   afterEach(async () => {
-    await prisma.apiCall.deleteMany({ where: { user_id: userId } })
-    await prisma.user.deleteMany({ where: { id: userId } })
+    if (userId) {
+      await prisma.apiCall.deleteMany({ where: { user_id: userId } })
+      await prisma.user.deleteMany({ where: { id: userId } })
+    }
   })
 
   it('returns 401 with no API key', async () => {

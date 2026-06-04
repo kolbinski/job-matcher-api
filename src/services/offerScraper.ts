@@ -28,7 +28,6 @@ export interface NormalizedOffer {
   street: string | null
   latitude: number | null
   longitude: number | null
-  category_id: number | null
   open_to_hire_ukrainians: boolean | null
   languages: string[]
   url: string | null
@@ -84,7 +83,6 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     street: typeof raw.street === 'string' ? raw.street : null,
     latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
     longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
-    category_id: null,
     open_to_hire_ukrainians:
       typeof raw.isOpenToHireUkrainians === 'boolean' ? raw.isOpenToHireUkrainians : null,
     languages: extractSkillNames(raw.languages),

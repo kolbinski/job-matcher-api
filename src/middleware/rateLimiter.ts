@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-import { RateLimitError } from '../lib/errors'
+import { InvalidApiKeyError, RateLimitError } from '../lib/errors'
 
 interface WindowEntry {
   count: number
@@ -19,9 +19,8 @@ setInterval(() => {
 }, 5 * 60_000).unref()
 
 export function rateLimiter(req: Request, _res: Response, next: NextFunction): void {
-  // req.user is guaranteed by validateApiKey running first
   const userId = req.user?.id
-  if (!userId) return next()
+  if (!userId) throw new InvalidApiKeyError()
 
   const now = Date.now()
   const entry = store.get(userId)

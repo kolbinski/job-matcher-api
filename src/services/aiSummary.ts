@@ -53,12 +53,17 @@ export async function generateAiSummary(
       { signal: controller.signal }
     )
 
-    clearTimeout(timeoutId)
-
     const block = response.content[0]
     if (block?.type !== 'text') return null
 
-    const parsed = JSON.parse(block.text) as Record<string, unknown>
+    let parsed: Record<string, unknown>
+    try {
+      parsed = JSON.parse(block.text) as Record<string, unknown>
+    } catch (err) {
+      console.error('[aiSummary] Failed to parse Claude response:', err)
+      return null
+    }
+
     const recommendation = parsed['ai_recommendation']
     if (!['apply', 'consider', 'skip'].includes(recommendation as string)) return null
 
@@ -66,8 +71,12 @@ export async function generateAiSummary(
       aiSummary: String(parsed['ai_summary'] ?? ''),
       aiRecommendation: recommendation as 'apply' | 'consider' | 'skip',
     }
-  } catch {
-    clearTimeout(timeoutId)
+  } catch (err) {
+    if (err instanceof Error && err.name !== 'AbortError') {
+      console.error('[aiSummary] Claude API error:', err)
+    }
     return null
+  } finally {
+    clearTimeout(timeoutId)
   }
 }

@@ -7,7 +7,8 @@ export async function validateApiKey(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const key = req.headers['x-api-key']
+  const raw = req.headers['x-api-key']
+  const key = Array.isArray(raw) ? raw[0] : raw
 
   if (!key || typeof key !== 'string') {
     throw new InvalidApiKeyError()
