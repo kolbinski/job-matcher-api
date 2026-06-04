@@ -168,6 +168,7 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
 
   // Offers not seen in this run retain their pre-sync fetched_at (< fetchedAt) or are null.
   // Both cases mean they were absent from the current fetch — safe to delete.
+  console.log('[offerSync] About to DELETE old offers — call stack:', new Error().stack)
   const deleted = await prisma.offer.deleteMany({
     where: {
       OR: [
