@@ -144,6 +144,8 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
     from = nextCursor
   }
 
+  console.log(`[offerSync] hitPageLimit=${hitPageLimit}, cleanupEnabled=${cleanupEnabled}, totalFetched=${totalFetched}`)
+
   // Rule A-4: never delete when nothing was fetched (API error / rate limit)
   if (totalFetched === 0) {
     console.warn('[offerSync] No offers fetched — skipping deletion')
