@@ -24,19 +24,15 @@ interface OfferSalary {
   type: string;
 }
 
-interface ScoreBreakdown {
-  techScore: number;
-  salaryScore: number;
-  remoteScore: number;
-  industryScore: number;
-}
-
 interface MatchedOffer {
   score: number;
-  score_breakdown: ScoreBreakdown;
   title: string;
   company: string;
   salary: OfferSalary | null;
+  matched_reasons: string[];
+  missing_skills: string[];
+  role_fit: string | null;
+  recommended: boolean | null;
 }
 
 interface UnmatchedOffer {
@@ -108,18 +104,23 @@ async function main(): Promise<void> {
     console.log(`   ${salary}`);
   });
 
-  // ── Score breakdown for #1 ─────────────────────────────────────────────────
+  // ── Claude evaluation for #1 ──────────────────────────────────────────────
   if (matched.length > 0) {
     const top = matched[0];
-    const b = top.score_breakdown;
-    console.log(`\nScore breakdown — #1 ${top.title} @ ${top.company}:`);
+    console.log(`\n#1 ${top.title} @ ${top.company} — score: ${top.score}/100`);
     console.log('─'.repeat(62));
-    console.log(`  techScore     ${b.techScore.toString().padStart(3)}/100  × 0.40 = ${(b.techScore * 0.40).toFixed(1)}`);
-    console.log(`  salaryScore   ${b.salaryScore.toString().padStart(3)}/100  × 0.25 = ${(b.salaryScore * 0.25).toFixed(1)}`);
-    console.log(`  remoteScore   ${b.remoteScore.toString().padStart(3)}/100  × 0.20 = ${(b.remoteScore * 0.20).toFixed(1)}`);
-    console.log(`  industryScore ${b.industryScore.toString().padStart(3)}/100  × 0.15 = ${(b.industryScore * 0.15).toFixed(1)}`);
-    console.log(`  ──────────────────────────────────`);
-    console.log(`  total         ${top.score.toString().padStart(3)}/100`);
+    if (top.role_fit) {
+      console.log(`  role_fit:       ${top.role_fit}`);
+    }
+    if (top.matched_reasons.length > 0) {
+      console.log(`  matched_reasons: ${top.matched_reasons.join(' · ')}`);
+    }
+    if (top.missing_skills.length > 0) {
+      console.log(`  missing_skills:  ${top.missing_skills.join(', ')}`);
+    }
+    if (top.recommended !== null) {
+      console.log(`  recommended:    ${top.recommended}`);
+    }
   }
 
   // ── Unmatched analysis ────────────────────────────────────────────────────
