@@ -15,12 +15,6 @@ export class InvalidApiKeyError extends AppError {
   }
 }
 
-export class InsufficientCreditsError extends AppError {
-  constructor() {
-    super(402, 'INSUFFICIENT_CREDITS', 'Insufficient credits to process this request')
-  }
-}
-
 export class InvalidProfileError extends AppError {
   constructor(message: string) {
     super(422, 'INVALID_PROFILE', message)

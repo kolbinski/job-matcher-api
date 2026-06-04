@@ -48,8 +48,6 @@ export interface MatchMeta {
   call_id: string
   generated_at: string
   response_ms: number
-  credits_used: number
-  credits_remaining: number
   total_offers_scanned: number
   matched_count: number
   unmatched_count: number
@@ -64,6 +62,7 @@ export interface OfferSalary {
 }
 
 export interface MatchedOffer {
+  slug: string
   score: number
   title: string
   company: string

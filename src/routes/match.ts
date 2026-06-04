@@ -2,9 +2,7 @@ import { Router } from 'express'
 import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateApiKey } from '../middleware/validateApiKey'
-import { checkCredits } from '../middleware/checkCredits'
 import { rateLimiter } from '../middleware/rateLimiter'
-import { billCall } from '../services/billing'
 import { filterRedFlags } from '../services/redFlagFilter'
 import { scoreOffer } from '../services/scoring'
 import { generateAiSummary } from '../services/aiSummary'
@@ -23,7 +21,6 @@ export const matchRouter = Router()
 matchRouter.post(
   '/',
   validateApiKey,
-  checkCredits,
   rateLimiter,
   async (req, res) => {
     const startTime = Date.now()
@@ -43,10 +40,11 @@ matchRouter.post(
       ai_scoring: options?.ai_scoring ?? true,
     }
 
-    // ── 2. Load active offers ──────────────────────────────────────────────
+    // ── 2. Load offers ─────────────────────────────────────────────────────
     const offers = await prisma.offer.findMany()
+    const offerBySlug = new Map(offers.map(o => [o.slug, o]))
 
-    // ── 3. Red flag filter + scoring (RULE A-1: filter before AI, RULE P-3: score before filters)
+    // ── 3. Red flag filter + scoring ───────────────────────────────────────
     const matched: MatchedOffer[] = []
     const unmatched: UnmatchedOffer[] = []
 
@@ -68,17 +66,18 @@ matchRouter.post(
     const order = sort?.order ?? 'desc'
     matched.sort((a, b) => (order === 'asc' ? a.score - b.score : b.score - a.score))
 
-    // ── 5. Post-score filters (min_score, remote, cities, etc. — RULE P-3) ─
+    // ── 5. Post-score filters ──────────────────────────────────────────────
     const filteredMatched = applyPostScoreFilters(matched, filters)
 
     // ── 6. AI summaries for top 10 ─────────────────────────────────────────
     let aiScoring = false
 
     if (opts.ai_scoring) {
-      const top10 = filteredMatched.slice(0, 10)
-      for (const offer of top10) {
+      for (const offer of filteredMatched.slice(0, 10)) {
+        const original = offerBySlug.get(offer.slug)
+        if (!original) continue
         const summary = await generateAiSummary(
-          offers.find((o) => o.slug === offerSlugFor(offer))!,
+          original,
           offer.score,
           offer.match_reasons,
           offer.missing_skills
@@ -91,37 +90,27 @@ matchRouter.post(
       }
     }
 
-    // ── 7. Apply limit ────────────────────────────────────────────────────
+    // ── 7. Apply limit ─────────────────────────────────────────────────────
     const limitedMatched = filteredMatched.slice(0, opts.limit)
 
-    // ── 8. Bill (response_ms logged here — Step 4 requirement) ────────────
+    // ── 8. Log api_calls row ───────────────────────────────────────────────
     const responseMs = Date.now() - startTime
-    const user = req.user!
-
-    const callId = await billCall({
-      userId: user.id,
-      apiKeyType: req.apiKeyType!,
-      profileJson: JSON.stringify(req.body.profile),
-      offersMatched: limitedMatched.length,
-      offersTotal: offers.length,
-      responseMs,
-      status: 'success',
+    const call = await prisma.apiCall.create({
+      data: {
+        user_id: req.user!.id,
+        offers_matched: limitedMatched.length,
+        offers_total: offers.length,
+        response_ms: responseMs,
+        status: 'success',
+      },
     })
 
-    // Fetch updated credits for response meta
-    const updatedUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { credits: true },
-    })
-
-    // ── 9. Return response ────────────────────────────────────────────────
+    // ── 9. Return response ─────────────────────────────────────────────────
     const response: MatchResponse = {
       meta: {
-        call_id: callId,
+        call_id: call.id,
         generated_at: new Date().toISOString(),
         response_ms: responseMs,
-        credits_used: req.callCost?.toNumber() ?? 0,
-        credits_remaining: updatedUser?.credits.toNumber() ?? 0,
         total_offers_scanned: offers.length,
         matched_count: limitedMatched.length,
         unmatched_count: unmatched.length,
@@ -137,17 +126,12 @@ matchRouter.post(
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-// Temporary slug index for AI summary lookup (avoids second DB call)
-const _offerUrlMap = new WeakMap<MatchedOffer, string>()
-function offerSlugFor(o: MatchedOffer): string {
-  return _offerUrlMap.get(o) ?? ''
-}
-
 function toMatchedOffer(
   offer: Offer,
   scored: ReturnType<typeof scoreOffer>
 ): MatchedOffer {
-  const mo: MatchedOffer = {
+  return {
+    slug: offer.slug,
     score: scored.score,
     title: offer.title,
     company: offer.company_name,
@@ -169,8 +153,6 @@ function toMatchedOffer(
     source: offer.source,
     fetched_at: offer.fetched_at?.toISOString() ?? null,
   }
-  _offerUrlMap.set(mo, offer.slug)
-  return mo
 }
 
 function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOffer {
@@ -196,17 +178,11 @@ function extractSalary(offer: Offer): OfferSalary | null {
   const types = offer.employment_types as unknown as EmploymentTypeEntry[]
   if (!Array.isArray(types)) return null
 
-  // Prefer B2B
   for (const t of types) {
-    if (
-      t.type === 'b2b' &&
-      t.salary?.from !== undefined &&
-      t.salary?.to !== undefined
-    ) {
+    if (t.type === 'b2b' && t.salary?.from !== undefined && t.salary?.to !== undefined) {
       return { from: t.salary.from, to: t.salary.to, currency: t.salary.currency ?? 'PLN', type: 'b2b' }
     }
   }
-  // Fallback: first entry with salary
   for (const t of types) {
     if (t.salary?.from !== undefined && t.salary?.to !== undefined) {
       return { from: t.salary.from, to: t.salary.to, currency: t.salary.currency ?? 'PLN', type: t.type ?? 'unknown' }

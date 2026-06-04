@@ -19,17 +19,11 @@ model Settings {
 }
 
 model User {
-  id                    String   @id @default(uuid())
-  email                 String   @unique
-  jobmatcher_api_key    String   @unique
-  credits               Decimal  @db.Decimal(10, 4)
-  auto_refill           Boolean  @default(false)
-  auto_refill_amount    Decimal? @db.Decimal(10, 2)
-  auto_refill_threshold Decimal? @db.Decimal(10, 2)
-  stripe_customer_id    String?
-  stripe_payment_method String?
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  jobmatcher_api_key String   @unique
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   api_calls ApiCall[]
 
@@ -37,8 +31,7 @@ model User {
 }
 
 // required_skills and nice_to_have_skills are TEXT[] from JustJoin.
-// JustJoin returns skill names as plain strings — no experience level.
-// employment_types and multilocation are JSONB to preserve Apify's nested structure.
+// employment_types and multilocation are JSONB to preserve the nested structure.
 model Offer {
   slug                    String    @id
   source                  String
@@ -69,14 +62,10 @@ model Offer {
   @@map("offers")
 }
 
-// cost is a snapshot of settings.call_cost at call time — not a FK.
-// profile_hash is SHA-256 of the raw profile JSON for deduplication analytics.
 model ApiCall {
   id             String   @id @default(uuid())
   user_id        String
   called_at      DateTime @default(now())
-  cost           Decimal  @db.Decimal(10, 4)
-  profile_hash   String?
   offers_matched Int?
   offers_total   Int?
   response_ms    Int?

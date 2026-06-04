@@ -13,13 +13,6 @@ export async function validateApiKey(
     throw new InvalidApiKeyError()
   }
 
-  const isLive = key.startsWith('jm_live_')
-  const isTest = key.startsWith('jm_test_')
-
-  if (!isLive && !isTest) {
-    throw new InvalidApiKeyError()
-  }
-
   const user = await prisma.user.findUnique({
     where: { jobmatcher_api_key: key },
   })
@@ -29,6 +22,5 @@ export async function validateApiKey(
   }
 
   req.user = user
-  req.apiKeyType = isTest ? 'test' : 'live'
   next()
 }
