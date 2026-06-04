@@ -350,3 +350,50 @@ describe('red flag filter — workplace via pre-filter', () => {
     expect(result.rejectedByWorkplace).toBe(true)
   })
 })
+
+// ─── LANGUAGE FILTER ──────────────────────────────────────────────────────────
+
+describe('language filter', () => {
+  it('rejects when offer requires german and candidate only speaks english and polish', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english', 'polish'] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'german language'] }))
+    expect(result.pass).toBe(false)
+    expect(result.rejectedByLanguage).toBe(true)
+  })
+
+  it('passes when candidate speaks the required language', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english', 'polish'] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'english'] }))
+    expect(result.rejectedByLanguage).toBe(false)
+  })
+
+  it('detects deutsch as german', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english'] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['java', 'deutsch'] }))
+    expect(result.rejectedByLanguage).toBe(true)
+  })
+
+  it('detects język angielski as english and rejects when candidate lacks it', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['polish'] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['react', 'język angielski'] }))
+    expect(result.rejectedByLanguage).toBe(true)
+  })
+
+  it('detects język angielski as english and passes when candidate speaks english', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['polish', 'english'] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['react', 'język angielski'] }))
+    expect(result.rejectedByLanguage).toBe(false)
+  })
+
+  it('skips language filter when candidate has no languages set', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test' } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'german language'] }))
+    expect(result.rejectedByLanguage).toBe(false)
+  })
+
+  it('skips language filter when candidate languages array is empty', () => {
+    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: [] } })
+    const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'french language'] }))
+    expect(result.rejectedByLanguage).toBe(false)
+  })
+})

@@ -86,7 +86,7 @@ model UserOffer {
   updated_at               DateTime @updatedAt
 
   user  User  @relation(fields: [user_id], references: [id])
-  offer Offer @relation(fields: [offer_id], references: [id])
+  offer Offer @relation(fields: [offer_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, offer_id])
   @@map("user_offers")

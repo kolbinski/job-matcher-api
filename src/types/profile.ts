@@ -18,6 +18,7 @@ const BasicInfoSchema = z.object({
   location: LocationSchema.optional(),
   experience_level: z.enum(['junior', 'mid', 'senior', 'c_level']).optional(),
   experience_since: z.number().int().optional(),
+  languages: z.array(z.string()).optional(),
   job_search_status: z.string().optional(),
 })
 

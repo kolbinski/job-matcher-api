@@ -10,6 +10,25 @@ export interface PreFilterResult {
   rejectedBySalary: boolean
   rejectedBySeniority: boolean
   rejectedByRedFlags: boolean
+  rejectedByLanguage: boolean
+}
+
+// Maps canonical language name → detection keywords (all lowercase).
+// skill.toLowerCase().includes(keyword) is used for matching.
+const LANGUAGE_KEYWORDS: Record<string, string[]> = {
+  english:    ['english', 'język angielski'],
+  polish:     ['polish', 'język polski'],
+  german:     ['german', 'deutsch', 'język niemiecki'],
+  french:     ['french', 'français', 'język francuski'],
+  spanish:    ['spanish', 'español', 'język hiszpański'],
+  dutch:      ['dutch', 'język niderlandzki', 'język holenderski'],
+  swedish:    ['swedish', 'svenska', 'język szwedzki'],
+  italian:    ['italian', 'italiano', 'język włoski'],
+  portuguese: ['portuguese', 'português', 'język portugalski'],
+  ukrainian:  ['ukrainian', 'українська', 'język ukraiński'],
+  russian:    ['russian', 'язык', 'język rosyjski'],
+  czech:      ['czech', 'čeština', 'język czeski'],
+  slovak:     ['slovak', 'slovenčina', 'język słowacki'],
 }
 
 // Ordered seniority levels — used for ±1 tolerance check.
@@ -27,6 +46,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   let rejectedBySalary = false
   let rejectedBySeniority = false
   let rejectedByRedFlags = false
+  let rejectedByLanguage = false
 
   // ── 1. Workplace filter ────────────────────────────────────────────────────
   const acceptedModels = (profile.preferences?.work_model ?? []).map(m => m.toLowerCase())
@@ -103,7 +123,23 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
     }
   }
 
-  // ── 5. Technology red flags ────────────────────────────────────────────────
+  // ── 5. Language filter ─────────────────────────────────────────────────────
+  const candidateLanguages = (profile.basic_info.languages ?? []).map(l => l.toLowerCase())
+  if (candidateLanguages.length > 0) {
+    const offerSkillsLower = offer.required_skills.map(s => s.toLowerCase())
+    for (const [lang, keywords] of Object.entries(LANGUAGE_KEYWORDS)) {
+      const offerRequiresLang = offerSkillsLower.some(skill =>
+        keywords.some(kw => skill.includes(kw))
+      )
+      if (offerRequiresLang && !candidateLanguages.includes(lang)) {
+        reasons.push(`Offer requires ${lang} but candidate doesn't speak it`)
+        rejectedByLanguage = true
+        break
+      }
+    }
+  }
+
+  // ── 6. Technology red flags ────────────────────────────────────────────────
   for (const flag of profile.red_flags) {
     const category = flag.category.toLowerCase()
     const desc = flag.description.toLowerCase()
@@ -132,6 +168,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
     rejectedBySalary,
     rejectedBySeniority,
     rejectedByRedFlags,
+    rejectedByLanguage,
   }
 }
 

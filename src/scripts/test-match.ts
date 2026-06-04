@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 import { prisma } from '../lib/prisma';
 
@@ -62,6 +64,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Read salary minimum from profile for display comparisons
+  let salaryMin: number | null = null;
+  if (user.profile_path) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
+        preferences?: { salary?: Array<{ min?: number }> }
+      };
+      salaryMin = raw.preferences?.salary?.[0]?.min ?? null;
+    } catch { /* profile unreadable — skip comparison label */ }
+  }
+
   console.log(`Calling POST /v1/match for ${user.email} (${userId})...\n`);
 
   let res: Response;
@@ -97,9 +110,15 @@ async function main(): Promise<void> {
 
   matched.slice(0, 5).forEach((offer, i) => {
     const s = offer.salary;
+    let salaryLabel = '';
+    if (s && salaryMin !== null) {
+      salaryLabel = s.to >= salaryMin
+        ? ` — above client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`
+        : ` — below client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`;
+    }
     const salary =
       s && s.from != null && s.to != null
-        ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})`
+        ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})${salaryLabel}`
         : 'salary not disclosed';
 
     console.log('\n' + '─'.repeat(62));
@@ -109,6 +128,9 @@ async function main(): Promise<void> {
     if (offer.role_fit) {
       console.log(`   role_fit:        ${offer.role_fit}`);
     }
+    if (offer.recommended !== null) {
+      console.log(`   recommended:     ${offer.recommended}`);
+    }
     if (offer.salary_comparison) {
       console.log(`   salary_vs_target: ${offer.salary_comparison}`);
     }
@@ -117,9 +139,6 @@ async function main(): Promise<void> {
     }
     if (offer.missing_skills.length > 0) {
       console.log(`   missing:         ${offer.missing_skills.join(', ')}`);
-    }
-    if (offer.recommended !== null) {
-      console.log(`   recommended:     ${offer.recommended}`);
     }
   });
 

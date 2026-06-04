@@ -38,6 +38,7 @@ matchRouter.post(
       include_unmatched: options?.include_unmatched ?? false,
       ai_scoring: options?.ai_scoring ?? true,
     }
+    console.log('[match] ai_scoring option:', opts.ai_scoring)
 
     // ── 2. Load profile from user.profile_path ─────────────────────────────
     const profilePath = req.user!.profile_path
@@ -80,10 +81,10 @@ matchRouter.post(
     const offers = await prisma.offer.findMany({ where: whereClause })
 
     // ── 6. Pre-filter + scoring ────────────────────────────────────────────
-    const rejectedForDB: { offer: Offer; reason: string }[] = []
+    const rejectedForDB: { offer_id: string; reason: string }[] = []
     const pairs: MatchedPair[] = []
     const unmatched: UnmatchedOffer[] = []
-    const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, red_flags: 0 }
+    const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, language: 0, red_flags: 0 }
 
     for (const offer of offers) {
       const result = applyPreFilters(profile, offer)
@@ -92,19 +93,34 @@ matchRouter.post(
         if (result.rejectedByEmploymentType) rejectCounts.employment_type++
         if (result.rejectedBySalary)         rejectCounts.salary++
         if (result.rejectedBySeniority)      rejectCounts.seniority++
+        if (result.rejectedByLanguage)       rejectCounts.language++
         if (result.rejectedByRedFlags)       rejectCounts.red_flags++
-        rejectedForDB.push({ offer, reason: result.reasons[0] ?? '' })
+        rejectedForDB.push({ offer_id: offer.id, reason: result.reasons[0] ?? '' })
         if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, result.reasons))
         continue
       }
       pairs.push({ offer: toMatchedOffer(offer, scoreOffer(norm, offer)), original: offer })
     }
 
+    // ── Also collect skill-excluded offers (not returned by SQL filter) ───────
+    // These have no matching skills — query their IDs and mark as pre_filter_rejected
+    // so user_offers gets a complete record of every offer for this user.
+    const processedIds = new Set(offers.map(o => o.id))
+    const skillExcluded = await prisma.offer.findMany({
+      where: { id: { notIn: [...seenIds, ...processedIds] } },
+      select: { id: true },
+    })
+    for (const { id } of skillExcluded) {
+      rejectedForDB.push({ offer_id: id, reason: 'No skills match candidate profile' })
+    }
+
     console.log(`[preFilter] workplace: rejected ${rejectCounts.workplace}`)
     console.log(`[preFilter] employment_type: rejected ${rejectCounts.employment_type}`)
     console.log(`[preFilter] salary: rejected ${rejectCounts.salary}`)
     console.log(`[preFilter] seniority: rejected ${rejectCounts.seniority}`)
+    console.log(`[preFilter] language: rejected ${rejectCounts.language}`)
     console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`)
+    console.log(`[preFilter] skill_excluded: ${skillExcluded.length}`)
     console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 
     // ── 7. Sort ────────────────────────────────────────────────────────────
@@ -118,7 +134,9 @@ matchRouter.post(
     let aiScoring = false
     let claudeEvaluationsCount = 0
 
-    if (opts.ai_scoring) {
+    if (opts.ai_scoring && filteredPairs.length === 0) {
+      console.log('[match] No offers to evaluate — skipping Claude API call')
+    } else if (opts.ai_scoring) {
       console.log('[match] Calling Claude evaluator for', filteredPairs.length, 'offers')
       const claudeResults = await evaluateOffers(profile, filteredPairs.map(p => p.original))
       console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
@@ -151,9 +169,9 @@ matchRouter.post(
     // ── 10. Write user_offers ──────────────────────────────────────────────
     const now = new Date()
 
-    const preFilterRows = rejectedForDB.map(({ offer, reason }) => ({
+    const preFilterRows = rejectedForDB.map(({ offer_id, reason }) => ({
       user_id: userId,
-      offer_id: offer.id,
+      offer_id,
       status: 'pre_filter_rejected',
       rejection_reason: reason || null,
       claude_matched_reasons: [] as string[],
@@ -197,7 +215,7 @@ matchRouter.post(
       data: {
         user_id: userId,
         offers_matched: filteredPairs.length,
-        offers_total: offers.length,
+        offers_total: offers.length + skillExcluded.length,
         response_ms: responseMs,
         status: 'success',
       },
@@ -214,7 +232,7 @@ matchRouter.post(
         call_id: call.id,
         generated_at: new Date().toISOString(),
         response_ms: responseMs,
-        total_offers_scanned: offers.length,
+        total_offers_scanned: offers.length + skillExcluded.length,
         matched_count: limitedMatched.length,
         unmatched_count: unmatched.length,
         ai_scoring: aiScoring,
