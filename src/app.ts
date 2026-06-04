@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from './lib/errors'
 import { healthRouter } from './routes/health'
 import { matchRouter } from './routes/match'
+import { pipelineRouter } from './routes/pipeline'
 
 export const app = express()
 
@@ -11,6 +12,7 @@ app.use(express.json())
 
 app.use('/v1/health', healthRouter)
 app.use('/v1/match', matchRouter)
+app.use('/v1/pipeline', pipelineRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {

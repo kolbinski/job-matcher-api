@@ -1,19 +1,15 @@
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
+import { prisma } from '../lib/prisma';
 
 dotenv.config();
 
 const BASE_URL = 'http://localhost:3000';
 
-const API_KEY = process.env.JOBMATCHER_API_KEY;
-if (!API_KEY) {
-  console.error('Missing JOBMATCHER_API_KEY in .env');
+const userId = process.argv[2];
+if (!userId) {
+  console.error('Usage: npx tsx src/scripts/test-match.ts <user_id>');
   process.exit(1);
 }
-
-// marek-wisniewski-profile.json is already in CandidateProfile schema format —
-// no transformation needed, send it directly.
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -57,24 +53,23 @@ interface MatchResponse {
   unmatched: UnmatchedOffer[];
 }
 
-const profile = JSON.parse(
-  fs.readFileSync(
-    path.resolve(__dirname, '../data/marek-wisniewski-profile.json'),
-    'utf-8',
-  ),
-);
-
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log('Calling POST /v1/match for Marek Wiśniewski...\n');
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    console.error(`User not found: ${userId}`);
+    process.exit(1);
+  }
+
+  console.log(`Calling POST /v1/match for ${user.email} (${userId})...\n`);
 
   let res: Response;
   try {
     res = await fetch(`${BASE_URL}/v1/match`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ profile, options: { include_unmatched: true, ai_scoring: true } }),
+      headers: { 'Content-Type': 'application/json', 'x-api-key': user.jobmatcher_api_key },
+      body: JSON.stringify({ options: { include_unmatched: true, ai_scoring: true } }),
     });
   } catch {
     console.error('Connection refused — is the server running? (npm run dev)');
@@ -144,4 +139,4 @@ async function main(): Promise<void> {
   });
 }
 
-main();
+main().finally(() => prisma.$disconnect());

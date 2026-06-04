@@ -15,6 +15,7 @@ import { normalizeProfile } from '../src/services/profileParser'
 
 function makeOffer(overrides: Partial<Offer> = {}): Offer {
   return {
+    id: 'test-id',
     slug: 'test-slug',
     source: 'justjoin',
     title: 'Software Engineer',

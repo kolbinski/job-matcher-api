@@ -22,10 +22,12 @@ model User {
   id                 String   @id @default(uuid())
   email              String   @unique
   jobmatcher_api_key String   @unique
+  profile_path       String?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 
-  api_calls ApiCall[]
+  api_calls   ApiCall[]
+  user_offers UserOffer[]
 
   @@map("users")
 }
@@ -33,7 +35,8 @@ model User {
 // required_skills and nice_to_have_skills are TEXT[] from JustJoin.
 // employment_types and multilocation are JSONB to preserve the nested structure.
 model Offer {
-  slug                    String    @id
+  id                      String    @id @default(uuid())
+  slug                    String    @unique
   source                  String
   title                   String
   company_name            String
@@ -59,7 +62,34 @@ model Offer {
   created_at              DateTime  @default(now())
   updated_at              DateTime  @updatedAt
 
+  user_offers UserOffer[]
+
   @@map("offers")
+}
+
+// status values: pre_filter_rejected | ai_rejected | pending_apply | applied |
+//   pending_reply_from_recruiter | rejected | offer_received | accepted |
+//   client_withdrawn | offer_expired
+model UserOffer {
+  id                       String   @id @default(uuid())
+  user_id                  String
+  offer_id                 String
+  status                   String
+  rejection_reason         String?
+  claude_score             Int?
+  claude_role_fit          String?
+  claude_matched_reasons   String[]
+  claude_missing_skills    String[]
+  claude_salary_comparison String?
+  claude_recommended       Boolean?
+  matched_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  user  User  @relation(fields: [user_id], references: [id])
+  offer Offer @relation(fields: [offer_id], references: [id])
+
+  @@unique([user_id, offer_id])
+  @@map("user_offers")
 }
 
 model ApiCall {

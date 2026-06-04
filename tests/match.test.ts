@@ -8,12 +8,7 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
-const MINIMAL_PROFILE = {
-  basic_info: { full_name: 'Test User', remote_ok: true },
-  technologies: [{ name: 'TypeScript' }, { name: 'Node.js' }],
-  preferences: { salary_pln_net_b2b: { min: 15000, max: 25000 } },
-  red_flags: [],
-}
+const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
 
 describe('POST /v1/match', () => {
   let userId = ''
@@ -25,6 +20,7 @@ describe('POST /v1/match', () => {
       data: {
         email: `match-test-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
         jobmatcher_api_key: apiKey,
+        profile_path: TEST_PROFILE_PATH,
       },
     })
     userId = user.id
@@ -32,13 +28,14 @@ describe('POST /v1/match', () => {
 
   afterEach(async () => {
     if (userId) {
+      await prisma.userOffer.deleteMany({ where: { user_id: userId } })
       await prisma.apiCall.deleteMany({ where: { user_id: userId } })
       await prisma.user.deleteMany({ where: { id: userId } })
     }
   })
 
   it('returns 401 with no API key', async () => {
-    const res = await request(app).post('/v1/match').send({ profile: MINIMAL_PROFILE })
+    const res = await request(app).post('/v1/match').send({})
     expect(res.status).toBe(401)
     expect(res.body.error).toBe('INVALID_API_KEY')
   })
@@ -47,15 +44,23 @@ describe('POST /v1/match', () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', 'jm_live_unknownkeyxxxxxxxxxxxxxx')
-      .send({ profile: MINIMAL_PROFILE })
+      .send({})
     expect(res.status).toBe(401)
   })
 
-  it('returns 422 with invalid profile body', async () => {
+  it('returns 422 when user has no profile_path configured', async () => {
+    const noProfileKey = `jm_live_${crypto.randomBytes(16).toString('hex')}`
+    const noProfileUser = await prisma.user.create({
+      data: {
+        email: `no-profile-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
+        jobmatcher_api_key: noProfileKey,
+      },
+    })
     const res = await request(app)
       .post('/v1/match')
-      .set('X-API-Key', apiKey)
-      .send({ profile: { bad: 'data' } })
+      .set('X-API-Key', noProfileKey)
+      .send({})
+    await prisma.user.delete({ where: { id: noProfileUser.id } })
     expect(res.status).toBe(422)
     expect(res.body.error).toBe('INVALID_PROFILE')
   })
@@ -64,7 +69,7 @@ describe('POST /v1/match', () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
-      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: false } })
+      .send({ options: { ai_scoring: false } })
 
     expect(res.status).toBe(200)
     expect(res.body.meta.call_id).toBeTruthy()
@@ -78,7 +83,7 @@ describe('POST /v1/match', () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
-      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: true } })
+      .send({ options: { ai_scoring: true } })
 
     expect(res.status).toBe(200)
     expect(typeof res.body.meta.ai_scoring).toBe('boolean')
@@ -93,11 +98,42 @@ describe('POST /v1/match', () => {
     await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
-      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: false } })
+      .send({ options: { ai_scoring: false } })
 
     const calls = await prisma.apiCall.findMany({ where: { user_id: userId } })
     expect(calls).toHaveLength(1)
     expect(calls[0].status).toBe('success')
     expect(calls[0].response_ms).toBeGreaterThan(0)
+  })
+
+  it('writes one user_offer row per scanned offer', async () => {
+    const res = await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ options: { ai_scoring: false } })
+
+    const scanned: number = res.body.meta.total_offers_scanned
+    const rows = await prisma.userOffer.findMany({ where: { user_id: userId } })
+    // Every scanned offer must end up in user_offers (pre_filter_rejected or pending_apply)
+    expect(rows.length).toBe(scanned)
+  })
+
+  it('does not re-process offers seen in a previous call', async () => {
+    await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ options: { ai_scoring: false } })
+
+    const firstCount = await prisma.userOffer.count({ where: { user_id: userId } })
+
+    const res2 = await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ options: { ai_scoring: false } })
+
+    const secondCount = await prisma.userOffer.count({ where: { user_id: userId } })
+    // Second call finds no new offers — all were already seen
+    expect(secondCount).toBe(firstCount)
+    expect(res2.body.meta.total_offers_scanned).toBe(0)
   })
 })

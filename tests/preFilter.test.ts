@@ -7,6 +7,7 @@ import { applyPreFilters } from '../src/services/redFlagFilter'
 
 function makeOffer(overrides: Partial<Offer> = {}): Offer {
   return {
+    id: 'test-id',
     slug: 'test-slug',
     source: 'justjoin',
     title: 'Software Engineer',

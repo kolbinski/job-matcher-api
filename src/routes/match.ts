@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { Router } from 'express'
 import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
@@ -7,6 +9,7 @@ import { applyPreFilters } from '../services/redFlagFilter'
 import { scoreOffer } from '../services/scoring'
 import { evaluateOffers } from '../services/claudeEvaluator'
 import { normalizeProfile } from '../services/profileParser'
+import { CandidateProfileSchema } from '../types/profile'
 import { MatchRequestSchema } from '../types/match'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
 import { parseEmploymentTypes } from '../lib/offers'
@@ -21,35 +24,63 @@ matchRouter.post(
   rateLimiter,
   async (req, res) => {
     const startTime = Date.now()
+    const userId = req.user!.id
 
-    // ── 1. Validate request body ───────────────────────────────────────────
+    // ── 1. Validate request body (filters/sort/options only — no profile) ───
     const parsed = MatchRequestSchema.safeParse(req.body)
     if (!parsed.success) {
       console.error('[match] Validation errors:', JSON.stringify(parsed.error.issues, null, 2))
       return res.status(422).json({ error: 'INVALID_PROFILE', message: 'Invalid request body', issues: parsed.error.issues })
     }
 
-    const { profile, filters, sort, options } = parsed.data
+    const { filters, sort, options } = parsed.data
     const opts = {
       include_unmatched: options?.include_unmatched ?? false,
       ai_scoring: options?.ai_scoring ?? true,
     }
 
-    // ── 2. Normalize profile once (not per offer) ──────────────────────────
+    // ── 2. Load profile from user.profile_path ─────────────────────────────
+    const profilePath = req.user!.profile_path
+    if (!profilePath) {
+      return res.status(422).json({ error: 'INVALID_PROFILE', message: 'No profile configured for this user' })
+    }
+
+    let rawProfile: unknown
+    try {
+      rawProfile = JSON.parse(fs.readFileSync(path.resolve(profilePath), 'utf-8'))
+    } catch {
+      return res.status(422).json({ error: 'INVALID_PROFILE', message: `Profile file not found: ${profilePath}` })
+    }
+
+    const profileParsed = CandidateProfileSchema.safeParse(rawProfile)
+    if (!profileParsed.success) {
+      return res.status(422).json({ error: 'INVALID_PROFILE', message: 'Profile file is invalid', issues: profileParsed.error.issues })
+    }
+    const profile = profileParsed.data
+
+    // ── 3. Normalize profile once (not per offer) ──────────────────────────
     const norm = normalizeProfile(profile)
 
-    // ── 3. Load offers — pre-filter in Postgres by skill overlap ───────────
-    // Only fetch offers with at least one matching required skill (or none listed).
-    // Avoids loading all 10k rows into Node heap on every request.
-    // Empty tech profile → only offers that require no skills can produce a non-zero tech score.
+    // ── 4. Exclude offers already processed for this user ─────────────────
+    const seenIds = new Set(
+      (await prisma.userOffer.findMany({ where: { user_id: userId }, select: { offer_id: true } }))
+        .map(r => r.offer_id)
+    )
+
+    // ── 5. Load offers — pre-filter in Postgres by skill overlap ───────────
     const candidateTechs = [...norm.techs]
-    const whereClause = candidateTechs.length > 0
+    const skillFilter = candidateTechs.length > 0
       ? { OR: [{ required_skills: { isEmpty: true } }, { required_skills: { hasSome: candidateTechs } }] }
       : { required_skills: { isEmpty: true } }
 
+    const whereClause = seenIds.size > 0
+      ? { AND: [skillFilter, { NOT: { id: { in: [...seenIds] } } }] }
+      : skillFilter
+
     const offers = await prisma.offer.findMany({ where: whereClause })
 
-    // ── 4. Pre-filter + scoring ────────────────────────────────────────────
+    // ── 6. Pre-filter + scoring ────────────────────────────────────────────
+    const rejectedForDB: { offer: Offer; reason: string }[] = []
     const pairs: MatchedPair[] = []
     const unmatched: UnmatchedOffer[] = []
     const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, red_flags: 0 }
@@ -62,6 +93,7 @@ matchRouter.post(
         if (result.rejectedBySalary)         rejectCounts.salary++
         if (result.rejectedBySeniority)      rejectCounts.seniority++
         if (result.rejectedByRedFlags)       rejectCounts.red_flags++
+        rejectedForDB.push({ offer, reason: result.reasons[0] ?? '' })
         if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, result.reasons))
         continue
       }
@@ -75,32 +107,29 @@ matchRouter.post(
     console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`)
     console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 
-    // ── 5. Sort ────────────────────────────────────────────────────────────
+    // ── 7. Sort ────────────────────────────────────────────────────────────
     const order = sort?.order ?? 'desc'
     pairs.sort((a, b) => order === 'asc' ? a.offer.score - b.offer.score : b.offer.score - a.offer.score)
 
-    // ── 6. Post-score filters ──────────────────────────────────────────────
+    // ── 8. Post-score filters ──────────────────────────────────────────────
     const filteredPairs = applyPostScoreFilters(pairs, filters)
 
-    // ── 7. Claude batch evaluation — all pre-filtered offers ─────────────
+    // ── 9. Claude batch evaluation ─────────────────────────────────────────
     let aiScoring = false
     let claudeEvaluationsCount = 0
 
     if (opts.ai_scoring) {
-      const allOffers = filteredPairs
-      console.log('[match] Calling Claude evaluator for', allOffers.length, 'offers')
-      const claudeResults = await evaluateOffers(profile, allOffers.map(p => p.original))
+      console.log('[match] Calling Claude evaluator for', filteredPairs.length, 'offers')
+      const claudeResults = await evaluateOffers(profile, filteredPairs.map(p => p.original))
       console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
       if (claudeResults) {
         aiScoring = true
         claudeEvaluationsCount = claudeResults.length
 
-        // Build slug → evaluation map keyed by offer_index Claude echoed back,
-        // not by array position — Claude may reorder or return extra items.
         const claudeBySlug = new Map(
           claudeResults
-            .filter(ev => ev.offer_index >= 0 && ev.offer_index < allOffers.length)
-            .map(ev => [allOffers[ev.offer_index].original.slug, ev])
+            .filter(ev => ev.offer_index >= 0 && ev.offer_index < filteredPairs.length)
+            .map(ev => [filteredPairs[ev.offer_index].original.slug, ev])
         )
 
         for (const p of filteredPairs) {
@@ -115,27 +144,67 @@ matchRouter.post(
           p.offer.recommended = claudeData.recommended
         }
 
-        // Re-sort by Claude scores so top offers reflect Claude's ranking, not algorithm's
         filteredPairs.sort((a, b) => b.offer.score - a.offer.score)
       }
     }
 
-    // ── 8. Return all scored offers ────────────────────────────────────────
-    const limitedMatched = filteredPairs.map(p => p.offer)
+    // ── 10. Write user_offers ──────────────────────────────────────────────
+    const now = new Date()
 
-    // ── 9. Log api_calls row ───────────────────────────────────────────────
+    const preFilterRows = rejectedForDB.map(({ offer, reason }) => ({
+      user_id: userId,
+      offer_id: offer.id,
+      status: 'pre_filter_rejected',
+      rejection_reason: reason || null,
+      claude_matched_reasons: [] as string[],
+      claude_missing_skills: [] as string[],
+      matched_at: now,
+      updated_at: now,
+    }))
+
+    const claudeRows = filteredPairs.map(p => ({
+      user_id: userId,
+      offer_id: p.original.id,
+      status: p.offer.recommended === false ? 'ai_rejected' : 'pending_apply',
+      rejection_reason: p.offer.recommended === false ? (p.offer.role_fit ?? null) : null,
+      claude_score: p.offer.recommended !== null ? p.offer.score : null,
+      claude_role_fit: p.offer.role_fit ?? null,
+      claude_matched_reasons: p.offer.matched_reasons,
+      claude_missing_skills: p.offer.missing_skills,
+      claude_salary_comparison: p.offer.salary_comparison ?? null,
+      claude_recommended: p.offer.recommended ?? null,
+      matched_at: now,
+      updated_at: now,
+    }))
+
+    if (preFilterRows.length + claudeRows.length > 0) {
+      // skipDuplicates handles the unique(user_id, offer_id) constraint.
+      // try/catch guards against FK violations if an offer was deleted between
+      // our SELECT and this INSERT (e.g. concurrent sync deleting stale offers).
+      try {
+        await prisma.userOffer.createMany({
+          data: [...preFilterRows, ...claudeRows],
+          skipDuplicates: true,
+        })
+      } catch (err) {
+        console.warn('[match] user_offers insert skipped:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // ── 11. Log api_calls row ──────────────────────────────────────────────
     const responseMs = Date.now() - startTime
     const call = await prisma.apiCall.create({
       data: {
-        user_id: req.user!.id, // guaranteed by validateApiKey middleware
-        offers_matched: limitedMatched.length,
+        user_id: userId,
+        offers_matched: filteredPairs.length,
         offers_total: offers.length,
         response_ms: responseMs,
         status: 'success',
       },
     })
 
-    // ── 10. Return response ────────────────────────────────────────────────
+    // ── 12. Return response ────────────────────────────────────────────────
+    const limitedMatched = filteredPairs.map(p => p.offer)
     if (limitedMatched.length > 0) {
       const first = limitedMatched[0]
       console.log('[match] First offer Claude fields — role_fit:', first.role_fit, '| recommended:', first.recommended)
@@ -198,11 +267,10 @@ function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOf
   }
 }
 
-function extractSalary(offer: Offer): OfferSalary | null {
+export function extractSalary(offer: Offer): OfferSalary | null {
   const types = parseEmploymentTypes(offer)
   if (types.length === 0) return null
 
-  // Prefer B2B; from/to are top-level fields (no nested salary object)
   for (const t of types) {
     if (t.type === 'b2b' && t.from !== undefined && t.to !== undefined) {
       return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: 'b2b' }

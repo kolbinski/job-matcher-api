@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { CandidateProfileSchema } from './profile'
 
 // ─── Request schemas ─────────────────────────────────────────────────────────
 
@@ -32,7 +31,6 @@ export const MatchOptionsSchema = z.object({
 })
 
 export const MatchRequestSchema = z.object({
-  profile: CandidateProfileSchema,
   filters: MatchFiltersSchema.optional(),
   sort: MatchSortSchema.optional(),
   options: MatchOptionsSchema.optional(),
