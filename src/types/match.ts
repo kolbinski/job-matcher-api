@@ -62,7 +62,6 @@ export interface OfferSalary {
 }
 
 export interface MatchedOffer {
-  slug: string
   score: number
   title: string
   company: string

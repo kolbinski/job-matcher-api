@@ -28,9 +28,8 @@ async function isWithinSchedule(): Promise<boolean> {
   const now  = new Date()
   const day  = now.getUTCDay()
   const hour = now.getUTCHours()
-  const min  = now.getUTCMinutes()
 
-  const afterStart = hour > startHour || (hour === startHour && min >= 45)
+  const afterStart = hour >= startHour
   const beforeEnd  = hour <= endHour
   return day >= minDay && day <= maxDay && afterStart && beforeEnd
 }
@@ -40,18 +39,15 @@ function cetTimeString(): string {
 }
 
 async function runSync(): Promise<void> {
-  if (!await isWithinSchedule()) {
-    console.log('[scheduler] Outside working hours — skipping sync')
-    return
-  }
+  const withinSchedule = await isWithinSchedule()
   if (syncInProgress) {
     console.log('[scheduler] Previous sync still running — skipping this tick')
     return
   }
-  console.log(`[scheduler] Starting scheduled sync at ${cetTimeString()}`)
+  console.log(`[scheduler] Starting sync at ${cetTimeString()} (cleanup: ${withinSchedule})`)
   syncInProgress = true
   try {
-    await syncOffers()
+    await syncOffers(withinSchedule)
   } catch (err) {
     console.error('[scheduler] Offer sync failed:', err)
   } finally {
@@ -59,6 +55,9 @@ async function runSync(): Promise<void> {
   }
 }
 
+// cronjob_schedule controls WHEN the cron fires — read once at startup, requires redeploy to change.
+// work_start_utc / work_end_utc / work_days control WHETHER the sync runs — read on every tick,
+// so DB changes take effect immediately without redeploying.
 export async function startScheduler(): Promise<void> {
   const setting = await prisma.settings.findUnique({
     where: { key: 'cronjob_schedule' },
@@ -84,6 +83,6 @@ export async function startScheduler(): Promise<void> {
 
   console.log(`[scheduler] Scheduled ${scheduled} expression(s): ${expressions.join(' | ')}`)
 
-  // Startup sync — isWithinSchedule() guard applies
+  // Startup sync always runs; cleanup is skipped if outside working hours.
   runSync().catch(err => console.error('[scheduler] Startup sync failed:', err))
 }

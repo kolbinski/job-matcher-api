@@ -1,3 +1,5 @@
+import type { EmploymentTypeEntry } from '../lib/offers'
+
 const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
 export const PAGE_SIZE = 100
 
@@ -20,7 +22,7 @@ export interface NormalizedOffer {
   remote_interview: boolean | null
   required_skills: string[]
   nice_to_have_skills: string[]
-  employment_types: unknown
+  employment_types: EmploymentTypeEntry[]
   multilocation: unknown | null
   city: string | null
   street: string | null
@@ -76,7 +78,7 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     remote_interview: typeof raw.isRemoteInterview === 'boolean' ? raw.isRemoteInterview : null,
     required_skills: extractSkillNames(raw.requiredSkills),
     nice_to_have_skills: extractSkillNames(raw.niceToHaveSkills),
-    employment_types: Array.isArray(raw.employmentTypes) ? raw.employmentTypes : [],
+    employment_types: Array.isArray(raw.employmentTypes) ? raw.employmentTypes as EmploymentTypeEntry[] : [],
     multilocation: Array.isArray(raw.locations) ? raw.locations : null,
     city: typeof raw.city === 'string' ? raw.city : null,
     street: typeof raw.street === 'string' ? raw.street : null,

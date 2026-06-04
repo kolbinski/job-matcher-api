@@ -5,6 +5,9 @@ import { env } from '../lib/env'
 
 const BATCH_SIZE = 500
 
+export const PAGE_DELAY_MIN_MS = env.NODE_ENV === 'test' ? 0 : 20_000
+export const PAGE_DELAY_MAX_MS = env.NODE_ENV === 'test' ? 0 : 60_000
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
@@ -76,15 +79,17 @@ function logSkillBreakdown(skillCounts: Map<string, number>): void {
   console.log(`[offerSync] Top skills: ${top}`)
 }
 
-export async function syncOffers(): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
+export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
   const fetchedAt = new Date()
 
-  // Load existing slugs once — upsertPage keeps it up to date as pages are inserted
-  const existingSlugs = new Set(
-    (await prisma.offer.findMany({ select: { slug: true } })).map(o => o.slug)
-  )
+  // Load max_pages and existing slugs in parallel
+  const [maxPagesRow, existingSlugsRaw] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'max_pages' } }),
+    prisma.offer.findMany({ select: { slug: true } }),
+  ])
+  const maxPages = parseInt(maxPagesRow?.value ?? '3', 10)
+  const existingSlugs = new Set(existingSlugsRaw.map(o => o.slug))
 
-  const allFetchedSlugs: string[] = []
   const skillCounts = new Map<string, number>()
   let totalFetched = 0
   let totalInserted = 0
@@ -93,8 +98,13 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
   let pageNum = 0
 
   while (true) {
-    if (pageNum > 0 && env.NODE_ENV !== 'test') {
-      const delay = Math.floor(Math.random() * (60_000 - 20_000 + 1)) + 20_000
+    if (pageNum >= maxPages) {
+      console.log(`[offerSync] Reached max_pages limit (${maxPages}) — stopping`)
+      break
+    }
+
+    if (pageNum > 0 && PAGE_DELAY_MAX_MS > 0) {
+      const delay = Math.floor(Math.random() * (PAGE_DELAY_MAX_MS - PAGE_DELAY_MIN_MS + 1)) + PAGE_DELAY_MIN_MS
       console.log(`[offerScraper] Waiting ${Math.round(delay / 1000)}s before next page...`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
@@ -109,7 +119,6 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
     const pageMs = Date.now() - pageStart
 
     for (const o of offers) {
-      allFetchedSlugs.push(o.slug)
       const primary = o.required_skills[0]
       if (primary) skillCounts.set(primary, (skillCounts.get(primary) ?? 0) + 1)
     }
@@ -133,8 +142,22 @@ export async function syncOffers(): Promise<{ fetched: number; inserted: number;
     return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
   }
 
+  if (!cleanupEnabled) {
+    console.log('[offerSync] Outside working hours — skipping offer cleanup')
+    console.log(`[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deleted 0`)
+    logSkillBreakdown(skillCounts)
+    return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: 0 }
+  }
+
+  // Offers not seen in this run retain their pre-sync fetched_at (< fetchedAt) or are null.
+  // Both cases mean they were absent from the current fetch — safe to delete.
   const deleted = await prisma.offer.deleteMany({
-    where: { slug: { notIn: allFetchedSlugs } },
+    where: {
+      OR: [
+        { fetched_at: null },
+        { fetched_at: { lt: fetchedAt } },
+      ],
+    },
   })
 
   console.log(

@@ -9,7 +9,7 @@ import { generateAiSummary } from '../services/aiSummary'
 import { normalizeProfile } from '../services/profileParser'
 import { MatchRequestSchema } from '../types/match'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
-import { EmploymentTypeEntry } from '../lib/offers'
+import type { EmploymentTypeEntry } from '../lib/offers'
 import { InvalidProfileError } from '../lib/errors'
 
 export const matchRouter = Router()
@@ -40,17 +40,18 @@ matchRouter.post(
     // ── 3. Load offers — pre-filter in Postgres by skill overlap ───────────
     // Only fetch offers with at least one matching required skill (or none listed).
     // Avoids loading all 10k rows into Node heap on every request.
+    // Empty tech profile → only offers that require no skills can produce a non-zero tech score.
     const candidateTechs = [...norm.techs]
     const whereClause = candidateTechs.length > 0
       ? { OR: [{ required_skills: { isEmpty: true } }, { required_skills: { hasSome: candidateTechs } }] }
-      : undefined
+      : { required_skills: { isEmpty: true } }
 
     const offers = await prisma.offer.findMany({ where: whereClause })
-    const offerBySlug = new Map(offers.map(o => [o.slug, o]))
 
     // ── 4. Red flag filter + scoring ───────────────────────────────────────
     const matched: MatchedOffer[] = []
     const unmatched: UnmatchedOffer[] = []
+    const offerToOriginal = new Map<MatchedOffer, Offer>()
 
     for (const offer of offers) {
       const rejectionReasons = filterRedFlags(profile, offer)
@@ -58,7 +59,9 @@ matchRouter.post(
         if (opts.include_unmatched) unmatched.push(toUnmatchedOffer(offer, rejectionReasons))
         continue
       }
-      matched.push(toMatchedOffer(offer, scoreOffer(norm, offer)))
+      const matchedOffer = toMatchedOffer(offer, scoreOffer(norm, offer))
+      offerToOriginal.set(matchedOffer, offer)
+      matched.push(matchedOffer)
     }
 
     // ── 5. Sort ────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ matchRouter.post(
     if (opts.ai_scoring) {
       const aiCount = Math.min(opts.limit, 10)
       for (const offer of filteredMatched.slice(0, aiCount)) {
-        const original = offerBySlug.get(offer.slug)
+        const original = offerToOriginal.get(offer)
         if (!original) continue
         const summary = await generateAiSummary(original, offer.score, offer.match_reasons, offer.missing_skills)
         if (summary) {
@@ -121,7 +124,6 @@ matchRouter.post(
 
 function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): MatchedOffer {
   return {
-    slug: offer.slug,
     score: scored.score,
     title: offer.title,
     company: offer.company_name,

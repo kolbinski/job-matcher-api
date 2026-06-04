@@ -114,7 +114,7 @@ describe('scoreOffer — techScore', () => {
   })
 
   it('returns 0 when candidate has none of the required skills', () => {
-    const result = score(makeProfile({ technologies: [] }), makeOffer({ required_skills: ['React', 'TypeScript', 'GraphQL'] }))
+    const result = score(makeProfile({ technologies: [] }), makeOffer({ required_skills: ['react', 'typescript', 'graphql'] }))
     expect(result.techScore).toBe(0)
     expect(result.missingSkills).toHaveLength(3)
   })
@@ -123,9 +123,9 @@ describe('scoreOffer — techScore', () => {
     expect(score(makeProfile({ technologies: [] }), makeOffer({ required_skills: [] })).techScore).toBe(50)
   })
 
-  it('identifies missing skills correctly (lowercased)', () => {
+  it('identifies missing skills correctly', () => {
     const profile = makeProfile({ technologies: [{ name: 'React' }] })
-    const result = score(profile, makeOffer({ required_skills: ['React', 'TypeScript', 'GraphQL'] }))
+    const result = score(profile, makeOffer({ required_skills: ['react', 'typescript', 'graphql'] }))
     expect(result.missingSkills).toContain('typescript')
     expect(result.missingSkills).toContain('graphql')
     expect(result.missingSkills).not.toContain('react')

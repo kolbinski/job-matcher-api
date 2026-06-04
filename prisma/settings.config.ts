@@ -5,4 +5,5 @@ export const SETTINGS = [
   { key: 'work_end_utc',             value: '15' },
   { key: 'work_days',                value: '1-5' },
   { key: 'ai_scoring_enabled',       value: 'true' },
+  { key: 'max_pages',                value: '3' },
 ] as const

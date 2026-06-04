@@ -16,7 +16,7 @@ export interface AiSummaryResult {
 }
 
 // Returns null on timeout or any Claude API error — the route handler sets
-// ai_scoring: false in meta and rolls back the billing transaction (RULE A-2).
+// ai_scoring: false in meta and continues to respond without AI enrichment (RULE A-5).
 export async function generateAiSummary(
   offer: Offer,
   score: number,

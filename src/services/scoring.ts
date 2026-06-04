@@ -33,7 +33,7 @@ export function scoreOffer(norm: NormalizedProfile, offer: Offer): ScoredOffer {
     techScore = 50
     missingSkills = []
   } else {
-    const offerSkills = offer.required_skills.map((s) => s.toLowerCase().trim())
+    const offerSkills = offer.required_skills.map((s) => s.trim())
     const matched = offerSkills.filter((s) => norm.techs.has(s))
     missingSkills = offerSkills.filter((s) => !norm.techs.has(s))
     techScore = Math.round((matched.length / offerSkills.length) * 100)
