@@ -7,6 +7,8 @@ import { syncOffers } from '../jobs/offerSync'
 //   '0 7-15 * * 1-5' — 07:00-15:00 UTC = 09:00-17:00 CEST, top of each hour
 // In October (CET, UTC+1): change to '45 7 * * 1-5|0 8-16 * * 1-5'
 const DEFAULT_SCHEDULE = '45 6 * * 1-5|0 7-15 * * 1-5'
+const STARTUP_GRACE_MS = 5 * 60 * 1000
+const startupTime = Date.now()
 
 let syncInProgress = false
 
@@ -39,6 +41,10 @@ function cetTimeString(): string {
 }
 
 async function runSync(): Promise<void> {
+  if (Date.now() - startupTime < STARTUP_GRACE_MS) {
+    console.log('[scheduler] Skipping first tick — within 5min grace period after startup')
+    return
+  }
   if (syncInProgress) {
     console.log('[scheduler] Previous sync still running — skipping this tick')
     return
