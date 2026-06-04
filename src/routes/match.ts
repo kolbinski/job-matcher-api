@@ -60,7 +60,7 @@ matchRouter.post(
         continue
       }
       const matchedOffer = toMatchedOffer(offer, scoreOffer(norm, offer))
-      if (offer.url) offerToOriginal.set(offer.url, offer)
+      if (offer.url) offerToOriginal.set(offer.url, offer) // url derived from PK slug — unique
       matched.push(matchedOffer)
     }
 
@@ -92,14 +92,10 @@ matchRouter.post(
     const limitedMatched = filteredMatched.slice(0, opts.limit)
 
     // ── 9. Log api_calls row ───────────────────────────────────────────────
-    if (!req.user) {
-      res.status(401).json({ error: 'INVALID_API_KEY', message: 'Authentication required' })
-      return
-    }
     const responseMs = Date.now() - startTime
     const call = await prisma.apiCall.create({
       data: {
-        user_id: req.user.id,
+        user_id: req.user!.id, // guaranteed by validateApiKey middleware
         offers_matched: limitedMatched.length,
         offers_total: offers.length,
         response_ms: responseMs,
@@ -154,6 +150,7 @@ function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOf
     company: offer.company_name,
     city: offer.city,
     remote: offer.workplace_type === 'remote',
+    hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
     salary: extractSalary(offer),
     rejection_reasons: rejectionReasons,
     url: offer.url,

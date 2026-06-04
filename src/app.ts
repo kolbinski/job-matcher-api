@@ -17,6 +17,11 @@ app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     res.status(err.statusCode).json({ error: err.code, message: err.message })
     return
   }
-  console.error(err)
+  const message = err instanceof Error ? err.message : String(err)
+  if (process.env.NODE_ENV === 'development') {
+    console.error(err)
+  } else {
+    console.error('[app] Unhandled error:', message)
+  }
   res.status(500).json({ error: 'INTERNAL_ERROR', message: 'An unexpected error occurred' })
 })

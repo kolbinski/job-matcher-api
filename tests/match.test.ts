@@ -74,6 +74,21 @@ describe('POST /v1/match', () => {
     expect(Array.isArray(res.body.unmatched)).toBe(true)
   })
 
+  it('returns a valid response structure when ai_scoring is enabled', async () => {
+    const res = await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ profile: MINIMAL_PROFILE, options: { ai_scoring: true, limit: 1 } })
+
+    expect(res.status).toBe(200)
+    expect(typeof res.body.meta.ai_scoring).toBe('boolean')
+    if (res.body.matched.length > 0 && res.body.meta.ai_scoring) {
+      const offer = res.body.matched[0]
+      expect(['apply', 'consider', 'skip']).toContain(offer.ai_recommendation)
+      expect(typeof offer.ai_summary).toBe('string')
+    }
+  })
+
   it('writes an api_calls row on success', async () => {
     await request(app)
       .post('/v1/match')

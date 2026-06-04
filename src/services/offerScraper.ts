@@ -2,6 +2,7 @@ import type { EmploymentTypeEntry } from '../lib/offers'
 
 const JJ_API = 'https://justjoin.it/api/candidate-api/offers'
 export const PAGE_SIZE = 100
+const JJ_API_LIMIT = 10_000
 
 const HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -58,7 +59,11 @@ function extractSkillNames(raw: unknown): string[] {
 function toDate(value: unknown): Date | null {
   if (!value) return null
   const d = new Date(value as string)
-  return isNaN(d.getTime()) ? null : d
+  if (isNaN(d.getTime())) {
+    console.warn(`[offerScraper] Invalid date value: ${String(value)}`)
+    return null
+  }
+  return d
 }
 
 export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | null {
@@ -101,8 +106,8 @@ interface ApiResponse {
 // Fetches a single page of offers. syncOffers() drives the pagination loop
 // so it can upsert each page immediately rather than collecting all 10,000 first.
 export async function fetchPage(from: number): Promise<FetchPageResult> {
-  if (from >= 10_000) {
-    console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
+  if (from >= JJ_API_LIMIT) {
+    console.log(`[offerScraper] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
     return { offers: [], nextCursor: null }
   }
 
@@ -110,7 +115,7 @@ export async function fetchPage(from: number): Promise<FetchPageResult> {
   const res = await fetch(url, { headers: HEADERS })
 
   if (res.status === 500) {
-    console.log('[offerScraper] Reached JustJoin API limit (10,000 offers)')
+    console.log(`[offerScraper] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
     return { offers: [], nextCursor: null }
   }
 

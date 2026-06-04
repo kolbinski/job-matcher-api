@@ -86,6 +86,7 @@ export interface UnmatchedOffer {
   company: string
   city: string | null
   remote: boolean
+  hybrid: boolean
   salary: OfferSalary | null
   rejection_reasons: string[]
   url: string | null

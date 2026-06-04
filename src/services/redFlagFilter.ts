@@ -27,8 +27,9 @@ export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[
 
     if (['salary', 'compensation', 'pay'].includes(category)) {
       const numMatch = desc.match(/(\d[\d\s]*\d|\d+)/)
-      if (numMatch) {
-        const minSalary = parseInt(numMatch[1].replace(/\s/g, ''), 10)
+      const rawNum = numMatch?.[1]
+      if (rawNum !== undefined) {
+        const minSalary = parseInt(rawNum.replace(/\s/g, ''), 10)
         const offerMax = getBestSalary(offer)
         if (offerMax !== null && offerMax < minSalary) {
           reasons.push(

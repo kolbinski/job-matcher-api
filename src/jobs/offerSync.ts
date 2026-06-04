@@ -52,25 +52,27 @@ async function upsertPage(
   const toInsert = offers.filter(o => !existingSlugs.has(o.slug))
   const toUpdate = offers.filter(o => existingSlugs.has(o.slug))
 
-  for (const batch of chunk(toInsert, BATCH_SIZE)) {
-    await prisma.offer.createMany({
-      data: batch.map(o => toUpsertData(o, fetchedAt)),
-      skipDuplicates: true,
-    })
-  }
+  return prisma.$transaction(async (tx) => {
+    for (const batch of chunk(toInsert, BATCH_SIZE)) {
+      await tx.offer.createMany({
+        data: batch.map(o => toUpsertData(o, fetchedAt)),
+        skipDuplicates: true,
+      })
+    }
 
-  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
-    await prisma.$transaction(
-      batch.map(offer =>
-        prisma.offer.update({
-          where: { slug: offer.slug },
-          data: toUpsertData(offer, fetchedAt),
-        })
+    for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+      await Promise.all(
+        batch.map(offer =>
+          tx.offer.update({
+            where: { slug: offer.slug },
+            data: toUpsertData(offer, fetchedAt),
+          })
+        )
       )
-    )
-  }
+    }
 
-  return { inserted: toInsert.length, updated: toUpdate.length, insertedSlugs: toInsert.map(o => o.slug) }
+    return { inserted: toInsert.length, updated: toUpdate.length, insertedSlugs: toInsert.map(o => o.slug) }
+  }, { timeout: 60_000 })
 }
 
 function logSkillBreakdown(skillCounts: Map<string, number>): void {
@@ -124,8 +126,9 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
     const pageMs = Date.now() - pageStart
 
     for (const o of offers) {
-      const primary = o.required_skills[0]
-      if (primary) skillCounts.set(primary, (skillCounts.get(primary) ?? 0) + 1)
+      for (const skill of o.required_skills) {
+        skillCounts.set(skill, (skillCounts.get(skill) ?? 0) + 1)
+      }
     }
 
     totalFetched += offers.length

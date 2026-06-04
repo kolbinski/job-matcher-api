@@ -24,8 +24,13 @@ async function isWithinSchedule(): Promise<boolean> {
   const startHour = parseInt(startRow?.value ?? '6', 10)
   const endHour   = parseInt(endRow?.value   ?? '15', 10)
 
-  // Parse 'min-max' day range, e.g. '1-5' → [1, 5]
-  const [minDay, maxDay] = (daysRow?.value ?? '1-5').split('-').map(Number)
+  // Parse 'min-max' day range, e.g. '1-5' → [1, 5]; default to Mon-Fri on invalid value
+  const [rawMin, rawMax] = (daysRow?.value ?? '1-5').split('-').map(Number)
+  const minDay = isNaN(rawMin) ? 1 : rawMin
+  const maxDay = isNaN(rawMax) ? 5 : rawMax
+  if (isNaN(rawMin) || isNaN(rawMax)) {
+    console.error(`[scheduler] Invalid work_days value: "${daysRow?.value}" — defaulting to Mon-Fri (1-5)`)
+  }
 
   const now  = new Date()
   const day  = now.getUTCDay()
@@ -83,8 +88,7 @@ export async function startScheduler(): Promise<void> {
   }
 
   if (scheduled === 0) {
-    console.error('[scheduler] No valid cron expressions found — scheduler not started')
-    return
+    throw new Error('[scheduler] No valid cron expressions found — scheduler not started')
   }
 
   console.log(`[scheduler] Scheduled ${scheduled} expression(s): ${expressions.join(' | ')}`)
@@ -92,7 +96,13 @@ export async function startScheduler(): Promise<void> {
   const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })
   const shouldFetch = fetchRow?.value === 'true'
   if (shouldFetch) {
-    runSync().catch(err => console.error('[scheduler] Startup sync failed:', err))
+    setTimeout(
+      () => {
+        console.log('[scheduler] Grace period over — running initial sync (fetch_offers_after_build=true)')
+        runSync().catch(err => console.error('[scheduler] Initial sync failed:', err))
+      },
+      STARTUP_GRACE_MS + 1_000
+    )
   } else {
     console.log('[scheduler] Startup sync skipped (fetch_offers_after_build=false)')
   }

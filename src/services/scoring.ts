@@ -110,7 +110,7 @@ function calcExperienceLevelScore(
 
   const diff = Math.abs(candidateIdx - offerIdx)
   if (diff === 0) {
-    matchReasons.push(`${offerLevel.charAt(0).toUpperCase() + offerLevel.slice(1)}-level role matches your experience`)
+    matchReasons.push(`${offerLevel[0].toUpperCase()}${offerLevel.slice(1)}-level role matches your experience`)
     return 100
   }
   if (diff === 1) return 65

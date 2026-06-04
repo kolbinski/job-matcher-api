@@ -65,7 +65,7 @@ export async function generateAiSummary(
     }
 
     const recommendation = parsed['ai_recommendation']
-    if (!['apply', 'consider', 'skip'].includes(recommendation as string)) return null
+    if (typeof recommendation !== 'string' || !(['apply', 'consider', 'skip'] as const).includes(recommendation as 'apply' | 'consider' | 'skip')) return null
 
     return {
       aiSummary: String(parsed['ai_summary'] ?? ''),

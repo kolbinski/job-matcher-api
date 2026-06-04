@@ -9,6 +9,7 @@ interface WindowEntry {
 const store = new Map<string, WindowEntry>()
 const WINDOW_MS = 60_000
 const MAX_REQUESTS = 100
+const MAX_STORE_SIZE = 10_000
 
 // Purge expired windows every 5 minutes to prevent unbounded map growth
 setInterval(() => {
@@ -21,6 +22,11 @@ setInterval(() => {
 export function rateLimiter(req: Request, _res: Response, next: NextFunction): void {
   const userId = req.user?.id
   if (!userId) throw new InvalidApiKeyError()
+
+  if (store.size >= MAX_STORE_SIZE) {
+    const oldestKey = store.keys().next().value
+    if (oldestKey !== undefined) store.delete(oldestKey)
+  }
 
   const now = Date.now()
   const entry = store.get(userId)
