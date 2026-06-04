@@ -1,0 +1,339 @@
+{
+  "basic_info": {
+    "name": "Marek Wiśniewski",
+    "email": "marek.wisniewski.it@gmail.com",
+    "phone": "+48 600 123 456",
+    "linkedin": "linkedin.com/in/marek-wisniewski-dev",
+    "github": "github.com/marek-wisniewski",
+    "location": "Warszawa",
+    "experience_years": 10,
+    "status": "actively_looking"
+  },
+  "education": [
+    {
+      "institution": "Politechnika Warszawska",
+      "degree": "Magister Inżynier",
+      "field": "Informatyka — Inżynieria Oprogramowania",
+      "thesis": "Projektowanie i implementacja skalowalnej architektury mikroserwisów dla systemów płatności online",
+      "gpa": 4.3,
+      "from": "2009-09",
+      "to": "2014-06"
+    }
+  ],
+  "employment_history": [
+    {
+      "company": "PayFlow Sp. z o.o.",
+      "role": "Tech Lead / Senior Fullstack Engineer",
+      "from": "2021-03",
+      "to": "2024-08",
+      "company_type": "product",
+      "industry": "fintech",
+      "team_size": 6,
+      "work_model": "remote",
+      "projects": [
+        {
+          "name": "System real-time płatności",
+          "technologies": [
+            "react",
+            "typescript",
+            "node.js",
+            "postgresql",
+            "redis",
+            "stripe",
+            "aws lambda",
+            "docker"
+          ],
+          "team_size": 6,
+          "methodology": "scrum",
+          "role": "tech lead",
+          "achievements": [
+            "Czas przetwarzania: 4.2s → 380ms (91% szybciej)",
+            "Przepustowość: 500 → 12,000 tx/min",
+            "Zero incydentów przez 18 miesięcy"
+          ]
+        },
+        {
+          "name": "Developer Portal (API docs + sandbox)",
+          "technologies": [
+            "next.js",
+            "typescript",
+            "graphql",
+            "storybook",
+            "algolia",
+            "material ui"
+          ],
+          "team_size": 3,
+          "methodology": "kanban",
+          "role": "lead",
+          "achievements": [
+            "Czas integracji partnera: 3 tygodnie → 4 dni",
+            "47 partnerów onboardowanych bez udziału supportu"
+          ]
+        }
+      ]
+    },
+    {
+      "company": "SoftHouse Warsaw",
+      "role": "Senior Fullstack Developer",
+      "from": "2018-02",
+      "to": "2021-02",
+      "company_type": "outsourcing",
+      "industry": "e-commerce",
+      "work_model": "hybrid",
+      "projects": [
+        {
+          "name": "E-commerce Niemcy (~2M SKU)",
+          "technologies": [
+            "vue.js",
+            "typescript",
+            "elasticsearch",
+            "node.js"
+          ],
+          "achievements": [
+            "Trafność wyszukiwania +34%",
+            "Konwersja +12% QoQ"
+          ]
+        },
+        {
+          "name": "WMS (logistyka)",
+          "technologies": [
+            "node.js",
+            "websockets",
+            "postgresql"
+          ],
+          "achievements": [
+            "Czas kompletacji zamówienia -22%"
+          ]
+        }
+      ]
+    },
+    {
+      "company": "Rentalify (StartupHub)",
+      "role": "Fullstack Developer → Tech Lead",
+      "from": "2016-04",
+      "to": "2018-11",
+      "company_type": "product",
+      "industry": "proptech",
+      "work_model": "onsite",
+      "projects": [
+        {
+          "name": "Platforma wynajmu nieruchomości",
+          "technologies": [
+            "react",
+            "node.js",
+            "postgresql"
+          ],
+          "achievements": [
+            "15,000 ogłoszeń, 4,200 umów w 18 miesięcy",
+            "Weryfikacja ogłoszeń: 48h → 2h"
+          ]
+        }
+      ]
+    },
+    {
+      "company": "Pixelmachine",
+      "role": "Junior/Mid Fullstack Developer",
+      "from": "2014-07",
+      "to": "2016-03",
+      "company_type": "agency",
+      "industry": "digital",
+      "projects": [
+        {
+          "name": "Projekty agencyjne",
+          "technologies": [
+            "javascript",
+            "php",
+            "css"
+          ],
+          "achievements": [
+            "Czas ładowania: 8s → 2.1s",
+            "Konwersja mobilna +18%"
+          ]
+        }
+      ]
+    },
+    {
+      "company": "Freelance",
+      "role": "Fullstack Developer",
+      "from": "2013-09",
+      "to": "2014-06",
+      "projects": [
+        {
+          "name": "System rezerwacji siłowni",
+          "technologies": [
+            "php",
+            "javascript",
+            "mysql"
+          ],
+          "achievements": [
+            "800+ rezerwacji/mc"
+          ]
+        }
+      ]
+    }
+  ],
+  "personal_projects": [
+    {
+      "name": "BudgetFlow",
+      "url": "budgetflow.app",
+      "technologies": [
+        "next.js",
+        "typescript",
+        "postgresql",
+        "prisma",
+        "openai"
+      ],
+      "description": "Tracker finansów z AI kategoryzacją transakcji i integracją bankową przez Plaid API",
+      "status": "active",
+      "users": 40
+    },
+    {
+      "name": "JobRadar",
+      "technologies": [
+        "node.js",
+        "typescript",
+        "puppeteer",
+        "redis"
+      ],
+      "description": "Bot scrapujący JustJoin.it, NoFluffJobs i LinkedIn z filtrowaniem po stacku i wynagrodzeniu",
+      "status": "private"
+    },
+    {
+      "name": "pg-migrate-cli",
+      "url": "npmjs.com/package/pg-migrate-cli",
+      "technologies": [
+        "node.js",
+        "typescript"
+      ],
+      "description": "CLI tool do migracji PostgreSQL z rollback, dry-run i diff",
+      "status": "open_source",
+      "github_stars": 180
+    }
+  ],
+  "career_goals": {
+    "target_role": "Senior Fullstack Engineer",
+    "salary_min": 22000,
+    "salary_max": 28000,
+    "currency": "PLN",
+    "employment_type": "b2b",
+    "work_model": "remote",
+    "max_office_days": 2,
+    "target_markets": [
+      "poland",
+      "europe"
+    ],
+    "industries": [
+      "fintech",
+      "saas",
+      "developer_tools",
+      "proptech"
+    ],
+    "company_type": "product",
+    "team_size_min": 5,
+    "team_size_max": 15
+  },
+  "technologies": [
+    {
+      "name": "typescript",
+      "since": 2018,
+      "level": "expert"
+    },
+    {
+      "name": "react",
+      "since": 2016,
+      "level": "expert"
+    },
+    {
+      "name": "next.js",
+      "since": 2016,
+      "level": "expert"
+    },
+    {
+      "name": "node.js",
+      "since": 2018,
+      "level": "expert"
+    },
+    {
+      "name": "express",
+      "since": 2018,
+      "level": "expert"
+    },
+    {
+      "name": "nest.js",
+      "since": 2021,
+      "level": "advanced"
+    },
+    {
+      "name": "graphql",
+      "since": 2020,
+      "level": "advanced"
+    },
+    {
+      "name": "postgresql",
+      "since": 2016,
+      "level": "expert"
+    },
+    {
+      "name": "docker",
+      "since": 2021,
+      "level": "advanced"
+    },
+    {
+      "name": "kubernetes",
+      "since": 2021,
+      "level": "advanced"
+    },
+    {
+      "name": "aws",
+      "since": 2021,
+      "level": "advanced"
+    },
+    {
+      "name": "elasticsearch",
+      "since": 2018,
+      "level": "advanced"
+    },
+    {
+      "name": "redis",
+      "since": 2020,
+      "level": "advanced"
+    },
+    {
+      "name": "react native",
+      "since": 2022,
+      "level": "intermediate"
+    },
+    {
+      "name": "vue.js",
+      "since": 2018,
+      "level": "intermediate"
+    }
+  ],
+  "red_flags": {
+    "rejected_company_types": [
+      "outsourcing",
+      "body_leasing",
+      "agency"
+    ],
+    "rejected_technologies": [
+      "php",
+      "jquery",
+      "legacy"
+    ],
+    "rejected_work_models": [
+      "onsite"
+    ],
+    "other": [
+      "no code review",
+      "no automated tests",
+      "micromanagement",
+      "take-home task over 2 hours"
+    ]
+  },
+  "preferences": {
+    "async_first": true,
+    "deep_work": true,
+    "mentoring": true,
+    "architecture_ownership": true
+  }
+}
