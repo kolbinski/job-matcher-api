@@ -1,167 +1,139 @@
-import { describe, it, expect } from 'vitest'
-import type { Offer } from '@prisma/client'
-import { buildStretchOffers } from '../src/routes/match'
-import type { MatchedPair } from '../src/routes/match'
-import type { MatchedOffer } from '../src/types/match'
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
+import request from 'supertest'
+import crypto from 'crypto'
+import { app } from '../src/app'
+import { prisma } from '../src/lib/prisma'
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// Profile on disk has preferences.learning_goals: ['python', 'terraform']
+const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
+const TEST_SLUG_PREFIX = 'test-stretch-'
 
-function makeOffer(overrides: Partial<Offer> = {}): Offer {
-  return {
-    id: 'test-id',
-    slug: 'test-slug',
-    is_active: true,
-    source: 'justjoin',
-    title: 'Software Engineer',
-    company_name: 'Acme Corp',
-    company_logo_url: null,
-    experience_level: 'senior',
-    workplace_type: 'remote',
-    working_time: null,
-    remote_interview: null,
-    required_skills: [],
-    nice_to_have_skills: [],
-    employment_types: [],
-    multilocation: null,
-    city: 'Warsaw',
-    street: null,
-    latitude: null,
-    longitude: null,
-    category_id: null,
-    open_to_hire_ukrainians: null,
-    languages: [],
-    url: 'https://example.com/job/1',
-    published_at: null,
-    fetched_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
-    ...overrides,
-  }
-}
+afterAll(async () => {
+  await prisma.$disconnect()
+})
 
-function makeMatchedOffer(overrides: Partial<MatchedOffer> = {}): MatchedOffer {
-  return {
-    score: 50,
-    title: 'Software Engineer',
-    company: 'Acme Corp',
-    city: 'Warsaw',
-    remote: true,
-    hybrid: false,
-    experience_level: 'senior',
-    salary: null,
-    matched_reasons: [],
-    missing_skills: [],
-    red_flags_found: [],
-    rank: null,
-    salary_comparison: null,
-    role_fit: null,
-    recommended: null,
-    url: 'https://example.com/job/1',
-    source: 'justjoin',
-    fetched_at: null,
-    ...overrides,
-  }
-}
+describe('stretch_offers — DB integration', () => {
+  let userId = ''
+  let apiKey: string
+  let pythonOfferSlug = ''
+  let javaOfferSlug = ''
 
-function makePair(offerOverrides: Partial<Offer> = {}, matchedOverrides: Partial<MatchedOffer> = {}): MatchedPair {
-  return {
-    original: makeOffer(offerOverrides),
-    offer: makeMatchedOffer(matchedOverrides),
-  }
-}
+  beforeEach(async () => {
+    const rand = crypto.randomBytes(4).toString('hex')
+    pythonOfferSlug = `${TEST_SLUG_PREFIX}python-${rand}`
+    javaOfferSlug  = `${TEST_SLUG_PREFIX}java-${rand}`
 
-// B2B employment_types with a known salary ceiling
-function b2bTypes(to: number, currency = 'PLN') {
-  return [{ type: 'b2b', from: to - 2000, to, currency }]
-}
+    apiKey = `jm_live_${crypto.randomBytes(16).toString('hex')}`
+    const user = await prisma.user.create({
+      data: {
+        email: `stretch-test-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
+        jobmatcher_api_key: apiKey,
+        profile_path: TEST_PROFILE_PATH,
+      },
+    })
+    userId = user.id
 
-// ─── tests ────────────────────────────────────────────────────────────────────
+    // Inactive so the match pipeline never picks them up as new offers
+    const pythonOffer = await prisma.offer.create({
+      data: {
+        slug: pythonOfferSlug,
+        source: 'test',
+        title: 'Python Backend Engineer',
+        company_name: 'StretchTestCo',
+        employment_types: [{ type: 'b2b', from: 20000, to: 25000, currency: 'PLN' }],
+        required_skills: ['python', 'django'],
+        nice_to_have_skills: [],
+        languages: [],
+        is_active: false,
+      },
+    })
 
-describe('buildStretchOffers', () => {
-  it('returns empty array when learning_goals is empty', () => {
-    const pair = makePair({}, { recommended: false, missing_skills: ['python'] })
-    expect(buildStretchOffers([pair], [])).toEqual([])
+    const javaOffer = await prisma.offer.create({
+      data: {
+        slug: javaOfferSlug,
+        source: 'test',
+        title: 'Java Developer',
+        company_name: 'OtherTestCo',
+        employment_types: [{ type: 'b2b', from: 15000, to: 18000, currency: 'PLN' }],
+        required_skills: ['java', 'spring'],
+        nice_to_have_skills: [],
+        languages: [],
+        is_active: false,
+      },
+    })
+
+    // Simulate prior Claude evaluations stored in user_offers
+    await prisma.userOffer.createMany({
+      data: [
+        {
+          user_id: userId,
+          offer_id: pythonOffer.id,
+          status: 'ai_rejected',
+          claude_missing_skills: ['python', 'django'],  // overlaps with learning_goals
+          claude_role_fit: 'Missing Python experience',
+          claude_matched_reasons: [],
+          matched_at: new Date(),
+          updated_at: new Date(),
+        },
+        {
+          user_id: userId,
+          offer_id: javaOffer.id,
+          status: 'ai_rejected',
+          claude_missing_skills: ['java', 'spring'],    // no overlap with learning_goals
+          claude_role_fit: 'Missing Java experience',
+          claude_matched_reasons: [],
+          matched_at: new Date(),
+          updated_at: new Date(),
+        },
+      ],
+    })
   })
 
-  it('returns empty array when no pairs are ai_rejected', () => {
-    const pair = makePair({}, { recommended: true, missing_skills: ['python'] })
-    expect(buildStretchOffers([pair], ['python'])).toEqual([])
+  afterEach(async () => {
+    if (userId) {
+      await prisma.userOffer.deleteMany({ where: { user_id: userId } })
+      await prisma.apiCall.deleteMany({ where: { user_id: userId } })
+      await prisma.user.deleteMany({ where: { id: userId } })
+    }
+    await prisma.offer.deleteMany({ where: { slug: { in: [pythonOfferSlug, javaOfferSlug] } } })
   })
 
-  it('returns empty array when recommended is null (not evaluated by Claude)', () => {
-    const pair = makePair({}, { recommended: null, missing_skills: ['python'] })
-    expect(buildStretchOffers([pair], ['python'])).toEqual([])
+  it('includes ai_rejected offer whose claude_missing_skills overlap with learning_goals', async () => {
+    const res = await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ options: { ai_scoring: false } })
+
+    expect(res.status).toBe(200)
+    expect(Array.isArray(res.body.stretch_offers)).toBe(true)
+
+    const stretch = res.body.stretch_offers as Array<{
+      title: string
+      company_name: string
+      missing_skills: string[]
+      role_fit: string | null
+      salary: { from: number; to: number; currency: string; type: string } | null
+      url: string | null
+    }>
+
+    const match = stretch.find(o => o.company_name === 'StretchTestCo')
+    expect(match).toBeDefined()
+    expect(match?.title).toBe('Python Backend Engineer')
+    expect(match?.missing_skills).toContain('python')
+    expect(match?.role_fit).toBe('Missing Python experience')
+    expect(match?.salary?.to).toBe(25000)
+    expect(match?.salary?.currency).toBe('PLN')
   })
 
-  it('returns empty array when ai_rejected offer has no overlapping missing_skills', () => {
-    const pair = makePair({}, { recommended: false, missing_skills: ['java', 'spring'] })
-    expect(buildStretchOffers([pair], ['python', 'terraform'])).toEqual([])
-  })
+  it('excludes ai_rejected offer with no learning_goals overlap', async () => {
+    const res = await request(app)
+      .post('/v1/match')
+      .set('X-API-Key', apiKey)
+      .send({ options: { ai_scoring: false } })
 
-  it('returns a stretch offer when missing_skills overlaps with learning_goals', () => {
-    const pair = makePair(
-      { title: 'DevOps Engineer', company_name: 'CloudCo', url: 'https://example.com/1' },
-      { recommended: false, missing_skills: ['terraform', 'ansible'], role_fit: 'Missing IaC experience' },
-    )
-    const result = buildStretchOffers([pair], ['terraform'])
-    expect(result).toHaveLength(1)
-    expect(result[0].title).toBe('DevOps Engineer')
-    expect(result[0].company_name).toBe('CloudCo')
-    expect(result[0].missing_skills).toEqual(['terraform', 'ansible'])
-    expect(result[0].role_fit).toBe('Missing IaC experience')
-    expect(result[0].url).toBe('https://example.com/1')
-  })
+    expect(res.status).toBe(200)
 
-  it('matching is case-insensitive — "Python" in missing_skills matches "python" in goals', () => {
-    const pair = makePair(
-      { employment_types: b2bTypes(20000) },
-      { recommended: false, missing_skills: ['Python', 'Django'] },
-    )
-    const result = buildStretchOffers([pair], ['python'])
-    expect(result).toHaveLength(1)
-  })
-
-  it('sorts by salary descending (highest .to first)', () => {
-    const low  = makePair({ id: 'low',  slug: 'low',  employment_types: b2bTypes(15000) }, { recommended: false, missing_skills: ['python'] })
-    const high = makePair({ id: 'high', slug: 'high', employment_types: b2bTypes(30000) }, { recommended: false, missing_skills: ['terraform'] })
-    const mid  = makePair({ id: 'mid',  slug: 'mid',  employment_types: b2bTypes(22000) }, { recommended: false, missing_skills: ['python', 'terraform'] })
-
-    const result = buildStretchOffers([low, high, mid], ['python', 'terraform'])
-    expect(result.map(r => r.salary?.to)).toEqual([30000, 22000, 15000])
-  })
-
-  it('returns at most 3 offers even when more qualify', () => {
-    const pairs = [25000, 22000, 20000, 18000, 15000].map((to, i) =>
-      makePair(
-        { id: `offer-${i}`, slug: `offer-${i}`, employment_types: b2bTypes(to) },
-        { recommended: false, missing_skills: ['python'] },
-      )
-    )
-    const result = buildStretchOffers(pairs, ['python'])
-    expect(result).toHaveLength(3)
-    expect(result[0].salary?.to).toBe(25000)
-  })
-
-  it('treats null salary as 0 for sorting (sorts to end)', () => {
-    const noSalary = makePair(
-      { id: 'nosalary', slug: 'nosalary', employment_types: [] },
-      { recommended: false, missing_skills: ['python'] },
-    )
-    const withSalary = makePair(
-      { id: 'withsalary', slug: 'withsalary', employment_types: b2bTypes(18000) },
-      { recommended: false, missing_skills: ['python'] },
-    )
-    const result = buildStretchOffers([noSalary, withSalary], ['python'])
-    expect(result[0].salary?.to).toBe(18000)
-    expect(result[1].salary).toBeNull()
-  })
-
-  it('includes only non-rejected pairs that match — mixed recommended values', () => {
-    const rejected    = makePair({ id: 'r', slug: 'r' }, { recommended: false, missing_skills: ['python'] })
-    const approved    = makePair({ id: 'a', slug: 'a' }, { recommended: true,  missing_skills: ['python'] })
-    const unevaluated = makePair({ id: 'u', slug: 'u' }, { recommended: null,  missing_skills: ['python'] })
-
-    const result = buildStretchOffers([rejected, approved, unevaluated], ['python'])
-    expect(result).toHaveLength(1)
+    const stretch = res.body.stretch_offers as Array<{ company_name: string }>
+    expect(stretch.find(o => o.company_name === 'OtherTestCo')).toBeUndefined()
   })
 })

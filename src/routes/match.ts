@@ -172,7 +172,7 @@ matchRouter.post(
 
     // ── 9b. Compute stretch_offers ────────────────────────────────────────
     const learningGoals = (profile.preferences.learning_goals ?? []).map(g => g.toLowerCase())
-    const stretchOffers = buildStretchOffers(filteredPairs, learningGoals)
+    const stretchOffers = await buildStretchOffers(userId, learningGoals, prisma)
 
     // ── 10. Write user_offers ──────────────────────────────────────────────
     const now = new Date()
@@ -311,24 +311,36 @@ export function extractSalary(offer: Offer): OfferSalary | null {
   return null
 }
 
-// Exported for unit testing. learningGoals must already be lowercased by the caller.
-export function buildStretchOffers(pairs: MatchedPair[], learningGoals: string[]): StretchOffer[] {
+// learningGoals must already be lowercased by the caller.
+// Reads from user_offers history — ai_rejected offers are never re-evaluated by Claude.
+export async function buildStretchOffers(
+  userId: string,
+  learningGoals: string[],
+  db: typeof prisma,
+): Promise<StretchOffer[]> {
   if (learningGoals.length === 0) return []
-  return pairs
-    .filter(p => p.offer.recommended === false)
-    .filter(p => {
-      const missing = p.offer.missing_skills.map(s => s.toLowerCase())
+
+  const rows = await db.userOffer.findMany({
+    where: { user_id: userId, status: 'ai_rejected' },
+    include: { offer: true },
+  })
+
+  console.log('[stretch] ai_rejected candidates:', rows.length, 'learning_goals:', learningGoals)
+
+  return rows
+    .filter(row => {
+      const missing = row.claude_missing_skills.map(s => s.toLowerCase())
       return learningGoals.some(goal => missing.includes(goal))
     })
-    .sort((a, b) => (extractSalary(b.original)?.to ?? 0) - (extractSalary(a.original)?.to ?? 0))
+    .sort((a, b) => (extractSalary(b.offer)?.to ?? 0) - (extractSalary(a.offer)?.to ?? 0))
     .slice(0, 3)
-    .map(p => ({
-      title: p.original.title,
-      company_name: p.original.company_name,
-      salary: extractSalary(p.original),
-      role_fit: p.offer.role_fit,
-      missing_skills: p.offer.missing_skills,
-      url: p.original.url,
+    .map(row => ({
+      title: row.offer.title,
+      company_name: row.offer.company_name,
+      salary: extractSalary(row.offer),
+      role_fit: row.claude_role_fit,
+      missing_skills: row.claude_missing_skills,
+      url: row.offer.url,
     }))
 }
 
