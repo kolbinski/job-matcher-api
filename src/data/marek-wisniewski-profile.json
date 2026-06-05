@@ -13,7 +13,10 @@
     },
     "experience_level": "senior",
     "experience_since": 2014,
-    "languages": ["polish", "english"],
+    "languages": [
+      "polish",
+      "english"
+    ],
     "job_search_status": "actively_looking"
   },
   "education": [
@@ -318,9 +321,16 @@
       "body_leasing",
       "agency"
     ],
-    "work_model": ["remote", "hybrid"],
+    "work_model": [
+      "remote",
+      "hybrid",
+      "office"
+    ],
     "max_office_days_per_week": 2,
-    "employment_type": ["b2b"],
+    "employment_type": [
+      "b2b",
+      "permanent"
+    ],
     "industries": [
       "fintech",
       "saas",
@@ -328,12 +338,19 @@
       "proptech"
     ],
     "salary": [
-      { "type": "b2b", "currency": "PLN", "min": 22000 }
+      {
+        "type": "b2b",
+        "currency": "PLN",
+        "min": 22000
+      }
     ],
     "markets": [
       "poland",
       "europe"
     ],
-    "learning_goals": ["python", "terraform"]
+    "learning_goals": [
+      "python",
+      "terraform"
+    ]
   }
 }

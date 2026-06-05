@@ -76,13 +76,15 @@ async function main(): Promise<void> {
 
   // Read salary minimum from profile for display comparisons
   let salaryMin: number | null = null;
+  let learningGoals: string[] = [];
   if (user.profile_path) {
     try {
       const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
-        preferences?: { salary?: Array<{ min?: number }> }
+        preferences?: { salary?: Array<{ min?: number }>; learning_goals?: string[] }
       };
       salaryMin = raw.preferences?.salary?.[0]?.min ?? null;
-    } catch { /* profile unreadable — skip comparison label */ }
+      learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase());
+    } catch { /* profile unreadable — skip comparison labels */ }
   }
 
   console.log(`Calling POST /v1/match for ${user.email} (${userId})...\n`);
@@ -115,11 +117,14 @@ async function main(): Promise<void> {
   console.log('Full meta:', JSON.stringify(data.meta))
   console.log('AI scoring:', data.meta?.ai_scoring, '| Claude evaluations:', data.meta?.claude_evaluations_count)
 
-  if (!meta.ai_scoring) {
-    console.warn('⚠️  AI scoring disabled — results based on algorithm only.')
-  } else if (meta.claude_evaluations_count === 0) {
+  const requestedAiScoring = true // we always send ai_scoring: true
+  if (requestedAiScoring && (!meta.claude_evaluations_count || meta.claude_evaluations_count === 0)) {
     console.error('❌ Claude API failed — no evaluations returned. Check server logs.')
     process.exit(1)
+  }
+
+  if (!meta.ai_scoring) {
+    console.warn('⚠️  AI scoring disabled — results based on algorithm only.')
   }
 
   // ── Top 5 matched with full Claude evaluation ─────────────────────────────
@@ -173,6 +178,43 @@ async function main(): Promise<void> {
     console.log(`  reason: ${reason}`);
     console.log(`  skills: ${skills}`);
   });
+
+  // ── Stretch offers ────────────────────────────────────────────────────────
+  const stretch = data.stretch_offers ?? [];
+  console.log('\n' + '─'.repeat(62));
+  console.log(`Stretch offers — learn these skills to unlock better roles (${stretch.length} total):`);
+  console.log('─'.repeat(62));
+
+  if (stretch.length === 0) {
+    console.log('  (none — no ai_rejected offers overlap with your learning_goals)');
+  } else {
+    stretch.forEach((offer, i) => {
+      const s = offer.salary;
+      let salaryLabel = '';
+      if (s && salaryMin !== null) {
+        salaryLabel = s.to >= salaryMin
+          ? ` — above client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`
+          : ` — below client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`;
+      }
+      const salary = s && s.from != null && s.to != null
+        ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})${salaryLabel}`
+        : 'salary not disclosed';
+
+      const learningGoalHits = offer.missing_skills.filter(skill =>
+        learningGoals.includes(skill.toLowerCase())
+      );
+
+      console.log(`\n${i + 1}. ${offer.title} @ ${offer.company_name}`);
+      console.log(`   salary:                   ${salary}`);
+      if (offer.role_fit) {
+        console.log(`   role_fit:                 ${offer.role_fit}`);
+      }
+      console.log(`   missing (your learning goals): ${learningGoalHits.join(', ') || offer.missing_skills.join(', ')}`);
+      if (offer.url) {
+        console.log(`   url:                      ${offer.url}`);
+      }
+    });
+  }
 }
 
 main().finally(() => prisma.$disconnect());

@@ -5,6 +5,8 @@ import { parseEmploymentTypes } from '../lib/offers';
 
 const anthropic = new Anthropic();
 
+const TIMEOUT_MS = 300_000;
+
 const SYSTEM_PROMPT =
   'You are a senior tech recruiter evaluating job offers for a candidate. Return ONLY a JSON array, no markdown, no preamble.';
 
@@ -29,7 +31,7 @@ export async function evaluateOffers(
   if (offers.length === 0) return [];
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const claudeStart = Date.now();
 
   try {
@@ -67,13 +69,16 @@ export async function evaluateOffers(
     const rawResponse = block.text;
     console.log('[claudeEvaluator] Raw response:', rawResponse);
 
-    const cleaned = stripCodeFences(rawResponse)
+    const cleaned = stripCodeFences(rawResponse);
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error('[claudeEvaluator] JSON parse error. Raw response:', rawResponse);
+      console.error(
+        '[claudeEvaluator] JSON parse error. Raw response:',
+        rawResponse,
+      );
       return null;
     }
 
@@ -108,8 +113,24 @@ export async function evaluateOffers(
     }
     return results;
   } catch (err) {
-    if (err instanceof Error && err.name !== 'AbortError') {
-      console.error('[claudeEvaluator] Claude API error:', err.message);
+    console.error(
+      '[claudeEvaluator] Offers sent:',
+      offers.length,
+      '| Timeout:',
+      TIMEOUT_MS,
+      'ms | Elapsed:',
+      Date.now() - claudeStart,
+      'ms | ~tokens estimated:',
+      offers.length * 150,
+    );
+    if (err instanceof Error) {
+      if (err.name === 'AbortError') {
+        console.error(
+          `[claudeEvaluator] TIMEOUT: request aborted after ${TIMEOUT_MS}ms`,
+        );
+      } else {
+        console.error('[claudeEvaluator] API ERROR:', err.message, err.name);
+      }
     }
     return null;
   } finally {
@@ -123,21 +144,24 @@ export function stripCodeFences(raw: string): string {
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
-    .trim()
+    .trim();
 }
 
 function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
   // Profile — only essential fields sent to Claude (no employment_history, education, personal_projects)
   const name = profile.basic_info.full_name;
   const techs = profile.technologies.map(t => t.name).join(', ');
-  const salaryPref = profile.preferences?.salary
-    ?.find(s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN');
+  const salaryPref = profile.preferences?.salary?.find(
+    s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN',
+  );
   const salaryMin =
     salaryPref?.min ??
     profile.career_goals?.short_term?.salary_target_pln_net_b2b?.min ??
     null;
   const workModel = (profile.preferences?.work_model ?? []).join(', ');
-  const targetRoles = (profile.career_goals?.short_term?.target_role ?? []).join(', ');
+  const targetRoles = (
+    profile.career_goals?.short_term?.target_role ?? []
+  ).join(', ');
   const redFlags = profile.red_flags.map(f => f.description).join(', ');
 
   const lines: string[] = [

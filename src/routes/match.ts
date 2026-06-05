@@ -141,8 +141,9 @@ matchRouter.post(
     if (opts.ai_scoring && filteredPairs.length === 0) {
       console.log('[match] No offers to evaluate — skipping Claude API call')
     } else if (opts.ai_scoring) {
-      console.log('[match] Calling Claude evaluator for', filteredPairs.length, 'offers')
-      const claudeResults = await evaluateOffers(profile, filteredPairs.map(p => p.original))
+      const offersToEvaluate = filteredPairs.slice(0, 100)
+      console.log(`[match] Sending ${offersToEvaluate.length} offers to Claude (capped at 100, total filtered: ${filteredPairs.length})`)
+      const claudeResults = await evaluateOffers(profile, offersToEvaluate.map(p => p.original))
       console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
       if (claudeResults) {
         aiScoring = true
@@ -150,8 +151,8 @@ matchRouter.post(
 
         const claudeBySlug = new Map(
           claudeResults
-            .filter(ev => ev.offer_index >= 0 && ev.offer_index < filteredPairs.length)
-            .map(ev => [filteredPairs[ev.offer_index].original.slug, ev])
+            .filter(ev => ev.offer_index >= 0 && ev.offer_index < offersToEvaluate.length)
+            .map(ev => [offersToEvaluate[ev.offer_index].original.slug, ev])
         )
 
         for (const p of filteredPairs) {
@@ -326,6 +327,9 @@ export async function buildStretchOffers(
   })
 
   console.log('[stretch] ai_rejected candidates:', rows.length, 'learning_goals:', learningGoals)
+  if (rows.length > 0) {
+    console.log('[stretch] sample claude_missing_skills:', rows.slice(0, 3).map(r => r.claude_missing_skills))
+  }
 
   return rows
     .filter(row => {
