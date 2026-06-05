@@ -57,6 +57,7 @@ export interface OfferSalary {
   to: number
   currency: string
   type: string
+  unit?: string
 }
 
 export interface MatchedOffer {

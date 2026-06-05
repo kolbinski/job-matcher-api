@@ -22,6 +22,7 @@ interface OfferSalary {
   to: number;
   currency: string;
   type: string;
+  unit?: string;
 }
 
 interface MatchedOffer {
@@ -117,14 +118,15 @@ function formatSalaryEmailLine(s: OfferSalary | null, min: number | null): strin
   if (!s || s.to == null) return 'salary not disclosed';
   const range = formatSalaryRange(s) ?? `${formatPLN(s.to)} ${s.currency}`;
   if (min === null) return `💰 ${range}`;
-  const delta = s.to - min;
+  const effectiveTo = s.unit?.toLowerCase() === 'day' ? s.to * 20 : s.to;
+  const delta = effectiveTo - min;
   const absDelta = Math.abs(delta);
   const deltaStr = delta === 0
     ? 'exactly your minimum'
     : delta > 0
-      ? `+${formatPLN(absDelta)} PLN above your minimum`
-      : `-${formatPLN(absDelta)} PLN below your minimum`;
-  return `💰 ${range} — max ${formatPLN(s.to)} PLN, that's ${deltaStr}`;
+      ? `+${formatPLN(absDelta)} ${s.currency} above your minimum`
+      : `-${formatPLN(absDelta)} ${s.currency} below your minimum`;
+  return `💰 ${range} — max ${formatPLN(s.to)} ${s.currency}, that's ${deltaStr}`;
 }
 
 function titleAtCompany(title: string, company: string): string {

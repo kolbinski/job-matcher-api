@@ -306,7 +306,7 @@ export function extractAllSalaries(offer: Offer): OfferSalary[] {
   const types = parseEmploymentTypes(offer)
   return types
     .filter(t => t.from !== undefined && t.to !== undefined)
-    .map(t => ({ from: t.from!, to: t.to!, currency: t.currency ?? 'PLN', type: t.type ?? 'unknown' }))
+    .map(t => ({ from: t.from!, to: t.to!, currency: t.currency ?? 'PLN', type: t.type ?? 'unknown', unit: t.unit }))
 }
 
 export function extractSalary(offer: Offer): OfferSalary | null {
@@ -315,12 +315,12 @@ export function extractSalary(offer: Offer): OfferSalary | null {
 
   for (const t of types) {
     if (t.type === 'b2b' && t.from !== undefined && t.to !== undefined) {
-      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: 'b2b' }
+      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: 'b2b', unit: t.unit }
     }
   }
   for (const t of types) {
     if (t.from !== undefined && t.to !== undefined) {
-      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: t.type ?? 'unknown' }
+      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: t.type ?? 'unknown', unit: t.unit }
     }
   }
   return null
