@@ -314,6 +314,8 @@ export function extractSalary(offer: Offer): OfferSalary | null {
 
 // learningGoals must already be lowercased by the caller.
 // Reads from user_offers history — ai_rejected offers are never re-evaluated by Claude.
+// Two-query approach: avoids Prisma include INNER JOIN silently dropping rows whose
+// related offer is inactive or deleted.
 export async function buildStretchOffers(
   userId: string,
   learningGoals: string[],
@@ -323,29 +325,36 @@ export async function buildStretchOffers(
 
   const rows = await db.userOffer.findMany({
     where: { user_id: userId, status: 'ai_rejected' },
-    include: { offer: true },
   })
 
   console.log('[stretch] ai_rejected candidates:', rows.length, 'learning_goals:', learningGoals)
-  if (rows.length > 0) {
-    console.log('[stretch] sample claude_missing_skills:', rows.slice(0, 3).map(r => r.claude_missing_skills))
-  }
 
-  return rows
+  const filtered = rows
     .filter(row => {
       const missing = row.claude_missing_skills.map(s => s.toLowerCase())
       return learningGoals.some(goal => missing.includes(goal))
     })
-    .sort((a, b) => (extractSalary(b.offer)?.to ?? 0) - (extractSalary(a.offer)?.to ?? 0))
+    .sort((a, b) => (b.claude_score ?? 0) - (a.claude_score ?? 0))
     .slice(0, 3)
-    .map(row => ({
-      title: row.offer.title,
-      company_name: row.offer.company_name,
-      salary: extractSalary(row.offer),
+
+  if (filtered.length === 0) return []
+
+  const offerIds = filtered.map(r => r.offer_id)
+  const offers = await db.offer.findMany({ where: { id: { in: offerIds } } })
+  const offerById = new Map(offers.map(o => [o.id, o]))
+
+  return filtered.flatMap(row => {
+    const offer = offerById.get(row.offer_id)
+    if (!offer) return []
+    return [{
+      title: offer.title,
+      company_name: offer.company_name,
+      salary: extractSalary(offer),
       role_fit: row.claude_role_fit,
       missing_skills: row.claude_missing_skills,
-      url: row.offer.url,
-    }))
+      url: offer.url,
+    }]
+  })
 }
 
 function applyPostScoreFilters(pairs: MatchedPair[], filters?: MatchFilters): MatchedPair[] {
