@@ -7,6 +7,7 @@ import {
   REMOTE_WEIGHT,
   EXPERIENCE_LEVEL_WEIGHT,
   scoreOffer,
+  skillMatches,
 } from '../src/services/scoring'
 import { filterRedFlags } from '../src/services/redFlagFilter'
 import { normalizeProfile } from '../src/services/profileParser'
@@ -159,5 +160,60 @@ describe('scoreOffer — salaryScore', () => {
 
   it('returns 50 when no salary data available', () => {
     expect(score(makeProfile(), makeOffer({ employment_types: [] })).salaryScore).toBe(50)
+  })
+})
+
+// ─── skillMatches ─────────────────────────────────────────────────────────────
+
+describe('skillMatches', () => {
+  it('matches exact skill (case-insensitive — offer skill already lowercased)', () => {
+    expect(skillMatches('react', new Set(['react', 'typescript']))).toBe(true)
+  })
+
+  it('returns false when offer skill is not in candidate set', () => {
+    expect(skillMatches('python', new Set(['react', 'typescript']))).toBe(false)
+  })
+
+  it('matches compound offer skill "react (typescript)" against candidate "react"', () => {
+    expect(skillMatches('react (typescript)', new Set(['react']))).toBe(true)
+  })
+
+  it('matches compound offer skill "devops & ci/cd" against candidate "ci/cd"', () => {
+    expect(skillMatches('devops & ci/cd', new Set(['ci/cd']))).toBe(true)
+  })
+
+  it('matches when candidate tech is longer and contains offer skill', () => {
+    expect(skillMatches('node', new Set(['node.js']))).toBe(true)
+  })
+
+  it('does not match unrelated compound skill', () => {
+    expect(skillMatches('java (spring)', new Set(['react', 'typescript']))).toBe(false)
+  })
+})
+
+// ─── techScore with compound skills ──────────────────────────────────────────
+
+describe('techScore — compound skill matching', () => {
+  it('matches "react (typescript)" offer skill when candidate has "react"', () => {
+    const profile = makeProfile({ technologies: [{ name: 'react' }, { name: 'node.js' }] })
+    const offer = makeOffer({ required_skills: ['react (typescript)', 'node.js'] })
+    const result = score(profile, offer)
+    expect(result.techScore).toBe(100)
+    expect(result.missingSkills).toHaveLength(0)
+  })
+
+  it('case-insensitive: "React" offer skill matches candidate "react"', () => {
+    const profile = makeProfile({ technologies: [{ name: 'react' }] })
+    const offer = makeOffer({ required_skills: ['React'] })
+    const result = score(profile, offer)
+    expect(result.techScore).toBe(100)
+  })
+
+  it('compound unmatched skill appears in missingSkills', () => {
+    const profile = makeProfile({ technologies: [{ name: 'react' }] })
+    const offer = makeOffer({ required_skills: ['python (django)', 'react'] })
+    const result = score(profile, offer)
+    expect(result.missingSkills).toContain('python (django)')
+    expect(result.missingSkills).not.toContain('react')
   })
 })

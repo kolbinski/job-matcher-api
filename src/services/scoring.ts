@@ -20,6 +20,17 @@ export interface ScoredOffer {
   matchReasons: string[]
 }
 
+// Returns true if the offer skill (already lowercased) is matched by the candidate's
+// tech set. Handles compound strings like "react (typescript)" or "devops & ci/cd"
+// by checking whether any candidate tech is a substring of the offer skill or vice versa.
+export function skillMatches(offerSkill: string, candidateTechs: Set<string>): boolean {
+  if (candidateTechs.has(offerSkill)) return true
+  for (const tech of candidateTechs) {
+    if (offerSkill.includes(tech) || tech.includes(offerSkill)) return true
+  }
+  return false
+}
+
 // norm is pre-computed by normalizeProfile() in the route handler — do NOT call
 // normalizeProfile() here, it must be called once per request, not once per offer.
 export function scoreOffer(norm: NormalizedProfile, offer: Offer): ScoredOffer {
@@ -33,9 +44,9 @@ export function scoreOffer(norm: NormalizedProfile, offer: Offer): ScoredOffer {
     techScore = 50
     missingSkills = []
   } else {
-    const offerSkills = offer.required_skills.map((s) => s.trim())
-    const matched = offerSkills.filter((s) => norm.techs.has(s))
-    missingSkills = offerSkills.filter((s) => !norm.techs.has(s))
+    const offerSkills = offer.required_skills.map((s) => s.trim().toLowerCase())
+    const matched = offerSkills.filter((s) => skillMatches(s, norm.techs))
+    missingSkills = offerSkills.filter((s) => !skillMatches(s, norm.techs))
     techScore = Math.round((matched.length / offerSkills.length) * 100)
     if (matched.length > 0) {
       matchReasons.push(

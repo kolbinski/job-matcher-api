@@ -171,10 +171,6 @@ matchRouter.post(
       }
     }
 
-    // ── 9b. Compute stretch_offers ────────────────────────────────────────
-    const learningGoals = (profile.preferences.learning_goals ?? []).map(g => g.toLowerCase())
-    const stretchOffers = await buildStretchOffers(userId, learningGoals, prisma)
-
     // ── 10. Write user_offers ──────────────────────────────────────────────
     const now = new Date()
 
@@ -204,19 +200,25 @@ matchRouter.post(
       updated_at: now,
     }))
 
-    if (preFilterRows.length + claudeRows.length > 0) {
-      // skipDuplicates handles the unique(user_id, offer_id) constraint.
-      // try/catch guards against FK violations if an offer was deleted between
-      // our SELECT and this INSERT (e.g. concurrent sync deleting stale offers).
+    const rowsToInsert = [...preFilterRows, ...claudeRows]
+    if (rowsToInsert.length > 0) {
+      console.log('[match] Writing to user_offers:', rowsToInsert.length, 'rows for user:', userId)
       try {
-        await prisma.userOffer.createMany({
-          data: [...preFilterRows, ...claudeRows],
+        const result = await prisma.userOffer.createMany({
+          data: rowsToInsert,
           skipDuplicates: true,
         })
+        console.log('[match] user_offers written:', result.count, 'rows')
       } catch (err) {
-        console.warn('[match] user_offers insert skipped:', err instanceof Error ? err.message : err)
+        console.error('[match] user_offers insert FAILED:', err)
+        // Do not re-throw — match results and billing already completed.
+        // Error is visible in logs for diagnosis.
       }
     }
+
+    // ── 9b. Compute stretch_offers (must run AFTER step 10 writes user_offers) ─
+    const learningGoals = (profile.preferences.learning_goals ?? []).map(g => g.toLowerCase())
+    const stretchOffers = await buildStretchOffers(userId, learningGoals, prisma)
 
     // ── 11. Log api_calls row ──────────────────────────────────────────────
     const responseMs = Date.now() - startTime
@@ -332,10 +334,11 @@ export async function buildStretchOffers(
   const filtered = rows
     .filter(row => {
       const missing = row.claude_missing_skills.map(s => s.toLowerCase())
-      return learningGoals.some(goal => missing.includes(goal))
+      if (missing.length === 0) return false
+      const overlapCount = learningGoals.filter(goal => missing.includes(goal)).length
+      return overlapCount / missing.length >= 0.5
     })
     .sort((a, b) => (b.claude_score ?? 0) - (a.claude_score ?? 0))
-    .slice(0, 3)
 
   if (filtered.length === 0) return []
 

@@ -33,9 +33,10 @@ describe('stretch_offers — DB integration', () => {
     })
     userId = user.id
 
-    // Active offers — safe because their IDs land in seenIds before the pipeline runs
-    // (user_offers rows are seeded below before the request), so the pipeline skips them.
-    // Must be active: Prisma's include JOIN silently drops rows whose related offer is inactive.
+    // Inactive so the skillExcluded query (is_active:true) never picks them up,
+    // avoiding FK violations when afterEach deletes them while another test is
+    // mid-insert. Safe to use is_active:false now that buildStretchOffers uses
+    // two separate queries instead of include:{offer:true} INNER JOIN.
     const pythonOffer = await prisma.offer.create({
       data: {
         slug: pythonOfferSlug,
@@ -46,7 +47,7 @@ describe('stretch_offers — DB integration', () => {
         required_skills: ['python', 'django'],
         nice_to_have_skills: [],
         languages: [],
-        is_active: true,
+        is_active: false,
       },
     })
 
@@ -60,7 +61,7 @@ describe('stretch_offers — DB integration', () => {
         required_skills: ['java', 'spring'],
         nice_to_have_skills: [],
         languages: [],
-        is_active: true,
+        is_active: false,
       },
     })
 

@@ -7,8 +7,13 @@ const anthropic = new Anthropic();
 
 const TIMEOUT_MS = 300_000;
 
-const SYSTEM_PROMPT =
-  'You are a senior tech recruiter evaluating job offers for a candidate. Return ONLY a JSON array, no markdown, no preamble.';
+const SYSTEM_PROMPT = `You are a senior tech recruiter evaluating job offers for a candidate. Return ONLY a JSON array, no markdown, no preamble.
+
+Scoring rules — apply all four consistently:
+1. SALARY: Compare offer MAX salary to candidate minimum. If offer max >= candidate minimum, salary is acceptable — do not penalize it. Only mark salary as a concern if offer max < candidate minimum. If salary is not disclosed, treat it as neutral and never use it as a reason for recommended=false.
+2. CONTRACT TYPE: The candidate profile lists accepted contract types. Only flag contract type if the offer's type is not in the candidate's accepted list. If the candidate accepts permanent contracts, do not penalize permanent offers.
+3. SENIORITY: Do not penalize offers listed as "mid" level if the candidate's skills clearly match the requirements. Only flag seniority if the role explicitly requires fewer years of experience than the candidate has, or uses the word "junior" in the title.
+4. FOCUS: Prioritise technical skill overlap, salary acceptability, and work model. These three factors should drive the recommended field.`;
 
 export interface ClaudeEvaluation {
   offer_index: number;

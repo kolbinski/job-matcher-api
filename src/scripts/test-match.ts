@@ -33,13 +33,16 @@ interface MatchedOffer {
   salary_comparison: string | null;
   role_fit: string | null;
   recommended: boolean | null;
+  url: string | null;
 }
 
 interface UnmatchedOffer {
   title: string;
   company: string;
+  salary: OfferSalary | null;
   rejection_reasons: string[];
   required_skills: string[];
+  url: string | null;
 }
 
 interface StretchOffer {
@@ -127,45 +130,52 @@ async function main(): Promise<void> {
     console.warn('⚠️  AI scoring disabled — results based on algorithm only.')
   }
 
-  // ── Top 5 matched with full Claude evaluation ─────────────────────────────
-  console.log('\nTop 5 by score:');
+  // ── Recommended offers ────────────────────────────────────────────────────
+  const recommended = matched.filter(o => o.recommended === true);
+  const considerApplying = matched.filter(o => o.recommended !== true && o.score >= 30);
 
-  matched.slice(0, 5).forEach((offer, i) => {
+  function formatMatchedOffer(offer: MatchedOffer, i: number): void {
     const s = offer.salary;
-    let salaryLabel = '';
-    if (s && salaryMin !== null) {
-      salaryLabel = s.to >= salaryMin
-        ? ` — above client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`
-        : ` — below client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`;
-    }
-    const salary =
-      s && s.from != null && s.to != null
-        ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})${salaryLabel}`
-        : 'salary not disclosed';
+    const salaryRange = s && s.from != null && s.to != null
+      ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})`
+      : null;
+    const salaryVsTarget = s && s.to != null && salaryMin !== null
+      ? s.to >= salaryMin
+        ? `✅ max ${s.to.toLocaleString('pl-PL')} ${s.currency} meets target`
+        : `❌ max ${s.to.toLocaleString('pl-PL')} ${s.currency} below target of ${salaryMin.toLocaleString('pl-PL')}`
+      : null;
 
     console.log('\n' + '─'.repeat(62));
     console.log(`${i + 1}. [${offer.score}/100] ${offer.title} @ ${offer.company}`);
-    console.log(`   salary:          ${salary}`);
-
-    if (offer.role_fit) {
-      console.log(`   role_fit:        ${offer.role_fit}`);
-    }
-    if (offer.recommended !== null) {
-      console.log(`   recommended:     ${offer.recommended}`);
-    }
-    if (offer.salary_comparison) {
-      console.log(`   salary_vs_target: ${offer.salary_comparison}`);
-    }
+    if (salaryRange) console.log(`   salary:           ${salaryRange}`);
+    else             console.log(`   salary:           not disclosed`);
+    if (salaryVsTarget)           console.log(`   salary_vs_target: ${salaryVsTarget}`);
+    if (offer.role_fit)           console.log(`   role_fit:         ${offer.role_fit}`);
     if (offer.matched_reasons.length > 0) {
       offer.matched_reasons.forEach(r => console.log(`   ✓ ${r}`));
     }
     if (offer.missing_skills.length > 0) {
-      console.log(`   missing:         ${offer.missing_skills.join(', ')}`);
+      console.log(`   missing:          ${offer.missing_skills.join(', ')}`);
     }
-  });
+    if (offer.url)                console.log(`   url:              ${offer.url}`);
+  }
 
-  // ── Unmatched analysis ────────────────────────────────────────────────────
-  console.log(`\nUnmatched analysis (${meta.unmatched_count} total):`);
+  console.log(`\n✅ Recommended offers (${recommended.length} total):`);
+  if (recommended.length === 0) {
+    console.log('  (none)');
+  } else {
+    recommended.forEach((offer, i) => formatMatchedOffer(offer, i));
+  }
+
+  console.log(`\n⚠️  Consider applying (${considerApplying.length} total):`);
+  if (considerApplying.length === 0) {
+    console.log('  (none)');
+  } else {
+    considerApplying.forEach((offer, i) => formatMatchedOffer(offer, i));
+  }
+
+  // ── Pre-filter rejected ───────────────────────────────────────────────────
+  console.log(`\n❌ Pre-filter rejected (${meta.unmatched_count} total):`);
   console.log('─'.repeat(62));
 
   unmatched.slice(0, 30).forEach(offer => {
@@ -174,10 +184,20 @@ async function main(): Promise<void> {
       ? reqSkills.slice(0, 6).join(', ') + (reqSkills.length > 6 ? '…' : '')
       : 'none listed';
     const reason = offer.rejection_reasons[0] ?? 'unknown';
+    const s = offer.salary;
+    const salary = s && s.from != null && s.to != null
+      ? `${s.from.toLocaleString('pl-PL')} – ${s.to.toLocaleString('pl-PL')} ${s.currency} (${s.type})`
+      : null;
     console.log(`\n- ${offer.title} @ ${offer.company}`);
     console.log(`  reason: ${reason}`);
     console.log(`  skills: ${skills}`);
+    if (salary) console.log(`  salary: ${salary}`);
+    if (offer.url) console.log(`  url:    ${offer.url}`);
   });
+  if (meta.unmatched_count > 30) {
+    console.log(`\n  … and ${meta.unmatched_count - 30} more`);
+  }
+
 
   // ── Stretch offers ────────────────────────────────────────────────────────
   const stretch = data.stretch_offers ?? [];
