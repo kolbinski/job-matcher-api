@@ -119,9 +119,11 @@ function formatSalaryEmailLine(s: OfferSalary | null, min: number | null): strin
   if (min === null) return `💰 ${range}`;
   const delta = s.to - min;
   const absDelta = Math.abs(delta);
-  const deltaStr = delta >= 0
-    ? `+${formatPLN(absDelta)} PLN above your minimum`
-    : `-${formatPLN(absDelta)} PLN below your minimum`;
+  const deltaStr = delta === 0
+    ? 'exactly your minimum'
+    : delta > 0
+      ? `+${formatPLN(absDelta)} PLN above your minimum`
+      : `-${formatPLN(absDelta)} PLN below your minimum`;
   return `💰 ${range} — max ${formatPLN(s.to)} PLN, that's ${deltaStr}`;
 }
 
