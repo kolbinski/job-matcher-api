@@ -342,6 +342,11 @@
         "type": "b2b",
         "currency": "PLN",
         "min": 22000
+      },
+      {
+        "type": "permanent",
+        "currency": "PLN",
+        "min": 15000
       }
     ],
     "markets": [
