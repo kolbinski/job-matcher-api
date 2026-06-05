@@ -42,6 +42,15 @@ interface UnmatchedOffer {
   required_skills: string[];
 }
 
+interface StretchOffer {
+  title: string;
+  company_name: string;
+  salary: OfferSalary | null;
+  role_fit: string | null;
+  missing_skills: string[];
+  url: string | null;
+}
+
 interface MatchResponse {
   meta: {
     matched_count: number;
@@ -53,6 +62,7 @@ interface MatchResponse {
   };
   matched: MatchedOffer[];
   unmatched: UnmatchedOffer[];
+  stretch_offers: StretchOffer[];
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -104,6 +114,13 @@ async function main(): Promise<void> {
 
   console.log('Full meta:', JSON.stringify(data.meta))
   console.log('AI scoring:', data.meta?.ai_scoring, '| Claude evaluations:', data.meta?.claude_evaluations_count)
+
+  if (!meta.ai_scoring) {
+    console.warn('⚠️  AI scoring disabled — results based on algorithm only.')
+  } else if (meta.claude_evaluations_count === 0) {
+    console.error('❌ Claude API failed — no evaluations returned. Check server logs.')
+    process.exit(1)
+  }
 
   // ── Top 5 matched with full Claude evaluation ─────────────────────────────
   console.log('\nTop 5 by score:');
