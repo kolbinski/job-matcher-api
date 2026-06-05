@@ -1,5 +1,6 @@
 import type { CandidateProfile } from '../types/profile'
 import { env } from '../lib/env'
+import HtmlPdf from 'html-pdf-node'
 
 export async function generateCV(
   profile: CandidateProfile,
@@ -52,30 +53,10 @@ Instructions:
     .replace(/\s*```$/i, '')
     .trim()
 
-  const puppeteer = await import('puppeteer-core')
-  const chromium = await import('@sparticuz/chromium')
-
-  // In production (Railway), use @sparticuz/chromium binary with its Lambda-optimised args.
-  // Locally, use system Chrome — the Lambda binary and its args don't work on macOS.
-  const isProduction = env.NODE_ENV === 'production'
-  const executablePath = isProduction
-    ? await chromium.default.executablePath()
-    : (process.env.PUPPETEER_EXECUTABLE_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
-  const args = isProduction
-    ? chromium.default.args
-    : ['--no-sandbox', '--disable-dev-shm-usage']
-
-  const browser = await puppeteer.default.launch({ args, executablePath, headless: true })
-
-  try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'load' })
-    const pdf = await page.pdf({
-      format: 'A4',
-      margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' },
-    })
-    return Buffer.from(pdf)
-  } finally {
-    await browser.close()
+  const options = {
+    format: 'A4',
+    margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' },
   }
+  const pdfBuffer = await HtmlPdf.generatePdf({ content: html }, options)
+  return pdfBuffer
 }
