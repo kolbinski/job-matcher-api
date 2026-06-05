@@ -7,6 +7,7 @@ import { matchRouter } from './routes/match'
 import { pipelineRouter } from './routes/pipeline'
 import { agentAuthRouter } from './routes/agentAuth'
 import { clientsRouter } from './routes/clients'
+import { cvGenerateRouter } from './routes/cvGenerate'
 
 export const app = express()
 
@@ -17,6 +18,9 @@ app.use('/v1/match', matchRouter)
 app.use('/v1/pipeline', pipelineRouter)
 app.use('/v1/auth/agent', agentAuthRouter)
 app.use('/v1/clients', clientsRouter)
+// 60s timeout for CV generation (Puppeteer + Claude)
+app.use('/v1/cv', (req, _res, next) => { req.setTimeout(60_000); next() })
+app.use('/v1/cv', cvGenerateRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {
