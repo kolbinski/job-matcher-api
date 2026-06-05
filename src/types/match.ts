@@ -94,8 +94,18 @@ export interface UnmatchedOffer {
   source: string
 }
 
+export interface StretchOffer {
+  title: string
+  company_name: string
+  salary: OfferSalary | null
+  role_fit: string | null
+  missing_skills: string[]
+  url: string | null
+}
+
 export interface MatchResponse {
   meta: MatchMeta
   matched: MatchedOffer[]
   unmatched: UnmatchedOffer[]
+  stretch_offers: StretchOffer[]
 }

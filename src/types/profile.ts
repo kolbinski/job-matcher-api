@@ -129,6 +129,7 @@ const PreferencesSchema = z.object({
   employment_type: z.array(z.string()).optional(),
   salary: z.array(SalaryPreferenceSchema).optional(),
   markets: z.array(z.string()).optional(),
+  learning_goals: z.array(z.string()).optional(),
 })
 
 const RedFlagSchema = z.object({

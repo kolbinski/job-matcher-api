@@ -67,11 +67,13 @@ export async function evaluateOffers(
     const rawResponse = block.text;
     console.log('[claudeEvaluator] Raw response:', rawResponse);
 
+    const cleaned = stripCodeFences(rawResponse)
+
     let parsed: unknown;
     try {
-      parsed = JSON.parse(rawResponse);
+      parsed = JSON.parse(cleaned);
     } catch {
-      console.error('[claudeEvaluator] JSON parse error');
+      console.error('[claudeEvaluator] JSON parse error. Raw response:', rawResponse);
       return null;
     }
 
@@ -113,6 +115,15 @@ export async function evaluateOffers(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+// Exported for unit testing.
+export function stripCodeFences(raw: string): string {
+  return raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
 }
 
 function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {

@@ -77,6 +77,7 @@ describe('POST /v1/match', () => {
     expect(res.body.meta.ai_scoring).toBe(false)
     expect(Array.isArray(res.body.matched)).toBe(true)
     expect(Array.isArray(res.body.unmatched)).toBe(true)
+    expect(Array.isArray(res.body.stretch_offers)).toBe(true)
   })
 
   it('returns a valid response structure when ai_scoring is enabled', async () => {
@@ -92,7 +93,7 @@ describe('POST /v1/match', () => {
       expect(typeof offer.recommended).toBe('boolean')
       expect(typeof offer.role_fit).toBe('string')
     }
-  }, 120_000) // Claude API can take up to 120 s for a full batch
+  }, 180_000) // Claude API can take up to 120 s for a full batch; 180 s gives headroom
 
   it('writes an api_calls row on success', async () => {
     await request(app)

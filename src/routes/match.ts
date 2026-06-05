@@ -11,10 +11,10 @@ import { evaluateOffers } from '../services/claudeEvaluator'
 import { normalizeProfile } from '../services/profileParser'
 import { CandidateProfileSchema } from '../types/profile'
 import { MatchRequestSchema } from '../types/match'
-import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters } from '../types/match'
+import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, StretchOffer } from '../types/match'
 import { parseEmploymentTypes } from '../lib/offers'
 
-type MatchedPair = { offer: MatchedOffer; original: Offer }
+export type MatchedPair = { offer: MatchedOffer; original: Offer }
 
 export const matchRouter = Router()
 
@@ -170,6 +170,10 @@ matchRouter.post(
       }
     }
 
+    // ── 9b. Compute stretch_offers ────────────────────────────────────────
+    const learningGoals = (profile.preferences.learning_goals ?? []).map(g => g.toLowerCase())
+    const stretchOffers = buildStretchOffers(filteredPairs, learningGoals)
+
     // ── 10. Write user_offers ──────────────────────────────────────────────
     const now = new Date()
 
@@ -244,6 +248,7 @@ matchRouter.post(
       },
       matched: limitedMatched,
       unmatched: opts.include_unmatched ? unmatched : [],
+      stretch_offers: stretchOffers,
     } satisfies MatchResponse)
   }
 )
@@ -304,6 +309,27 @@ export function extractSalary(offer: Offer): OfferSalary | null {
     }
   }
   return null
+}
+
+// Exported for unit testing. learningGoals must already be lowercased by the caller.
+export function buildStretchOffers(pairs: MatchedPair[], learningGoals: string[]): StretchOffer[] {
+  if (learningGoals.length === 0) return []
+  return pairs
+    .filter(p => p.offer.recommended === false)
+    .filter(p => {
+      const missing = p.offer.missing_skills.map(s => s.toLowerCase())
+      return learningGoals.some(goal => missing.includes(goal))
+    })
+    .sort((a, b) => (extractSalary(b.original)?.to ?? 0) - (extractSalary(a.original)?.to ?? 0))
+    .slice(0, 3)
+    .map(p => ({
+      title: p.original.title,
+      company_name: p.original.company_name,
+      salary: extractSalary(p.original),
+      role_fit: p.offer.role_fit,
+      missing_skills: p.offer.missing_skills,
+      url: p.original.url,
+    }))
 }
 
 function applyPostScoreFilters(pairs: MatchedPair[], filters?: MatchFilters): MatchedPair[] {
