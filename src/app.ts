@@ -1,5 +1,6 @@
 import 'express-async-errors'
 import express from 'express'
+import cors from 'cors'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from './lib/errors'
 import { healthRouter } from './routes/health'
@@ -11,6 +12,7 @@ import { cvGenerateRouter } from './routes/cvGenerate'
 
 export const app = express()
 
+app.use(cors())
 app.use(express.json())
 
 app.use('/v1/health', healthRouter)
