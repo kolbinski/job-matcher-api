@@ -60,7 +60,7 @@ function toDate(value: unknown): Date | null {
   if (!value) return null
   const d = new Date(value as string)
   if (isNaN(d.getTime())) {
-    console.warn(`[offerScraper] Invalid date value: ${String(value)}`)
+    console.warn(`[offerScraper][justjoin] Invalid date value: ${String(value)}`)
     return null
   }
   return d
@@ -107,7 +107,7 @@ interface ApiResponse {
 // so it can upsert each page immediately rather than collecting all 10,000 first.
 export async function fetchPage(from: number): Promise<FetchPageResult> {
   if (from >= JJ_API_LIMIT) {
-    console.log(`[offerScraper] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
+    console.log(`[offerScraper][justjoin] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
     return { offers: [], nextCursor: null }
   }
 
@@ -115,7 +115,7 @@ export async function fetchPage(from: number): Promise<FetchPageResult> {
   const res = await fetch(url, { headers: HEADERS })
 
   if (res.status === 500) {
-    console.log(`[offerScraper] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
+    console.log(`[offerScraper][justjoin] Reached JustJoin API limit (${JJ_API_LIMIT} offers)`)
     return { offers: [], nextCursor: null }
   }
 

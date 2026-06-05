@@ -5,4 +5,5 @@ export const SETTINGS = [
   { key: 'ai_scoring_enabled',       value: 'true' },
   { key: 'fetch_offers_after_build', value: 'false' },
   { key: 'justjoin_max_pages',       value: '3' },
+  { key: 'nfj_max_pages',            value: '3' },
 ] as const

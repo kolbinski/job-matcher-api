@@ -1,12 +1,15 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { fetchPage, NormalizedOffer } from '../services/offerScraper'
+import { fetchNfjPage } from '../services/nfjScraper'
 import { env } from '../lib/env'
 
 const BATCH_SIZE = 500
 
 export const PAGE_DELAY_MIN_MS = env.NODE_ENV === 'test' ? 0 : 20_000
 export const PAGE_DELAY_MAX_MS = env.NODE_ENV === 'test' ? 0 : 60_000
+export const NFJ_DELAY_MIN_MS  = env.NODE_ENV === 'test' ? 0 : 30_000
+export const NFJ_DELAY_MAX_MS  = env.NODE_ENV === 'test' ? 0 : 60_000
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
@@ -85,17 +88,19 @@ function logSkillBreakdown(skillCounts: Map<string, number>): void {
   console.log(`[offerSync] Top skills: ${top}`)
 }
 
-export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
-  const fetchedAt = new Date()
+type SourceSyncResult = {
+  fetched: number
+  inserted: number
+  updated: number
+  skillCounts: Map<string, number>
+  hitPageLimit: boolean
+}
 
-  // Load max_pages and existing slugs in parallel
-  const [maxPagesRow, existingSlugsRaw] = await Promise.all([
-    prisma.settings.findUnique({ where: { key: 'justjoin_max_pages' } }),
-    prisma.offer.findMany({ select: { slug: true } }),
-  ])
-  const maxPages = parseInt(maxPagesRow?.value ?? '3', 10)
-  const existingSlugs = new Set(existingSlugsRaw.map(o => o.slug))
-
+async function syncJustJoin(
+  existingSlugs: Set<string>,
+  fetchedAt: Date,
+  maxPages: number,
+): Promise<SourceSyncResult> {
   const skillCounts = new Map<string, number>()
   let totalFetched = 0
   let totalInserted = 0
@@ -106,14 +111,14 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
 
   while (true) {
     if (pageNum >= maxPages) {
-      console.log(`[offerSync] Reached max_pages limit (${maxPages}) — stopping`)
+      console.log(`[offerScraper][justjoin] Reached max_pages limit (${maxPages}) — stopping`)
       hitPageLimit = true
       break
     }
 
     if (pageNum > 0 && PAGE_DELAY_MAX_MS > 0) {
       const delay = Math.floor(Math.random() * (PAGE_DELAY_MAX_MS - PAGE_DELAY_MIN_MS + 1)) + PAGE_DELAY_MIN_MS
-      console.log(`[offerScraper] Waiting ${Math.round(delay / 1000)}s before next page...`)
+      console.log(`[offerScraper][justjoin] Waiting ${Math.round(delay / 1000)}s before next page...`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
 
@@ -138,25 +143,104 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
     pageNum++
 
     console.log(
-      `[offerScraper] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
+      `[offerScraper][justjoin] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
     )
 
     if (nextCursor === null) break
     from = nextCursor
   }
 
+  return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, skillCounts, hitPageLimit }
+}
+
+async function syncNfj(
+  existingSlugs: Set<string>,
+  fetchedAt: Date,
+  maxPages: number,
+): Promise<SourceSyncResult> {
+  const skillCounts = new Map<string, number>()
+  let totalFetched = 0
+  let totalInserted = 0
+  let totalUpdated = 0
+  let hitPageLimit = false
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    if (pageNum > 1 && NFJ_DELAY_MAX_MS > 0) {
+      const delay = Math.floor(Math.random() * (NFJ_DELAY_MAX_MS - NFJ_DELAY_MIN_MS + 1)) + NFJ_DELAY_MIN_MS
+      console.log(`[offerScraper][nofluffjobs] Waiting ${Math.round(delay / 1000)}s before next page...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+
+    const pageStart = Date.now()
+    const { offers } = await fetchNfjPage(pageNum)
+
+    if (offers.length === 0) break
+
+    const { inserted, updated, insertedSlugs } = await upsertPage(offers, existingSlugs, fetchedAt)
+    for (const slug of insertedSlugs) existingSlugs.add(slug)
+    const pageMs = Date.now() - pageStart
+
+    for (const o of offers) {
+      for (const skill of o.required_skills) {
+        skillCounts.set(skill, (skillCounts.get(skill) ?? 0) + 1)
+      }
+    }
+
+    totalFetched += offers.length
+    totalInserted += inserted
+    totalUpdated += updated
+
+    console.log(
+      `[offerScraper][nofluffjobs] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
+    )
+
+    if (pageNum === maxPages) {
+      console.log(`[offerScraper][nofluffjobs] Reached max_pages limit (${maxPages}) — stopping`)
+      hitPageLimit = true
+    }
+  }
+
+  return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, skillCounts, hitPageLimit }
+}
+
+export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: number; inserted: number; updated: number; deleted: number }> {
+  const fetchedAt = new Date()
+
+  const [maxPagesRow, nfjMaxPagesRow, existingSlugsRaw] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'justjoin_max_pages' } }),
+    prisma.settings.findUnique({ where: { key: 'nfj_max_pages' } }),
+    prisma.offer.findMany({ select: { slug: true } }),
+  ])
+  const maxPages    = parseInt(maxPagesRow?.value    ?? '3', 10)
+  const nfjMaxPages = parseInt(nfjMaxPagesRow?.value ?? '3', 10)
+  const existingSlugs = new Set(existingSlugsRaw.map(o => o.slug))
+
+  console.log(`[offerSync] Starting sync — justjoin max_pages=${maxPages}, nfj max_pages=${nfjMaxPages}`)
+
+  const [jjResult, nfjResult] = await Promise.all([
+    syncJustJoin(existingSlugs, fetchedAt, maxPages),
+    syncNfj(existingSlugs, fetchedAt, nfjMaxPages),
+  ])
+
+  const totalFetched  = jjResult.fetched  + nfjResult.fetched
+  const totalInserted = jjResult.inserted + nfjResult.inserted
+  const totalUpdated  = jjResult.updated  + nfjResult.updated
+  const hitPageLimit  = jjResult.hitPageLimit && nfjResult.hitPageLimit
+
+  const skillCounts = jjResult.skillCounts
+  for (const [skill, count] of nfjResult.skillCounts) {
+    skillCounts.set(skill, (skillCounts.get(skill) ?? 0) + count)
+  }
+
   console.log(`[offerSync] hitPageLimit=${hitPageLimit}, cleanupEnabled=${cleanupEnabled}, totalFetched=${totalFetched}`)
 
-  // Rule A-4: never delete when nothing was fetched (API error / rate limit)
   if (totalFetched === 0) {
     console.warn('[offerSync] No offers fetched — skipping deletion')
     return { fetched: 0, inserted: 0, updated: 0, deleted: 0 }
   }
 
-  // Never delete when we stopped early due to max_pages — we only saw a fraction
-  // of live offers, so anything not in this partial scrape is still valid.
   if (hitPageLimit) {
-    console.warn(`[offerSync] Partial scrape (max_pages=${maxPages}) — skipping deletion to protect existing offers`)
+    console.warn(`[offerSync] Partial scrape — skipping deletion to protect existing offers`)
     console.log(`[offerSync] Sync complete: fetched ${totalFetched}, inserted ${totalInserted}, updated ${totalUpdated}, deleted 0`)
     logSkillBreakdown(skillCounts)
     return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: 0 }
@@ -169,8 +253,6 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
     return { fetched: totalFetched, inserted: totalInserted, updated: totalUpdated, deleted: 0 }
   }
 
-  // Offers not seen in this run retain their pre-sync fetched_at (< fetchedAt) or are null.
-  // Soft-delete: mark is_active = false instead of removing rows so user_offers history is preserved.
   const deactivated = await prisma.offer.updateMany({
     where: {
       OR: [

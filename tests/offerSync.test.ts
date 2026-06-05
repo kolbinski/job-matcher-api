@@ -5,16 +5,22 @@ import type { NormalizedOffer, FetchPageResult } from '../src/services/offerScra
 
 vi.mock('../src/services/offerScraper', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/offerScraper')>()
-  return {
-    ...actual,
-    fetchPage: vi.fn(),
-  }
+  return { ...actual, fetchPage: vi.fn() }
 })
 
+vi.mock('../src/services/nfjScraper', () => ({
+  fetchNfjPage: vi.fn(),
+}))
+
 import { fetchPage } from '../src/services/offerScraper'
+import { fetchNfjPage } from '../src/services/nfjScraper'
 import { syncOffers } from '../src/jobs/offerSync'
 
 const mockFetchPage = vi.mocked(fetchPage)
+const mockFetchNfjPage = vi.mocked(fetchNfjPage)
+
+// Default: NFJ returns nothing — individual tests opt in by overriding this
+mockFetchNfjPage.mockResolvedValue({ offers: [] })
 
 const TEST_SLUG_PREFIX = 'test-offersync-'
 
