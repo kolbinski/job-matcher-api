@@ -3,11 +3,12 @@ import { z } from 'zod'
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().default(''),
+  JWT_SECRET: z.string().min(1).default('dev-jwt-secret-change-in-production'),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 })
 
-const requireInProduction = ['ANTHROPIC_API_KEY'] as const
+const requireInProduction = ['ANTHROPIC_API_KEY', 'JWT_SECRET'] as const
 
 const parsed = EnvSchema.safeParse(process.env)
 

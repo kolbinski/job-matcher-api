@@ -28,8 +28,9 @@ model User {
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 
-  api_calls   ApiCall[]
-  user_offers UserOffer[]
+  api_calls     ApiCall[]
+  user_offers   UserOffer[]
+  agent_clients AgentClient[]
 
   @@map("users")
 }
@@ -93,6 +94,28 @@ model UserOffer {
 
   @@unique([user_id, offer_id])
   @@map("user_offers")
+}
+
+model Agent {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  password_hash String
+  created_at    DateTime      @default(now())
+  clients       AgentClient[]
+
+  @@map("agents")
+}
+
+model AgentClient {
+  id       String @id @default(uuid())
+  agent_id String
+  user_id  String
+
+  agent Agent @relation(fields: [agent_id], references: [id])
+  user  User  @relation(fields: [user_id], references: [id])
+
+  @@unique([agent_id, user_id])
+  @@map("agent_clients")
 }
 
 model ApiCall {

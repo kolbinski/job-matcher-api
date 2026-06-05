@@ -340,6 +340,11 @@
     "salary": [
       {
         "type": "b2b",
+        "currency": "USD",
+        "min": 7000
+      },
+      {
+        "type": "b2b",
         "currency": "PLN",
         "min": 22000
       },
