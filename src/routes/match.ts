@@ -201,11 +201,15 @@ matchRouter.post(
     }))
 
     const rowsToInsert = [...preFilterRows, ...claudeRows]
-    if (rowsToInsert.length > 0) {
-      console.log('[match] Writing to user_offers:', rowsToInsert.length, 'rows for user:', userId)
+    const validRows = rowsToInsert.filter(r => r.offer_id != null)
+    if (validRows.length !== rowsToInsert.length) {
+      console.warn('[match] Skipped', rowsToInsert.length - validRows.length, 'rows with null offer_id')
+    }
+    if (validRows.length > 0) {
+      console.log('[match] Writing to user_offers:', validRows.length, 'rows for user:', userId)
       try {
         const result = await prisma.userOffer.createMany({
-          data: rowsToInsert,
+          data: validRows,
           skipDuplicates: true,
         })
         console.log('[match] user_offers written:', result.count, 'rows')
