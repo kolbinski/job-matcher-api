@@ -72,38 +72,47 @@ interface MatchResponse {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const N = new Intl.NumberFormat('pl-PL'); // consistent Polish number formatting
-
-function fmt(n: number): string { return N.format(Math.round(n)); }
+function formatPLN(amount: number): string {
+  return Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
 
 function formatSalaryRange(s: OfferSalary | null): string | null {
   if (!s || s.from == null || s.to == null) return null;
-  return `${fmt(s.from)} – ${fmt(s.to)} ${s.currency} (${s.type})`;
+  return `${formatPLN(s.from)} – ${formatPLN(s.to)} ${s.currency} (${s.type})`;
 }
 
 // "24 000 – 27 000 PLN (b2b) — max 27 000 PLN, that's +5 000 PLN above your minimum"
 function formatSalaryEmailLine(s: OfferSalary | null, min: number | null): string {
   if (!s || s.to == null) return 'salary not disclosed';
-  const range = formatSalaryRange(s) ?? `${fmt(s.to)} ${s.currency}`;
+  const range = formatSalaryRange(s) ?? `${formatPLN(s.to)} ${s.currency}`;
   if (min === null) return `💰 ${range}`;
   const delta = s.to - min;
+  const absDelta = Math.abs(delta);
   const deltaStr = delta >= 0
-    ? `+${fmt(delta)} PLN above your minimum`
-    : `${fmt(delta)} PLN below your minimum`;
-  return `💰 ${range} — max ${fmt(s.to)} PLN, that's ${deltaStr}`;
+    ? `+${formatPLN(absDelta)} PLN above your minimum`
+    : `-${formatPLN(absDelta)} PLN below your minimum`;
+  return `💰 ${range} — max ${formatPLN(s.to)} PLN, that's ${deltaStr}`;
 }
 
-function dedupeByUrl<T extends { url: string | null; title: string }>(
+function titleAtCompany(title: string, company: string): string {
+  if (/ @ .+$/.test(title.trimEnd())) return title.trimEnd();
+  return `${title} @ ${company}`;
+}
+
+function dedupeByTitleCompany<T extends { title: string }>(
   arr: T[],
   companyKey: (t: T) => string,
+  scoreKey?: (t: T) => number,
 ): T[] {
-  const seen = new Set<string>();
-  return arr.filter(item => {
-    const key = item.url ?? `${item.title}@${companyKey(item)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const best = new Map<string, T>();
+  for (const item of arr) {
+    const key = `${item.title}|||${companyKey(item)}`;
+    const existing = best.get(key);
+    if (!existing || (scoreKey && scoreKey(item) > scoreKey(existing))) {
+      best.set(key, item);
+    }
+  }
+  return [...best.values()];
 }
 
 function todayDDMMYYYY(): string {
@@ -180,8 +189,8 @@ async function main(): Promise<void> {
       const s = offer.salary;
       const salaryVsTarget = s && s.to != null && salaryMin !== null
         ? s.to >= salaryMin
-          ? `✅ max ${s.to.toLocaleString('pl-PL')} ${s.currency} meets target`
-          : `❌ max ${s.to.toLocaleString('pl-PL')} ${s.currency} below target of ${salaryMin.toLocaleString('pl-PL')}`
+          ? `✅ max ${formatPLN(s.to)} ${s.currency} meets target`
+          : `❌ max ${formatPLN(s.to)} ${s.currency} below target of ${formatPLN(salaryMin)}`
         : null;
 
       console.log('\n' + '─'.repeat(62));
@@ -229,8 +238,8 @@ async function main(): Promise<void> {
         const s = offer.salary;
         const salaryLabel = s && s.to != null && salaryMin !== null
           ? s.to >= salaryMin
-            ? ` — above client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`
-            : ` — below client's minimum of ${salaryMin.toLocaleString('pl-PL')} PLN`
+            ? ` — above client's minimum of ${formatPLN(salaryMin)} PLN`
+            : ` — below client's minimum of ${formatPLN(salaryMin)} PLN`
           : '';
         const salary = formatSalaryRange(s)
           ? `${formatSalaryRange(s)}${salaryLabel}`
@@ -250,22 +259,19 @@ async function main(): Promise<void> {
   // ── Email report mode ─────────────────────────────────────────────────────────
   const firstName = user.first_name ?? user.email.split('@')[0];
   const newOffersCount = recommended.length + stretch.length; // counts before dedup (dedup happens per section below)
-  const sep = '═'.repeat(62);
 
-  console.log(sep);
   console.log(`Hi ${firstName}! Here are your job matches for ${todayDDMMYYYY()}`);
   console.log(`Found ${newOffersCount} new offers for you (from ${meta.total_offers_scanned} newly processed offers today)`);
-  console.log(sep);
 
   // Section 1 — Apply now
-  const dedupedRecommended = dedupeByUrl(recommended, o => o.company);
-  console.log(`\n🎯 Apply now (${dedupedRecommended.length} offers)\n`);
+  const dedupedRecommended = dedupeByTitleCompany(recommended, o => o.company, o => o.score);
+  console.log(`\n\n\n🎯 Apply now (${dedupedRecommended.length} offers)\n`);
   if (dedupedRecommended.length === 0) {
     console.log('  No strongly recommended offers this scan.');
   } else {
     dedupedRecommended.forEach(offer => {
       const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
-      console.log(`${offer.score}/100  ${offer.title} @ ${offer.company}`);
+      console.log(`${offer.score}/100  ${titleAtCompany(offer.title, offer.company)}`);
       console.log(`   ${salaryLine}`);
       if (offer.role_fit) console.log(`   ${offer.role_fit}`);
       if (offer.url) console.log(`   🔗 ${offer.url}`);
@@ -274,15 +280,15 @@ async function main(): Promise<void> {
   }
 
   // Section 2 — Level up & earn more
-  const dedupedStretch = dedupeByUrl(stretch, o => o.company_name);
-  console.log(`📚 Level up & earn more (${dedupedStretch.length} offers)\n`);
+  const dedupedStretch = dedupeByTitleCompany(stretch, o => o.company_name);
+  console.log(`\n\n\n📚 Level up & earn more (${dedupedStretch.length} offers)\n`);
   if (dedupedStretch.length === 0) {
     console.log('  No stretch offers this scan.');
   } else {
     dedupedStretch.forEach(offer => {
       const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
       const learningGoalHits = offer.missing_skills.filter(sk => learningGoals.includes(sk.toLowerCase()));
-      console.log(`${offer.title} @ ${offer.company_name}`);
+      console.log(titleAtCompany(offer.title, offer.company_name));
       console.log(`   ${salaryLine}`);
       if (offer.role_fit) console.log(`   ${offer.role_fit}`);
       if (learningGoalHits.length > 0) console.log(`   Skills to learn: ${learningGoalHits.join(', ')}`);
@@ -292,34 +298,27 @@ async function main(): Promise<void> {
   }
 
   // Section 3 — Worth considering
-  const dedupedConsider = dedupeByUrl(considerApplying, o => o.company);
+  const stretchUrls = new Set(stretch.map(o => o.url).filter((u): u is string => u != null));
+  const dedupedConsider = dedupeByTitleCompany(considerApplying, o => o.company, o => o.score);
+  const visibleConsider = dedupedConsider.filter(o =>
+    (o.url == null || !stretchUrls.has(o.url)) &&
+    (salaryMin === null || o.salary == null || o.salary.to == null || o.salary.to >= salaryMin)
+  );
 
-  // Temporary: log extracted salary for consider-applying offers below candidate minimum
-  if (salaryMin !== null) {
-    const suspect = dedupedConsider.filter(o => o.salary?.to != null && o.salary.to < salaryMin!);
-    if (suspect.length > 0) {
-      console.log('[salary-debug] Consider-applying offers with extracted salary below minimum:');
-      suspect.forEach(o => console.log(
-        `  ${o.title} @ ${o.company} — salary: ${JSON.stringify(o.salary)} (score: ${o.score})`
-      ));
-      console.log('');
-    }
-  }
-
-  console.log(`💡 Worth considering (${dedupedConsider.length} offers)\n`);
-  if (dedupedConsider.length === 0) {
+  console.log(`\n\n\n💡 Worth considering (${visibleConsider.length} offers)\n`);
+  if (visibleConsider.length === 0) {
     console.log('  No additional offers above score threshold.');
   } else {
-    dedupedConsider.forEach(offer => {
-      const salary = formatSalaryRange(offer.salary) ?? 'salary not disclosed';
-      const url = offer.url ?? '(no url)';
-      console.log(`• ${offer.title} @ ${offer.company} — ${salary} — ${url}`);
+    visibleConsider.forEach(offer => {
+      const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
+      console.log(titleAtCompany(offer.title, offer.company));
+      console.log(`   ${salaryLine}`);
+      if (offer.url) console.log(`   🔗 ${offer.url}`);
+      console.log('');
     });
   }
 
-  console.log(`\n${sep}`);
-  console.log('Next scan: tomorrow morning');
-  console.log(sep);
+  console.log('\n\n\nNext scan: tomorrow morning');
 }
 
 main().finally(() => prisma.$disconnect());
