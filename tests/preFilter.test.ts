@@ -250,6 +250,29 @@ describe('salary filter', () => {
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedBySalary).toBe(false)
   })
+
+  it('passes permanent offer 15000-22000 when candidate has b2b min 22000 + permanent min 15000', () => {
+    const profile = makeProfile({
+      preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 22000 }, { type: 'permanent', currency: 'PLN', min: 15000 }] },
+    })
+    const offer = makeOffer({
+      employment_types: [{ type: 'permanent', from: 12000, to: 18000, currency: 'PLN', unit: 'Month' }],
+    })
+    const result = applyPreFilters(profile, offer)
+    expect(result.rejectedBySalary).toBe(false)
+  })
+
+  it('rejects b2b offer 15000-22000 when candidate has b2b min 22000 + permanent min 15000', () => {
+    const profile = makeProfile({
+      preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 22000 }, { type: 'permanent', currency: 'PLN', min: 15000 }] },
+    })
+    const offer = makeOffer({
+      employment_types: [{ type: 'b2b', from: 12000, to: 18000, currency: 'PLN', unit: 'Month' }],
+    })
+    const result = applyPreFilters(profile, offer)
+    expect(result.pass).toBe(false)
+    expect(result.rejectedBySalary).toBe(true)
+  })
 })
 
 // ─── SENIORITY FILTER ────────────────────────────────────────────────────────

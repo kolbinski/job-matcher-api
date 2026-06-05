@@ -272,6 +272,7 @@ function toMatchedOffer(offer: Offer, scored: ReturnType<typeof scoreOffer>): Ma
     hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
     experience_level: offer.experience_level,
     salary: extractSalary(offer),
+    salaries: extractAllSalaries(offer),
     matched_reasons: scored.matchReasons,
     missing_skills: scored.missingSkills,
     red_flags_found: [],
@@ -299,6 +300,13 @@ function toUnmatchedOffer(offer: Offer, rejectionReasons: string[]): UnmatchedOf
     url: offer.url,
     source: offer.source,
   }
+}
+
+export function extractAllSalaries(offer: Offer): OfferSalary[] {
+  const types = parseEmploymentTypes(offer)
+  return types
+    .filter(t => t.from !== undefined && t.to !== undefined)
+    .map(t => ({ from: t.from!, to: t.to!, currency: t.currency ?? 'PLN', type: t.type ?? 'unknown' }))
 }
 
 export function extractSalary(offer: Offer): OfferSalary | null {
@@ -357,6 +365,7 @@ export async function buildStretchOffers(
       title: offer.title,
       company_name: offer.company_name,
       salary: extractSalary(offer),
+      salaries: extractAllSalaries(offer),
       role_fit: row.claude_role_fit,
       missing_skills: row.claude_missing_skills,
       url: offer.url,

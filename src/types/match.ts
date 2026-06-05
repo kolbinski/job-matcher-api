@@ -68,6 +68,7 @@ export interface MatchedOffer {
   hybrid: boolean
   experience_level: string | null
   salary: OfferSalary | null
+  salaries: OfferSalary[]
   matched_reasons: string[]
   missing_skills: string[]
   red_flags_found: string[]
@@ -98,6 +99,7 @@ export interface StretchOffer {
   title: string
   company_name: string
   salary: OfferSalary | null
+  salaries: OfferSalary[]
   role_fit: string | null
   missing_skills: string[]
   url: string | null

@@ -30,6 +30,7 @@ interface MatchedOffer {
   title: string;
   company: string;
   salary: OfferSalary | null;
+  salaries?: OfferSalary[];
   matched_reasons: string[];
   missing_skills: string[];
   salary_comparison: string | null;
@@ -51,9 +52,16 @@ interface StretchOffer {
   title: string;
   company_name: string;
   salary: OfferSalary | null;
+  salaries?: OfferSalary[];
   role_fit: string | null;
   missing_skills: string[];
   url: string | null;
+}
+
+interface SalaryPref {
+  type: string;
+  currency: string;
+  min: number;
 }
 
 interface MatchResponse {
@@ -79,6 +87,29 @@ function formatPLN(amount: number): string {
 function formatSalaryRange(s: OfferSalary | null): string | null {
   if (!s || s.from == null || s.to == null) return null;
   return `${formatPLN(s.from)} – ${formatPLN(s.to)} ${s.currency} (${s.type})`;
+}
+
+function formatSalaryEmailLines(salaries: OfferSalary[], prefs: SalaryPref[]): string[] {
+  if (salaries.length === 0) return ['salary not disclosed'];
+  const matching = prefs.length > 0
+    ? salaries.filter(s => prefs.some(p =>
+        p.type.toLowerCase() === s.type.toLowerCase() &&
+        p.currency.toUpperCase() === s.currency.toUpperCase()
+      ))
+    : [];
+  const toShow = matching.length > 0 ? matching : salaries.slice(0, 1);
+  const lines = toShow.map(s => formatSalaryEmailLine(s, resolveMin(s, prefs)));
+  const realLines = lines.filter(l => l !== 'salary not disclosed');
+  return realLines.length > 0 ? realLines : ['salary not disclosed'];
+}
+
+function resolveMin(salary: OfferSalary | null, prefs: SalaryPref[]): number | null {
+  if (!salary || prefs.length === 0) return null;
+  const match = prefs.find(
+    p => p.type.toLowerCase() === salary.type.toLowerCase() &&
+         p.currency.toUpperCase() === salary.currency.toUpperCase()
+  );
+  return match?.min ?? null;
 }
 
 // "24 000 – 27 000 PLN (b2b) — max 27 000 PLN, that's +5 000 PLN above your minimum"
@@ -131,14 +162,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let salaryMin: number | null = null;
+  let salaryPrefs: SalaryPref[] = [];
   let learningGoals: string[] = [];
   if (user.profile_path) {
     try {
       const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
-        preferences?: { salary?: Array<{ min?: number }>; learning_goals?: string[] }
+        preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }>; learning_goals?: string[] }
       };
-      salaryMin = raw.preferences?.salary?.[0]?.min ?? null;
+      salaryPrefs = (raw.preferences?.salary ?? [])
+        .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null);
       learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase());
     } catch { /* profile unreadable — skip comparison labels */ }
   }
@@ -187,10 +219,11 @@ async function main(): Promise<void> {
     function formatMatchedOffer(offer: MatchedOffer, i: number): void {
       const salaryRange = formatSalaryRange(offer.salary);
       const s = offer.salary;
-      const salaryVsTarget = s && s.to != null && salaryMin !== null
-        ? s.to >= salaryMin
+      const targetMin = resolveMin(s, salaryPrefs);
+      const salaryVsTarget = s && s.to != null && targetMin !== null
+        ? s.to >= targetMin
           ? `✅ max ${formatPLN(s.to)} ${s.currency} meets target`
-          : `❌ max ${formatPLN(s.to)} ${s.currency} below target of ${formatPLN(salaryMin)}`
+          : `❌ max ${formatPLN(s.to)} ${s.currency} below target of ${formatPLN(targetMin)}`
         : null;
 
       console.log('\n' + '─'.repeat(62));
@@ -236,10 +269,11 @@ async function main(): Promise<void> {
     } else {
       stretch.forEach((offer, i) => {
         const s = offer.salary;
-        const salaryLabel = s && s.to != null && salaryMin !== null
-          ? s.to >= salaryMin
-            ? ` — above client's minimum of ${formatPLN(salaryMin)} PLN`
-            : ` — below client's minimum of ${formatPLN(salaryMin)} PLN`
+        const stretchMin = resolveMin(s, salaryPrefs);
+        const salaryLabel = s && s.to != null && stretchMin !== null
+          ? s.to >= stretchMin
+            ? ` — above client's minimum of ${formatPLN(stretchMin)} PLN`
+            : ` — below client's minimum of ${formatPLN(stretchMin)} PLN`
           : '';
         const salary = formatSalaryRange(s)
           ? `${formatSalaryRange(s)}${salaryLabel}`
@@ -270,9 +304,9 @@ async function main(): Promise<void> {
     console.log('  No strongly recommended offers this scan.');
   } else {
     dedupedRecommended.forEach(offer => {
-      const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
+      const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs);
       console.log(`${offer.score}/100  ${titleAtCompany(offer.title, offer.company)}`);
-      console.log(`   ${salaryLine}`);
+      salaryLines.forEach(line => console.log(`   ${line}`));
       if (offer.role_fit) console.log(`   ${offer.role_fit}`);
       if (offer.url) console.log(`   🔗 ${offer.url}`);
       console.log('');
@@ -286,10 +320,10 @@ async function main(): Promise<void> {
     console.log('  No stretch offers this scan.');
   } else {
     dedupedStretch.forEach(offer => {
-      const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
+      const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs);
       const learningGoalHits = offer.missing_skills.filter(sk => learningGoals.includes(sk.toLowerCase()));
       console.log(titleAtCompany(offer.title, offer.company_name));
-      console.log(`   ${salaryLine}`);
+      salaryLines.forEach(line => console.log(`   ${line}`));
       if (offer.role_fit) console.log(`   ${offer.role_fit}`);
       if (learningGoalHits.length > 0) console.log(`   Skills to learn: ${learningGoalHits.join(', ')}`);
       if (offer.url) console.log(`   🔗 ${offer.url}`);
@@ -300,19 +334,26 @@ async function main(): Promise<void> {
   // Section 3 — Worth considering
   const stretchUrls = new Set(stretch.map(o => o.url).filter((u): u is string => u != null));
   const dedupedConsider = dedupeByTitleCompany(considerApplying, o => o.company, o => o.score);
-  const visibleConsider = dedupedConsider.filter(o =>
-    (o.url == null || !stretchUrls.has(o.url)) &&
-    (salaryMin === null || o.salary == null || o.salary.to == null || o.salary.to >= salaryMin)
-  );
+  const visibleConsider = dedupedConsider.filter(o => {
+    if (o.url != null && stretchUrls.has(o.url)) return false;
+    const salaries = o.salaries ?? (o.salary ? [o.salary] : []);
+    if (salaries.length === 0 || salaryPrefs.length === 0) return true;
+    const matching = salaries.filter(s => salaryPrefs.some(p =>
+      p.type.toLowerCase() === s.type.toLowerCase() &&
+      p.currency.toUpperCase() === s.currency.toUpperCase()
+    ));
+    if (matching.length === 0) return true; // no matching type → undisclosed for our prefs → show
+    return matching.some(s => { const min = resolveMin(s, salaryPrefs); return min === null || s.to >= min; });
+  });
 
   console.log(`\n\n\n💡 Worth considering (${visibleConsider.length} offers)\n`);
   if (visibleConsider.length === 0) {
     console.log('  No additional offers above score threshold.');
   } else {
     visibleConsider.forEach(offer => {
-      const salaryLine = formatSalaryEmailLine(offer.salary, salaryMin);
+      const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs);
       console.log(titleAtCompany(offer.title, offer.company));
-      console.log(`   ${salaryLine}`);
+      salaryLines.forEach(line => console.log(`   ${line}`));
       if (offer.url) console.log(`   🔗 ${offer.url}`);
       console.log('');
     });
