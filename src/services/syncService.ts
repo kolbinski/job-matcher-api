@@ -94,23 +94,9 @@ async function runJob(
       const stretchCount = result.stretch_offers.length;
       const email_report = buildEmailReport(result, user);
 
-      let email_sent = false;
       if (user.email) {
-        try {
-          await sendMatchReport(
-            agentEmail,
-            agentName,
-            user.email,
-            email_report,
-          );
-          email_sent = true;
-          console.log(`[sync] Email sent to ${user.email}`);
-        } catch (emailErr) {
-          console.error(
-            `[sync] Email failed for ${user.email}:`,
-            emailErr instanceof Error ? emailErr.message : String(emailErr),
-          );
-        }
+        await sendMatchReport(agentEmail, agentName, user.email, email_report);
+        console.log(`[sync] Email sent to ${user.email}`);
       }
 
       job.clients.push({
@@ -120,7 +106,7 @@ async function runJob(
         new_offers_count: newOffersCount,
         stretch_offers_count: stretchCount,
         email_report,
-        email_sent,
+        email_sent: !!user.email,
       });
       job.total_new_offers += newOffersCount + stretchCount;
 
@@ -129,7 +115,7 @@ async function runJob(
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[syncService] client failed:', user.id, message);
+      console.error(`[sync] ${user.email}: failed — ${message}`);
       job.clients.push({
         client_id: user.id,
         first_name: user.first_name,

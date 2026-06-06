@@ -207,18 +207,14 @@ export async function runMatchForUser(
       console.warn('[match] Deduplicated', validRows.length - uniqueRows.length, 'rows with duplicate offer_id')
     }
     console.log('[match] Writing to user_offers:', uniqueRows.length, 'rows for user:', userId)
-    try {
-      const chunkSize = 100
-      let totalWritten = 0
-      for (let i = 0; i < uniqueRows.length; i += chunkSize) {
-        const chunk = uniqueRows.slice(i, i + chunkSize)
-        const chunkResult = await prisma.userOffer.createMany({ data: chunk, skipDuplicates: true })
-        totalWritten += chunkResult.count
-      }
-      console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(uniqueRows.length / chunkSize), 'chunks')
-    } catch (err) {
-      console.error('[match] user_offers insert FAILED:', err)
+    const chunkSize = 100
+    let totalWritten = 0
+    for (let i = 0; i < uniqueRows.length; i += chunkSize) {
+      const chunk = uniqueRows.slice(i, i + chunkSize)
+      const chunkResult = await prisma.userOffer.createMany({ data: chunk, skipDuplicates: true })
+      totalWritten += chunkResult.count
     }
+    console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(uniqueRows.length / chunkSize), 'chunks')
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────

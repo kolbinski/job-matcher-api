@@ -7,5 +7,6 @@ export default defineConfig({
     setupFiles: ['tests/setup.ts'],
     testTimeout: 60_000,   // integration tests hit a real DB that may have 10k+ rows
     hookTimeout: 30_000,
+    fileParallelism: false, // prevent concurrent test files from competing for DB connections
   },
 })
