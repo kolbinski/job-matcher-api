@@ -107,20 +107,24 @@ describe('POST /v1/match', () => {
     expect(calls[0].response_ms).toBeGreaterThan(0)
   })
 
-  it('writes one user_offer row per scanned offer', async () => {
+  it('writes user_offer rows for pre-filtered offers; skips unscored matched offers', async () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
       .send({ options: { ai_scoring: false } })
 
     const scanned: number = res.body.meta.total_offers_scanned
+    const matched: number = res.body.meta.matched_count
     const rows = await prisma.userOffer.findMany({ where: { user_id: userId } })
-    // Every scanned offer must end up in user_offers (pre_filter_rejected or pending_apply)
-    expect(rows.length).toBe(scanned)
+    // Pre-filter rejected + skill-excluded offers are inserted; matched offers with
+    // null claude_score (ai_scoring: false) are skipped to prevent pending_apply rows
+    // with no Claude data.
+    expect(rows.length).toBe(scanned - matched)
+    expect(rows.every(r => r.status !== 'pending_apply' || r.claude_score !== null)).toBe(true)
   })
 
-  it('does not re-process offers seen in a previous call', async () => {
-    await request(app)
+  it('does not re-process pre-filtered offers seen in a previous call', async () => {
+    const res1 = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
       .send({ options: { ai_scoring: false } })
@@ -133,8 +137,10 @@ describe('POST /v1/match', () => {
       .send({ options: { ai_scoring: false } })
 
     const secondCount = await prisma.userOffer.count({ where: { user_id: userId } })
-    // Second call finds no new offers — all were already seen
+    // No new rows added — unscored matched offers re-appear in scan but are still
+    // skipped (null claude_score), so count stays the same.
     expect(secondCount).toBe(firstCount)
-    expect(res2.body.meta.total_offers_scanned).toBe(0)
+    // Only the unscored matched offers from the first call are re-scanned.
+    expect(res2.body.meta.total_offers_scanned).toBe(res1.body.meta.matched_count)
   })
 })

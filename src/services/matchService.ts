@@ -164,20 +164,25 @@ export async function runMatchForUser(
     updated_at: now,
   }))
 
-  const claudeRows = filteredPairs.map(p => ({
-    user_id: userId,
-    offer_id: p.original.id,
-    status: p.offer.recommended === false ? 'ai_rejected' : 'pending_apply',
-    rejection_reason: p.offer.recommended === false ? (p.offer.role_fit ?? null) : null,
-    claude_score: p.offer.recommended !== null ? p.offer.score : null,
-    claude_role_fit: p.offer.role_fit ?? null,
-    claude_matched_reasons: p.offer.matched_reasons,
-    claude_missing_skills: p.offer.missing_skills,
-    claude_salary_comparison: p.offer.salary_comparison ?? null,
-    claude_recommended: p.offer.recommended ?? null,
-    matched_at: now,
-    updated_at: now,
-  }))
+  const claudeRows = filteredPairs
+    .filter(p => p.offer.recommended !== null)
+    .map(p => {
+      const isPendingApply = p.offer.recommended === true && p.offer.role_fit !== null
+      return {
+        user_id: userId,
+        offer_id: p.original.id,
+        status: isPendingApply ? 'pending_apply' : 'ai_rejected',
+        rejection_reason: !isPendingApply ? (p.offer.role_fit ?? null) : null,
+        claude_score: p.offer.score,
+        claude_role_fit: p.offer.role_fit ?? null,
+        claude_matched_reasons: p.offer.matched_reasons,
+        claude_missing_skills: p.offer.missing_skills,
+        claude_salary_comparison: p.offer.salary_comparison ?? null,
+        claude_recommended: p.offer.recommended,
+        matched_at: now,
+        updated_at: now,
+      }
+    })
 
   const rowsToInsert = [...preFilterRows, ...claudeRows]
   const validRows = rowsToInsert.filter(r => r.offer_id != null)
