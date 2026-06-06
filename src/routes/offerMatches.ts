@@ -64,12 +64,12 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: url' })
   }
 
-  const { url } = parsed.data
+  const decodedUrl = decodeURIComponent(parsed.data.url)
   // req.agent is guaranteed by validateAgentJwt middleware
   const agentId = req.agent!.id
 
   const offer = await prisma.offer.findFirst({
-    where: { url, is_active: true },
+    where: { url: decodedUrl, is_active: true },
     select: { id: true, employment_types: true, source: true },
   })
 
