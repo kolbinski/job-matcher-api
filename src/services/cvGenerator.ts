@@ -1,12 +1,11 @@
 import type { CandidateProfile } from '../types/profile'
 import { env } from '../lib/env'
-import HtmlPdf from 'html-pdf-node'
 
 export async function generateCV(
   profile: CandidateProfile,
   offerText: string,
   cvLanguage: string,
-): Promise<Buffer> {
+): Promise<string> {
   const prompt = `
 You are an expert CV writer. Generate a professional CV in ${cvLanguage} language.
 
@@ -47,16 +46,9 @@ Instructions:
 
   const data = await response.json() as { content: Array<{ text: string }> }
   const raw = data.content[0].text
-  const html = raw
+  return raw
     .replace(/^```html\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim()
-
-  const options = {
-    format: 'A4',
-    margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' },
-  }
-  const pdfBuffer = await HtmlPdf.generatePdf({ content: html }, options)
-  return pdfBuffer
 }

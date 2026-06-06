@@ -53,9 +53,11 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')
   }
 
-  const pdfBuffer = await generateCV(profileParsed.data, offer_text, cv_language)
+  const html = await generateCV(profileParsed.data, offer_text, cv_language)
+  const filename = `cv-${user.first_name ?? 'candidate'}-${user.last_name ?? ''}-${Date.now()}.pdf`
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
 
-  res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Disposition', 'attachment; filename="cv.pdf"')
-  res.send(pdfBuffer)
+  res.json({ html, filename })
 })
