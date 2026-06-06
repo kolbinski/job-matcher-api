@@ -11,7 +11,24 @@ const QuerySchema = z.object({
   client_id: z.string().min(1),
   status: z.string().min(1),
   has_learning_goals: z.enum(['true', 'false']).optional(),
+  count_only: z.enum(['true', 'false']).optional(),
 })
+
+async function loadLearningGoals(clientId: string): Promise<string[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: clientId },
+    select: { profile_path: true },
+  })
+  if (!user?.profile_path) return []
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
+      preferences?: { learning_goals?: string[] }
+    }
+    return (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase())
+  } catch {
+    return []
+  }
+}
 
 userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   const parsed = QuerySchema.safeParse(req.query)
@@ -23,7 +40,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     })
   }
 
-  const { client_id, status, has_learning_goals } = parsed.data
+  const { client_id, status, has_learning_goals, count_only } = parsed.data
   const agentId = req.agent!.id
 
   const agentClient = await prisma.agentClient.findUnique({
@@ -33,8 +50,29 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
   }
 
+  const where = { user_id: client_id, status }
+
+  // count_only=true without has_learning_goals: pure DB count, no data transfer
+  if (count_only === 'true' && has_learning_goals !== 'true') {
+    const count = await prisma.userOffer.count({ where })
+    return res.json({ count })
+  }
+
+  // count_only=true with has_learning_goals=true: lean fetch (no offer join), filter in memory
+  if (count_only === 'true' && has_learning_goals === 'true' && status === 'ai_rejected') {
+    const rows = await prisma.userOffer.findMany({
+      where,
+      select: { claude_missing_skills: true },
+    })
+    const learningGoals = await loadLearningGoals(client_id)
+    const count = learningGoals.length > 0
+      ? rows.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))).length
+      : rows.length
+    return res.json({ count })
+  }
+
   const userOffers = await prisma.userOffer.findMany({
-    where: { user_id: client_id, status },
+    where,
     include: { offer: { select: { title: true, company_name: true, url: true } } },
     orderBy: { matched_at: 'desc' },
   })
@@ -42,19 +80,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   let result = userOffers
 
   if (has_learning_goals === 'true' && status === 'ai_rejected') {
-    const user = await prisma.user.findUnique({
-      where: { id: client_id },
-      select: { profile_path: true },
-    })
-    let learningGoals: string[] = []
-    if (user?.profile_path) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
-          preferences?: { learning_goals?: string[] }
-        }
-        learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase())
-      } catch { /* profile unreadable — skip filter */ }
-    }
+    const learningGoals = await loadLearningGoals(client_id)
     if (learningGoals.length > 0) {
       result = result.filter(uo =>
         uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
