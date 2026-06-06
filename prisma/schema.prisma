@@ -73,13 +73,14 @@ model Offer {
 
 // status values: pre_filter_rejected | ai_rejected | pending_apply | applied |
 //   pending_reply_from_recruiter | rejected | offer_received | accepted |
-//   client_withdrawn | offer_expired
+//   client_withdrawn | offer_expired | agent_withdrawn
 model UserOffer {
   id                       String   @id @default(uuid())
   user_id                  String
   offer_id                 String
   status                   String
   rejection_reason         String?
+  agent_withdraw_reason    String?
   claude_score             Int?
   claude_role_fit          String?
   claude_matched_reasons   String[]

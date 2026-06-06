@@ -65,6 +65,11 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
   console.log(`[sync] Starting job for ${users.length} users`)
 
   for (const user of users) {
+    const milestone = ((job.processed_clients + 1) / job.total_clients) * 100
+    const easeInterval = setInterval(() => {
+      job.progress += (milestone - job.progress) * 0.1
+    }, 1000)
+
     try {
       const result = await runMatchForUser(user.id, { ai_scoring: true })
 
@@ -110,6 +115,7 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
       })
     }
 
+    clearInterval(easeInterval)
     job.processed_clients++
     job.progress = Math.round((job.processed_clients / job.total_clients) * 100)
   }

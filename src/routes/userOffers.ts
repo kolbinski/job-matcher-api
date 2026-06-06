@@ -76,6 +76,43 @@ function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[])
   return entries
 }
 
+const BodySchema = z.object({
+  reason: z.string().min(1),
+})
+
+userOffersRouter.post('/:id/withdraw', validateAgentJwt, async (req, res) => {
+  const { id } = req.params as { id: string }
+  const parsed = BodySchema.safeParse(req.body)
+  const reason = parsed.success ? parsed.data.reason.trim() : ''
+  if (!parsed.success || !reason) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'reason is required and cannot be empty' })
+  }
+
+  const agentId = req.agent!.id
+
+  const userOffer = await prisma.userOffer.findUnique({
+    where: { id },
+    select: { id: true, user_id: true },
+  })
+  if (!userOffer) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'User offer not found' })
+  }
+
+  const agentClient = await prisma.agentClient.findUnique({
+    where: { agent_id_user_id: { agent_id: agentId, user_id: userOffer.user_id } },
+  })
+  if (!agentClient) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer does not belong to your client' })
+  }
+
+  await prisma.userOffer.update({
+    where: { id },
+    data: { status: 'agent_withdrawn', agent_withdraw_reason: reason },
+  })
+
+  return res.json({ success: true })
+})
+
 userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   const parsed = QuerySchema.safeParse(req.query)
   if (!parsed.success) {
@@ -94,6 +131,11 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   })
   if (!agentClient) {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
+  }
+
+  if (status === 'agent_withdrawn') {
+    if (count_only === 'true') return res.json({ count: 0 })
+    return res.json({ client_id, status, count: 0, offers: [] })
   }
 
   const where = { user_id: client_id, status }
