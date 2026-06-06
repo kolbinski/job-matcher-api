@@ -1,7 +1,7 @@
-import { Resend } from 'resend'
-import { env } from '../lib/env'
+import { Resend } from 'resend';
+import { env } from '../lib/env';
 
-const resend = new Resend(env.RESEND_API_KEY)
+const resend = new Resend(env.RESEND_API_KEY);
 
 export async function sendMatchReport(
   fromEmail: string,
@@ -10,9 +10,9 @@ export async function sendMatchReport(
   emailReport: string,
 ): Promise<void> {
   await resend.emails.send({
-    from: `${fromName} @ Homo Digital <${fromEmail}>`,
+    from: `${fromName} <${fromEmail}>`,
     to: toEmail,
     subject: `Your job report — ${new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' })}`,
     text: emailReport,
-  })
+  });
 }
