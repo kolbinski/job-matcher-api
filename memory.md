@@ -160,8 +160,16 @@ Railway restarts the dyno on deploy. In-flight requests during restart are dropp
 *Deduplication test* (requires real seenIds behaviour) lives in `tests/integration/match-deduplication.test.ts`, excluded from default `vitest run` and run via `npm run test:integration`.
 *Remaining bottleneck:* Supabase network latency (~300ms/round-trip). Getting below 30s would require a local test DB or fully mocking user/userOffer/apiCall calls too.
 
-**[2026-06-06] Batched Claude evaluation (no cap)**
+**[2026-06-06] Batched Claude evaluation (no cap)** [SUPERSEDED — see per-batch insertion entry below]
 `matchService.ts` step 8 processes all filtered offers in BATCH_SIZE=100 chunks rather than capping at 100. `claudeBySlug` Map keyed by slug merges results across batches.
+
+**[2026-06-06] Per-batch user_offers insertion**
+Claude evaluations in `matchService.ts` step 8 are now applied and persisted immediately after each 100-offer batch, rather than accumulating into a `claudeBySlug` Map and bulk-inserting after all batches complete. The `ClaudeEvaluation` import was removed (Map no longer needed). Each batch: evaluate → apply to pairs in-place → `createMany` with `skipDuplicates: true` → log. Final sort by Claude score happens once after all batches.
+*Why:* A mid-run Claude failure previously lost all progress. With per-batch insertion, already-processed batches remain in `user_offers` so the next sync's `seenIds` is larger and Claude re-evaluates fewer offers.
+
+**[2026-06-06] Email "Worth considering" capped at 3**
+`buildEmailReport` in `emailReport.ts` caps the "Worth considering" section to `sortedConsider.slice(0, 3)`. Header changed from `💡 Worth considering (N offers)` to `💡 Top N worth considering` where N = `Math.min(actual, 3)`.
+*Why:* Email readability — agents don't need a full list of borderline offers, just the best 3.
 
 **[2026-06-06] pre_filter_rejected rows written before Claude (step 6b)**
 Pre-filter rejected rows are written to `user_offers` immediately after filtering (before Claude runs), so `seenIds` on the next sync already excludes them. Prevents re-evaluation of known-rejected offers.

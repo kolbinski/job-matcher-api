@@ -1,7 +1,7 @@
 # Current Task
 
 **Status:** 🟢 V1 Build — production, ongoing optimisations
-**Last Updated:** 2026-06-06
+**Last Updated:** 2026-06-06 (session 2)
 
 ---
 
@@ -70,26 +70,16 @@ Ship a working `POST /v1/match` endpoint that:
 
 ---
 
-## Working Memory
+## Recent Changes (2026-06-06 session 2)
 
-**Resolved:** Profile input format is JSON. The English spec is unambiguous — `POST /v1/match` body is a structured JSON object. No Markdown parsing needed in V1.
-
-**Pending question:** Should credit deduction happen BEFORE or AFTER the Claude API call? 
-- Before: user pays even if Claude times out (bad UX)
-- After: user gets free calls if Claude is down (bad for business)
-- Resolution: Deduct before, but roll back transaction if Claude returns non-retryable error. Claude timeout → 503, no charge.
-
-**Pending question:** Apify cronjob — should it run inside the same Railway service or as a separate Railway cron job service?
-
----
+- **Test speed** — `npm run check` 241s → 51s. `offer.findMany` spy in `match` + `stretchOffers` tests returns 6 DB fixtures instead of 8000+ live rows. Dedup test extracted to `tests/integration/` (`npm run test:integration`).
+- **Per-batch DB insertion** — Claude evaluation in `matchService.ts` now inserts `user_offers` immediately after each 100-offer batch. Crash-safe: already-processed batches are persisted before the next Claude API call.
+- **Email sender** — removed `@ Homo Digital` suffix from the `from` field in `emailService.ts`.
+- **Email "Worth considering"** — header changed to `💡 Top N worth considering` and capped at top 3 offers (`sortedConsider.slice(0, 3)`).
 
 ## Next Action
 
-Start SPARK Step 2: Payment Guard.
-Begin with `validateApiKey` middleware — lookup `jobmatcher_api_key` in `users` table, attach user to `req`, return 401 on miss.
-
----
-
-## Completed Steps
-
-_(none yet — build not started)_
+No blocking work. Potential next tasks:
+- Railway env var: set `DATABASE_URL` with `connection_limit=5&pool_timeout=30`
+- OpenAPI spec for `POST /v1/match` (SPARK Step 5)
+- Monitor first production sync after per-batch insertion change
