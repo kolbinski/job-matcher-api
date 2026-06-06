@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma'
 import { runMatchForUser } from './matchService'
 import { buildEmailReport } from './emailReport'
+import { sendMatchReport } from './emailService'
 
 interface SyncClientResult {
   client_id: string
@@ -10,6 +11,7 @@ interface SyncClientResult {
   new_offers_count: number
   stretch_offers_count: number
   email_report: string
+  email_sent: boolean
   error?: string
 }
 
@@ -30,7 +32,7 @@ export function getJob(jobId: string): SyncJob | undefined {
   return jobs.get(jobId)
 }
 
-export function startSyncJob(): string {
+export function startSyncJob(agentEmail: string, agentName: string): string {
   const jobId = randomUUID()
   const job: SyncJob = {
     status: 'running',
@@ -43,7 +45,7 @@ export function startSyncJob(): string {
   }
   jobs.set(jobId, job)
 
-  runJob(job).catch(err => {
+  runJob(job, agentEmail, agentName).catch(err => {
     job.status = 'error'
     job.finished_at = new Date().toISOString()
     console.error('[syncService] runJob failed:', err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : '')
@@ -52,7 +54,7 @@ export function startSyncJob(): string {
   return jobId
 }
 
-async function runJob(job: SyncJob): Promise<void> {
+async function runJob(job: SyncJob, agentEmail: string, agentName: string): Promise<void> {
   const users = await prisma.user.findMany({
     where: { profile_path: { not: null } },
     select: { id: true, email: true, first_name: true, last_name: true, profile_path: true },
@@ -68,6 +70,18 @@ async function runJob(job: SyncJob): Promise<void> {
 
       const newOffersCount = result.matched.filter(o => o.recommended === true).length
       const stretchCount = result.stretch_offers.length
+      const email_report = buildEmailReport(result, user, totalOffersInDb)
+
+      let email_sent = false
+      if (user.email) {
+        try {
+          await sendMatchReport(agentEmail, agentName, user.email, email_report)
+          email_sent = true
+          console.log(`[sync] Email sent to ${user.email}`)
+        } catch (emailErr) {
+          console.error(`[sync] Email failed for ${user.email}:`, emailErr instanceof Error ? emailErr.message : String(emailErr))
+        }
+      }
 
       job.clients.push({
         client_id: user.id,
@@ -75,7 +89,8 @@ async function runJob(job: SyncJob): Promise<void> {
         last_name: user.last_name,
         new_offers_count: newOffersCount,
         stretch_offers_count: stretchCount,
-        email_report: buildEmailReport(result, user, totalOffersInDb),
+        email_report,
+        email_sent,
       })
       job.total_new_offers += newOffersCount + stretchCount
 
@@ -90,6 +105,7 @@ async function runJob(job: SyncJob): Promise<void> {
         new_offers_count: 0,
         stretch_offers_count: 0,
         email_report: '',
+        email_sent: false,
         error: message,
       })
     }

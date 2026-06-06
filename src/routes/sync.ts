@@ -2,13 +2,20 @@ import { Router } from 'express'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import { env } from '../lib/env'
+import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { startSyncJob, getJob } from '../services/syncService'
 
 export const syncRouter = Router()
 
-syncRouter.post('/start', validateAgentJwt, (_req, res) => {
-  const jobId = startSyncJob()
+syncRouter.post('/start', validateAgentJwt, async (req, res) => {
+  // req.agent is guaranteed by validateAgentJwt middleware
+  const agent = await prisma.agent.findUnique({ where: { id: req.agent!.id } })
+  if (!agent) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Agent not found' })
+  }
+  const agentName = [agent.first_name, agent.last_name].filter(s => s.length > 0).join(' ') || agent.email
+  const jobId = startSyncJob(agent.email, agentName)
   res.json({ job_id: jobId })
 })
 

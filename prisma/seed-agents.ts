@@ -10,10 +10,12 @@ async function main() {
 
   const agent = await prisma.agent.upsert({
     where: { email: 'krzysztof.olbinski@homodigital.io' },
-    update: {},
+    update: { first_name: 'Krzysztof', last_name: 'Olbiński' },
     create: {
       email: 'krzysztof.olbinski@homodigital.io',
       password_hash: passwordHash,
+      first_name: 'Krzysztof',
+      last_name: 'Olbiński',
     },
   })
 

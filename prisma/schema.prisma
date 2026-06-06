@@ -100,6 +100,8 @@ model Agent {
   id            String        @id @default(uuid())
   email         String        @unique
   password_hash String
+  first_name    String        @default("")
+  last_name     String        @default("")
   created_at    DateTime      @default(now())
   clients       AgentClient[]
 
