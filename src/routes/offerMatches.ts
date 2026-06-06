@@ -70,7 +70,7 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
 
   const offer = await prisma.offer.findFirst({
     where: { url, is_active: true },
-    select: { id: true, employment_types: true },
+    select: { id: true, employment_types: true, source: true },
   })
 
   if (!offer) {
@@ -109,6 +109,7 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
       claude_role_fit: uo.claude_role_fit,
       claude_matched_reasons: uo.claude_matched_reasons,
       salary: buildSalaryEntries(offer.employment_types, loadSalaryPrefs(uo.user.profile_path)),
+      source: offer.source,
     })),
   })
 })

@@ -120,7 +120,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   const userOffers = await prisma.userOffer.findMany({
     where,
     include: {
-      offer: { select: { title: true, company_name: true, url: true, employment_types: true } },
+      offer: { select: { title: true, company_name: true, url: true, employment_types: true, source: true } },
     },
     orderBy: { matched_at: 'desc' },
   })
@@ -154,6 +154,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
       salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs),
+      source: uo.offer.source,
     })),
   })
 })
