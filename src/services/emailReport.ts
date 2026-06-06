@@ -11,8 +11,9 @@ interface SalaryPref {
 export function buildEmailReport(
   result: MatchResponse,
   user: { first_name: string | null; profile_path: string | null },
+  totalOffersInDb: number,
 ): string {
-  const { meta, matched, stretch_offers: stretch } = result
+  const { matched, stretch_offers: stretch } = result
 
   let salaryPrefs: SalaryPref[] = []
   let learningGoals: string[] = []
@@ -40,7 +41,7 @@ export function buildEmailReport(
   const lines: string[] = []
 
   lines.push(`Hi ${firstName}! Here are your job matches for ${todayDDMMYYYY()}`)
-  lines.push(`Found ${newOffersCount} new offers for you (from ${meta.total_offers_scanned} newly processed offers today)`)
+  lines.push(`Found ${newOffersCount} new offers for you (from ${totalOffersInDb} offers in database)`)
 
   // Section 1 — Apply now
   const dedupedRecommended = dedupeByTitleCompany(recommended, o => o.company, o => o.score)

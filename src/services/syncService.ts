@@ -58,6 +58,7 @@ async function runJob(job: SyncJob): Promise<void> {
     select: { id: true, email: true, first_name: true, last_name: true, profile_path: true },
   })
 
+  const totalOffersInDb = await prisma.offer.count()
   job.total_clients = users.length
   console.log(`[sync] Starting job for ${users.length} users`)
 
@@ -74,7 +75,7 @@ async function runJob(job: SyncJob): Promise<void> {
         last_name: user.last_name,
         new_offers_count: newOffersCount,
         stretch_offers_count: stretchCount,
-        email_report: buildEmailReport(result, user),
+        email_report: buildEmailReport(result, user, totalOffersInDb),
       })
       job.total_new_offers += newOffersCount + stretchCount
 
