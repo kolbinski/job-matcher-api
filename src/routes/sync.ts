@@ -15,7 +15,7 @@ syncRouter.post('/start', validateAgentJwt, async (req, res) => {
     return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Agent not found' })
   }
   const agentName = [agent.first_name, agent.last_name].filter(s => s.length > 0).join(' ') || agent.email
-  const jobId = startSyncJob(agent.email, agentName)
+  const jobId = startSyncJob(agent.id, agent.email, agentName)
   res.json({ job_id: jobId })
 })
 

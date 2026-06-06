@@ -32,7 +32,7 @@ export function getJob(jobId: string): SyncJob | undefined {
   return jobs.get(jobId);
 }
 
-export function startSyncJob(agentEmail: string, agentName: string): string {
+export function startSyncJob(agentId: string, agentEmail: string, agentName: string): string {
   const jobId = randomUUID();
   const job: SyncJob = {
     status: 'running',
@@ -45,7 +45,7 @@ export function startSyncJob(agentEmail: string, agentName: string): string {
   };
   jobs.set(jobId, job);
 
-  runJob(job, agentEmail, agentName).catch(err => {
+  runJob(job, agentId, agentEmail, agentName).catch(err => {
     job.status = 'error';
     job.finished_at = new Date().toISOString();
     console.error(
@@ -60,11 +60,15 @@ export function startSyncJob(agentEmail: string, agentName: string): string {
 
 async function runJob(
   job: SyncJob,
+  agentId: string,
   agentEmail: string,
   agentName: string,
 ): Promise<void> {
   const users = await prisma.user.findMany({
-    where: { profile_path: { not: null } },
+    where: {
+      profile_path: { not: null },
+      agent_clients: { some: { agent_id: agentId } },
+    },
     select: {
       id: true,
       email: true,
