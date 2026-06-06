@@ -6,7 +6,6 @@ import { AppError } from '../lib/errors'
 import { applyPreFilters } from './redFlagFilter'
 import { scoreOffer } from './scoring'
 import { evaluateOffers } from './claudeEvaluator'
-import type { ClaudeEvaluation } from './claudeEvaluator'
 import { normalizeProfile } from './profileParser'
 import { CandidateProfileSchema } from '../types/profile'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, StretchOffer } from '../types/match'
@@ -144,7 +143,9 @@ export async function runMatchForUser(
   pairs.sort((a, b) => sortOrder === 'asc' ? a.offer.score - b.offer.score : b.offer.score - a.offer.score)
   const filteredPairs = applyPostScoreFilters(pairs, opts?.filters)
 
-  // ── 8. Claude evaluation ───────────────────────────────────────────────────
+  // ── 8. Claude evaluation — insert each batch immediately after evaluation ──
+  // Rows are persisted before the next Claude API call so a mid-run failure
+  // leaves already-processed batches saved and seenIds grows with each batch.
   let aiScoring = false
   let claudeEvaluationsCount = 0
 
@@ -153,79 +154,64 @@ export async function runMatchForUser(
   } else if (doAiScoring) {
     const BATCH_SIZE = 100
     const totalBatches = Math.ceil(filteredPairs.length / BATCH_SIZE)
-    const claudeBySlug = new Map<string, ClaudeEvaluation>()
 
     for (let i = 0; i < filteredPairs.length; i += BATCH_SIZE) {
       const batch = filteredPairs.slice(i, i + BATCH_SIZE)
       const batchNum = Math.floor(i / BATCH_SIZE) + 1
       console.log(`[match] Claude batch ${batchNum}/${totalBatches} (${batch.length} offers)`)
+
       const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
-      if (batchResults) {
-        for (const ev of batchResults) {
-          if (ev.offer_index >= 0 && ev.offer_index < batch.length) {
-            claudeBySlug.set(batch[ev.offer_index].original.slug, ev)
-          }
-        }
-      } else {
+      if (!batchResults) {
         console.warn(`[match] Claude batch ${batchNum}/${totalBatches} returned null — skipping`)
+        continue
+      }
+
+      // Apply evaluations to this batch's pairs in-place
+      for (const ev of batchResults) {
+        if (ev.offer_index < 0 || ev.offer_index >= batch.length) continue
+        const p = batch[ev.offer_index]
+        p.offer.score = ev.score
+        p.offer.rank = ev.rank
+        p.offer.matched_reasons = ev.matched_reasons
+        p.offer.missing_skills = ev.missing_skills
+        p.offer.salary_comparison = ev.salary_comparison
+        p.offer.role_fit = ev.role_fit
+        p.offer.recommended = ev.recommended
+        claudeEvaluationsCount++
+      }
+
+      // Insert this batch's rows immediately
+      const batchRows = batch
+        .filter(p => p.offer.recommended !== null && p.original.id != null)
+        .map(p => {
+          const isPendingApply = p.offer.recommended === true && p.offer.role_fit !== null
+          return {
+            user_id: userId,
+            offer_id: p.original.id,
+            status: isPendingApply ? 'pending_apply' : 'ai_rejected',
+            rejection_reason: !isPendingApply ? (p.offer.role_fit ?? null) : null,
+            claude_score: p.offer.score,
+            claude_role_fit: p.offer.role_fit ?? null,
+            claude_matched_reasons: p.offer.matched_reasons,
+            claude_missing_skills: p.offer.missing_skills,
+            claude_salary_comparison: p.offer.salary_comparison ?? null,
+            claude_recommended: p.offer.recommended,
+            matched_at: now,
+            updated_at: now,
+          }
+        })
+
+      if (batchRows.length > 0) {
+        const writeResult = await prisma.userOffer.createMany({ data: batchRows, skipDuplicates: true })
+        console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
+        if (writeResult.count > 0) aiScoring = true
       }
     }
 
-    if (claudeBySlug.size > 0) {
-      aiScoring = true
-      claudeEvaluationsCount = claudeBySlug.size
-
-      for (const p of filteredPairs) {
-        const claudeData = claudeBySlug.get(p.original.slug)
-        if (!claudeData) continue
-        p.offer.score = claudeData.score
-        p.offer.rank = claudeData.rank
-        p.offer.matched_reasons = claudeData.matched_reasons
-        p.offer.missing_skills = claudeData.missing_skills
-        p.offer.salary_comparison = claudeData.salary_comparison
-        p.offer.role_fit = claudeData.role_fit
-        p.offer.recommended = claudeData.recommended
-      }
-
+    // Re-sort by Claude score once all batches are done
+    if (aiScoring) {
       filteredPairs.sort((a, b) => b.offer.score - a.offer.score)
     }
-  }
-
-  // ── 9. Write claude-scored user_offers ────────────────────────────────────
-  const claudeRows = filteredPairs
-    .filter(p => p.offer.recommended !== null)
-    .map(p => {
-      const isPendingApply = p.offer.recommended === true && p.offer.role_fit !== null
-      return {
-        user_id: userId,
-        offer_id: p.original.id,
-        status: isPendingApply ? 'pending_apply' : 'ai_rejected',
-        rejection_reason: !isPendingApply ? (p.offer.role_fit ?? null) : null,
-        claude_score: p.offer.score,
-        claude_role_fit: p.offer.role_fit ?? null,
-        claude_matched_reasons: p.offer.matched_reasons,
-        claude_missing_skills: p.offer.missing_skills,
-        claude_salary_comparison: p.offer.salary_comparison ?? null,
-        claude_recommended: p.offer.recommended,
-        matched_at: now,
-        updated_at: now,
-      }
-    })
-
-  if (claudeRows.length > 0) {
-    const validClaudeRows = claudeRows.filter(r => r.offer_id != null)
-    if (validClaudeRows.length !== claudeRows.length) {
-      console.warn('[match] Skipped', claudeRows.length - validClaudeRows.length, 'claude rows with null offer_id')
-    }
-    console.log('[match] Writing to user_offers:', validClaudeRows.length, 'claude rows for user:', userId)
-    const chunkSize = 100
-    let totalWritten = 0
-    for (let i = 0; i < validClaudeRows.length; i += chunkSize) {
-      const chunk = validClaudeRows.slice(i, i + chunkSize)
-      const chunkResult = await prisma.userOffer.createMany({ data: chunk, skipDuplicates: true })
-      totalWritten += chunkResult.count
-    }
-    console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(validClaudeRows.length / chunkSize), 'chunks')
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────
