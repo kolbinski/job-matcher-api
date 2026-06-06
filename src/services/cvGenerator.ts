@@ -41,7 +41,12 @@ Instructions:
   })
 
   if (!response.ok) {
-    throw new Error(`[cvGenerator] Claude API error: ${response.status} ${response.statusText}`)
+    const errorBody = await response.text()
+    console.error('[cvGenerator] Claude API error status:', response.status)
+    console.error('[cvGenerator] Claude API error body:', errorBody)
+    console.error('[cvGenerator] prompt length (chars):', prompt.length)
+    console.error('[cvGenerator] offer_text length:', offerText.length)
+    throw new Error(`Claude API error: ${response.status} ${errorBody}`)
   }
 
   const data = await response.json() as { content: Array<{ text: string }> }
