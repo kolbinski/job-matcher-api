@@ -111,11 +111,13 @@ export function buildEmailReport(
     o => o.city,
   )
 
-  lines.push(`\n\n\n💡 Worth considering (${sortedConsider.length} offers)\n`)
-  if (sortedConsider.length === 0) {
+  const topConsider = sortedConsider.slice(0, 3)
+  const displayCount = Math.min(sortedConsider.length, 3)
+  lines.push(`\n\n\n💡 Top ${displayCount} worth considering\n`)
+  if (topConsider.length === 0) {
     lines.push('  No additional offers above score threshold.')
   } else {
-    for (const offer of sortedConsider) {
+    for (const offer of topConsider) {
       const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs)
       lines.push(titleAtCompany(offer.title, offer.company, offer.remote, offer.hybrid, offer.city))
       for (const line of salaryLines) lines.push(`   ${line}`)
