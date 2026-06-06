@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
 import { app } from '../src/app'
@@ -8,7 +8,24 @@ import { prisma } from '../src/lib/prisma'
 const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
 const TEST_SLUG_PREFIX = 'test-stretch-'
 
+// Capture the real findMany before spying so the stretch-offer lookup
+// (id: { in: [...] }) passes through to the real DB.
+const origFindMany = prisma.offer.findMany.bind(prisma.offer)
+
+beforeAll(() => {
+  // Return [] for the main active-offers scan (test offers are is_active:false and
+  // already in seenIds). Pass through queries with id.in so buildStretchOffers can
+  // load the specific test offers it needs.
+  // Cast to any: PrismaPromise vs Promise mismatch is irrelevant at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(vi.spyOn(prisma.offer, 'findMany') as any).mockImplementation(async (args?: any) => {
+    if (args?.where?.id?.in) return origFindMany(args)
+    return []
+  })
+})
+
 afterAll(async () => {
+  vi.restoreAllMocks()
   await prisma.$disconnect()
 })
 

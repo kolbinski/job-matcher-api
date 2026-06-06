@@ -125,3 +125,11 @@ Three API changes that silently break v3 code under v4:
 **RULE D-4: Use in-memory rate limiting only on single-dyno deployments.**
 **Why:** In-memory rate limit state is not shared across Railway dyno instances. On a single dyno it's exact. The moment Railway auto-scales to two dynos, each dyno enforces its own 100 req/min limit, effectively doubling the true rate limit.
 **How to apply:** In `rateLimiter.ts`, add a comment: `// in-memory store — migrate to Redis before enabling Railway auto-scaling`. Add a pre-scaling checklist item: "upgrade rate limiter to Redis-backed store."
+
+**RULE T-4: Spy on `prisma.model.findMany` to avoid loading 8000+ rows in integration tests.**
+**Why:** Tests that call `POST /v1/match` hit the real DB and load all active offers (8000+), making each test take 30+ seconds. With Claude mocked but offers un-mocked, total check time was 241s.
+**How to apply:** In `beforeAll`, capture `prisma.offer.findMany.bind(prisma.offer)` as `origFindMany`, then `(vi.spyOn(prisma.offer, 'findMany') as any).mockImplementation(...)`. Return controlled fixtures for the main query, `[]` for skill-excluded (identified by `args?.select?.id`), and `origFindMany(args)` for stretch-offer lookups (identified by `args?.where?.id?.in`). Cast the spy to `any` before `.mockImplementation` — Prisma's `PrismaPromise` return type is incompatible with `async` functions but irrelevant at runtime.
+
+**RULE T-5: Tests that verify seenIds deduplication must stay as integration tests.**
+**Why:** The `does not re-process` test asserts that `total_offers_scanned` decreases on the second call. With mocked `findMany` that ignores WHERE clauses, both calls return the same fixtures — the assertion fails. Only a real DB query that honours `NOT { id: { in: seenIds } }` gives the correct behaviour.
+**How to apply:** Move deduplication tests to `tests/integration/` (excluded from default `vitest run`). Run via `npm run test:integration`.

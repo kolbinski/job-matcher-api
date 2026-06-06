@@ -1,7 +1,7 @@
 # Current Task
 
-**Status:** 🟢 V1 Build — Step 4 complete, Step 5 starting
-**Last Updated:** 2026-06-03
+**Status:** 🟢 V1 Build — production, ongoing optimisations
+**Last Updated:** 2026-06-06
 
 ---
 

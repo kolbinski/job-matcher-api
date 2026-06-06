@@ -149,3 +149,25 @@ Railway restarts the dyno on deploy. In-flight requests during restart are dropp
 **V2 planned**: NoFluffJobs scraper, `GET /v1/credits`, `GET /v1/calls`, user dashboard
 **V3 planned**: RemoteOK (free API), international filtering, IP rotation for scraping
 **V4 planned**: Wellfound (AngelList), Dice.com — US market expansion
+
+---
+
+## Test Architecture
+
+**[2026-06-06] Offer findMany spy pattern for fast integration tests**
+`tests/match.test.ts` and `tests/stretchOffers.test.ts` spy on `prisma.offer.findMany` in `beforeAll` to return a small controlled set of offers (6 fixture records) instead of 8000+ live rows. This reduces test time from 241s to ~51s while keeping all real DB assertions (userOffer, apiCall, user).
+*Fixture slugs:* `test-match-fixture-*` — created in `beforeAll`, deleted in `afterAll`.
+*Deduplication test* (requires real seenIds behaviour) lives in `tests/integration/match-deduplication.test.ts`, excluded from default `vitest run` and run via `npm run test:integration`.
+*Remaining bottleneck:* Supabase network latency (~300ms/round-trip). Getting below 30s would require a local test DB or fully mocking user/userOffer/apiCall calls too.
+
+**[2026-06-06] Batched Claude evaluation (no cap)**
+`matchService.ts` step 8 processes all filtered offers in BATCH_SIZE=100 chunks rather than capping at 100. `claudeBySlug` Map keyed by slug merges results across batches.
+
+**[2026-06-06] pre_filter_rejected rows written before Claude (step 6b)**
+Pre-filter rejected rows are written to `user_offers` immediately after filtering (before Claude runs), so `seenIds` on the next sync already excludes them. Prevents re-evaluation of known-rejected offers.
+
+**[2026-06-06] SSE /v1/sync/progress removed**
+Replaced by client-side polling of `GET /v1/sync/status`. Removed jwt/env imports from `src/routes/sync.ts`.
+
+**[2026-06-06] total_offers_scanned in SyncJob**
+`SyncJob` interface and `runJob` accumulate `total_offers_scanned` per client from `result.meta.total_offers_scanned`. Used in email report ("Today I scanned X new offers").
