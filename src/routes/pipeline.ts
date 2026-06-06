@@ -3,7 +3,7 @@ import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateApiKey } from '../middleware/validateApiKey'
 import { rateLimiter } from '../middleware/rateLimiter'
-import { extractSalary } from './match'
+import { extractSalary } from '../services/matchService'
 import type { OfferSalary } from '../types/match'
 
 export const pipelineRouter = Router()

@@ -1,12 +1,14 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma'
+import { runMatchForUser } from './matchService'
 
 interface SyncClientResult {
   client_id: string
-  client_email: string
   first_name: string | null
-  new_offers: number
-  stretch_offers: number
+  last_name: string | null
+  new_offers_count: number
+  stretch_offers_count: number
+  email_report: string
   error?: string
 }
 
@@ -44,59 +46,41 @@ export function startSyncJob(): string {
 }
 
 async function runJob(job: SyncJob): Promise<void> {
-  const port = process.env.PORT ?? '3000'
-  const baseUrl = `http://localhost:${port}`
-
   const users = await prisma.user.findMany({
     where: { profile_path: { not: null } },
-    select: { id: true, email: true, first_name: true, jobmatcher_api_key: true },
+    select: { id: true, email: true, first_name: true, last_name: true },
   })
 
   console.log(`[sync] Starting job for ${users.length} users`)
 
   for (const user of users) {
     try {
-      const res = await fetch(`${baseUrl}/v1/match`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': user.jobmatcher_api_key,
-        },
-        body: JSON.stringify({ options: { ai_scoring: true } }),
-      })
+      const result = await runMatchForUser(user.id, { ai_scoring: true })
 
-      if (!res.ok) {
-        const body = await res.text()
-        throw new Error(`HTTP ${res.status}: ${body}`)
-      }
-
-      const data = await res.json() as {
-        matched: Array<{ recommended: boolean | null }>
-        stretch_offers: unknown[]
-      }
-
-      const newOffers = data.matched.filter(o => o.recommended === true).length
-      const stretchCount = data.stretch_offers.length
+      const newOffersCount = result.matched.filter(o => o.recommended === true).length
+      const stretchCount = result.stretch_offers.length
 
       job.clients.push({
         client_id: user.id,
-        client_email: user.email,
         first_name: user.first_name,
-        new_offers: newOffers,
-        stretch_offers: stretchCount,
+        last_name: user.last_name,
+        new_offers_count: newOffersCount,
+        stretch_offers_count: stretchCount,
+        email_report: '',
       })
-      job.total_new_offers += newOffers + stretchCount
+      job.total_new_offers += newOffersCount + stretchCount
 
-      console.log(`[sync] ${user.email}: ${newOffers} new offers, ${stretchCount} stretch`)
+      console.log(`[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`[sync] ${user.email} failed:`, message)
       job.clients.push({
         client_id: user.id,
-        client_email: user.email,
         first_name: user.first_name,
-        new_offers: 0,
-        stretch_offers: 0,
+        last_name: user.last_name,
+        new_offers_count: 0,
+        stretch_offers_count: 0,
+        email_report: '',
         error: message,
       })
     }
