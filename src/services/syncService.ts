@@ -1,39 +1,39 @@
-import { randomUUID } from 'crypto'
-import { prisma } from '../lib/prisma'
-import { runMatchForUser } from './matchService'
-import { buildEmailReport } from './emailReport'
-import { sendMatchReport } from './emailService'
+import { randomUUID } from 'crypto';
+import { prisma } from '../lib/prisma';
+import { runMatchForUser } from './matchService';
+import { buildEmailReport } from './emailReport';
+import { sendMatchReport } from './emailService';
 
 interface SyncClientResult {
-  client_id: string
-  first_name: string | null
-  last_name: string | null
-  new_offers_count: number
-  stretch_offers_count: number
-  email_report: string
-  email_sent: boolean
-  error?: string
+  client_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  new_offers_count: number;
+  stretch_offers_count: number;
+  email_report: string;
+  email_sent: boolean;
+  error?: string;
 }
 
 export interface SyncJob {
-  status: 'running' | 'done' | 'error'
-  started_at: string
-  finished_at?: string
-  progress: number
-  total_clients: number
-  processed_clients: number
-  total_new_offers: number
-  clients: SyncClientResult[]
+  status: 'running' | 'done' | 'error';
+  started_at: string;
+  finished_at?: string;
+  progress: number;
+  total_clients: number;
+  processed_clients: number;
+  total_new_offers: number;
+  clients: SyncClientResult[];
 }
 
-const jobs = new Map<string, SyncJob>()
+const jobs = new Map<string, SyncJob>();
 
 export function getJob(jobId: string): SyncJob | undefined {
-  return jobs.get(jobId)
+  return jobs.get(jobId);
 }
 
 export function startSyncJob(agentEmail: string, agentName: string): string {
-  const jobId = randomUUID()
+  const jobId = randomUUID();
   const job: SyncJob = {
     status: 'running',
     started_at: new Date().toISOString(),
@@ -42,48 +42,74 @@ export function startSyncJob(agentEmail: string, agentName: string): string {
     processed_clients: 0,
     total_new_offers: 0,
     clients: [],
-  }
-  jobs.set(jobId, job)
+  };
+  jobs.set(jobId, job);
 
   runJob(job, agentEmail, agentName).catch(err => {
-    job.status = 'error'
-    job.finished_at = new Date().toISOString()
-    console.error('[syncService] runJob failed:', err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : '')
-  })
+    job.status = 'error';
+    job.finished_at = new Date().toISOString();
+    console.error(
+      '[syncService] runJob failed:',
+      err instanceof Error ? err.message : String(err),
+      err instanceof Error ? err.stack : '',
+    );
+  });
 
-  return jobId
+  return jobId;
 }
 
-async function runJob(job: SyncJob, agentEmail: string, agentName: string): Promise<void> {
+async function runJob(
+  job: SyncJob,
+  agentEmail: string,
+  agentName: string,
+): Promise<void> {
   const users = await prisma.user.findMany({
     where: { profile_path: { not: null } },
-    select: { id: true, email: true, first_name: true, last_name: true, profile_path: true },
-  })
+    select: {
+      id: true,
+      email: true,
+      first_name: true,
+      last_name: true,
+      profile_path: true,
+    },
+  });
 
-  job.total_clients = users.length
-  console.log(`[sync] Starting job for ${users.length} users`)
+  job.total_clients = users.length;
+  console.log(`[sync] Starting job for ${users.length} users`);
 
   for (const user of users) {
-    const milestone = ((job.processed_clients + 1) / job.total_clients) * 100
+    const milestone = ((job.processed_clients + 1) / job.total_clients) * 100;
     const easeInterval = setInterval(() => {
-      job.progress += (milestone - job.progress) * 0.1
-    }, 1000)
+      job.progress = Math.round(
+        job.progress + (milestone - job.progress) * 0.1,
+      );
+    }, 3000);
 
     try {
-      const result = await runMatchForUser(user.id, { ai_scoring: true })
+      const result = await runMatchForUser(user.id, { ai_scoring: true });
 
-      const newOffersCount = result.matched.filter(o => o.recommended === true).length
-      const stretchCount = result.stretch_offers.length
-      const email_report = buildEmailReport(result, user)
+      const newOffersCount = result.matched.filter(
+        o => o.recommended === true,
+      ).length;
+      const stretchCount = result.stretch_offers.length;
+      const email_report = buildEmailReport(result, user);
 
-      let email_sent = false
+      let email_sent = false;
       if (user.email) {
         try {
-          await sendMatchReport(agentEmail, agentName, user.email, email_report)
-          email_sent = true
-          console.log(`[sync] Email sent to ${user.email}`)
+          await sendMatchReport(
+            agentEmail,
+            agentName,
+            user.email,
+            email_report,
+          );
+          email_sent = true;
+          console.log(`[sync] Email sent to ${user.email}`);
         } catch (emailErr) {
-          console.error(`[sync] Email failed for ${user.email}:`, emailErr instanceof Error ? emailErr.message : String(emailErr))
+          console.error(
+            `[sync] Email failed for ${user.email}:`,
+            emailErr instanceof Error ? emailErr.message : String(emailErr),
+          );
         }
       }
 
@@ -95,13 +121,15 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
         stretch_offers_count: stretchCount,
         email_report,
         email_sent,
-      })
-      job.total_new_offers += newOffersCount + stretchCount
+      });
+      job.total_new_offers += newOffersCount + stretchCount;
 
-      console.log(`[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch`)
+      console.log(
+        `[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch`,
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[syncService] client failed:', user.id, message)
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[syncService] client failed:', user.id, message);
       job.clients.push({
         client_id: user.id,
         first_name: user.first_name,
@@ -111,15 +139,17 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
         email_report: '',
         email_sent: false,
         error: message,
-      })
+      });
     }
 
-    clearInterval(easeInterval)
-    job.processed_clients++
-    job.progress = Math.round((job.processed_clients / job.total_clients) * 100)
+    clearInterval(easeInterval);
+    job.processed_clients++;
+    job.progress = Math.round(
+      (job.processed_clients / job.total_clients) * 100,
+    );
   }
 
-  job.status = 'done'
-  job.finished_at = new Date().toISOString()
-  console.log(`[sync] Job done. total_new_offers=${job.total_new_offers}`)
+  job.status = 'done';
+  job.finished_at = new Date().toISOString();
+  console.log(`[sync] Job done. total_new_offers=${job.total_new_offers}`);
 }
