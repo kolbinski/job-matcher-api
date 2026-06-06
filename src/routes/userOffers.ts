@@ -14,20 +14,66 @@ const QuerySchema = z.object({
   count_only: z.enum(['true', 'false']).optional(),
 })
 
-async function loadLearningGoals(clientId: string): Promise<string[]> {
+interface SalaryPref {
+  type: string
+  currency: string
+  min: number
+}
+
+interface SalaryEntry {
+  min: number
+  max: number
+  currency: string
+  type: string
+  delta: number
+}
+
+interface ClientProfile {
+  learningGoals: string[]
+  salaryPrefs: SalaryPref[]
+}
+
+async function loadClientProfile(clientId: string): Promise<ClientProfile> {
   const user = await prisma.user.findUnique({
     where: { id: clientId },
     select: { profile_path: true },
   })
-  if (!user?.profile_path) return []
+  if (!user?.profile_path) return { learningGoals: [], salaryPrefs: [] }
   try {
     const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
-      preferences?: { learning_goals?: string[] }
+      preferences?: {
+        learning_goals?: string[]
+        salary?: Array<{ type?: string; currency?: string; min?: number }>
+      }
     }
-    return (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase())
+    return {
+      learningGoals: (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase()),
+      salaryPrefs: (raw.preferences?.salary ?? [])
+        .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null),
+    }
   } catch {
-    return []
+    return { learningGoals: [], salaryPrefs: [] }
   }
+}
+
+function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[]): SalaryEntry[] {
+  if (salaryPrefs.length === 0) return []
+  const types = Array.isArray(employmentTypes)
+    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
+    : []
+  const entries: SalaryEntry[] = []
+  for (const et of types) {
+    const { from, to, currency, type: etType, unit } = et
+    if (from == null || to == null || !currency || !etType) continue
+    const pref = salaryPrefs.find(
+      p => p.type.toLowerCase() === etType.toLowerCase() &&
+           p.currency.toUpperCase() === currency.toUpperCase()
+    )
+    if (!pref) continue
+    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
+    entries.push({ min: from, max: to, currency, type: etType, delta: effectiveTo - pref.min })
+  }
+  return entries
 }
 
 userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
@@ -64,7 +110,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
       where,
       select: { claude_missing_skills: true },
     })
-    const learningGoals = await loadLearningGoals(client_id)
+    const { learningGoals } = await loadClientProfile(client_id)
     const count = learningGoals.length > 0
       ? rows.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))).length
       : rows.length
@@ -73,14 +119,17 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
 
   const userOffers = await prisma.userOffer.findMany({
     where,
-    include: { offer: { select: { title: true, company_name: true, url: true } } },
+    include: {
+      offer: { select: { title: true, company_name: true, url: true, employment_types: true } },
+    },
     orderBy: { matched_at: 'desc' },
   })
+
+  const { learningGoals, salaryPrefs } = await loadClientProfile(client_id)
 
   let result = userOffers
 
   if (has_learning_goals === 'true' && status === 'ai_rejected') {
-    const learningGoals = await loadLearningGoals(client_id)
     if (learningGoals.length > 0) {
       result = result.filter(uo =>
         uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
@@ -104,6 +153,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
       claude_recommended: uo.claude_recommended,
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
+      salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs),
     })),
   })
 })
