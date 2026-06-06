@@ -42,6 +42,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "resend": "^6.12.4",
+    "slugify": "^1.6.9",
     "zod": "^4.4.3"
   },
   "devDependencies": {

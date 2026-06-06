@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
+import slugify from 'slugify'
 import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { generateCV } from '../services/cvGenerator'
@@ -14,6 +15,8 @@ const GenerateCVSchema = z.object({
   client_id: z.string().uuid(),
   offer_text: z.string().min(1),
   cv_language: z.string().min(2),
+  company_name: z.string().optional(),
+  job_title: z.string().optional(),
 })
 
 cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
@@ -25,7 +28,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
 
-  const { client_id, offer_text, cv_language } = parsed.data
+  const { client_id, offer_text, cv_language, company_name, job_title } = parsed.data
   const agentId = req.agent!.id
 
   // Verify client belongs to this agent
@@ -62,10 +65,16 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   }
 
   const html = await generateCV(profileParsed.data, offer_text, cv_language)
-  const filename = `cv-${user.first_name ?? 'candidate'}-${user.last_name ?? ''}-${Date.now()}.pdf`
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
+
+  const opts = { lower: true, strict: true }
+  const parts = [
+    'cv',
+    slugify(user.first_name ?? '', opts),
+    slugify(user.last_name ?? '', opts),
+    slugify(job_title ?? '', opts),
+    slugify(company_name ?? '', opts),
+  ].filter(p => p.length > 0)
+  const filename = parts.join('-') + '.pdf'
 
   res.json({ html, filename })
 })
