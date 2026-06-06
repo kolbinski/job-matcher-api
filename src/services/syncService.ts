@@ -16,6 +16,9 @@ export interface SyncJob {
   status: 'running' | 'done' | 'error'
   started_at: string
   finished_at?: string
+  progress: number
+  total_clients: number
+  processed_clients: number
   total_new_offers: number
   clients: SyncClientResult[]
 }
@@ -31,6 +34,9 @@ export function startSyncJob(): string {
   const job: SyncJob = {
     status: 'running',
     started_at: new Date().toISOString(),
+    progress: 0,
+    total_clients: 0,
+    processed_clients: 0,
     total_new_offers: 0,
     clients: [],
   }
@@ -39,7 +45,7 @@ export function startSyncJob(): string {
   runJob(job).catch(err => {
     job.status = 'error'
     job.finished_at = new Date().toISOString()
-    console.error('[sync] Job failed:', err)
+    console.error('[syncService] runJob failed:', err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : '')
   })
 
   return jobId
@@ -51,6 +57,7 @@ async function runJob(job: SyncJob): Promise<void> {
     select: { id: true, email: true, first_name: true, last_name: true },
   })
 
+  job.total_clients = users.length
   console.log(`[sync] Starting job for ${users.length} users`)
 
   for (const user of users) {
@@ -73,7 +80,7 @@ async function runJob(job: SyncJob): Promise<void> {
       console.log(`[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error(`[sync] ${user.email} failed:`, message)
+      console.error('[syncService] client failed:', user.id, message)
       job.clients.push({
         client_id: user.id,
         first_name: user.first_name,
@@ -84,6 +91,9 @@ async function runJob(job: SyncJob): Promise<void> {
         error: message,
       })
     }
+
+    job.processed_clients++
+    job.progress = Math.round((job.processed_clients / job.total_clients) * 100)
   }
 
   job.status = 'done'
