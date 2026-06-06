@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma'
 import { runMatchForUser } from './matchService'
+import { buildEmailReport } from './emailReport'
 
 interface SyncClientResult {
   client_id: string
@@ -54,7 +55,7 @@ export function startSyncJob(): string {
 async function runJob(job: SyncJob): Promise<void> {
   const users = await prisma.user.findMany({
     where: { profile_path: { not: null } },
-    select: { id: true, email: true, first_name: true, last_name: true },
+    select: { id: true, email: true, first_name: true, last_name: true, profile_path: true },
   })
 
   job.total_clients = users.length
@@ -73,7 +74,7 @@ async function runJob(job: SyncJob): Promise<void> {
         last_name: user.last_name,
         new_offers_count: newOffersCount,
         stretch_offers_count: stretchCount,
-        email_report: '',
+        email_report: buildEmailReport(result, user),
       })
       job.total_new_offers += newOffersCount + stretchCount
 
