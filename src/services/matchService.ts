@@ -114,6 +114,32 @@ export async function runMatchForUser(
   console.log(`[preFilter] skill_excluded: ${skillExcluded.length}`)
   console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 
+  // ── 6b. Write pre_filter_rejected rows immediately ────────────────────────
+  // Inserting before Claude so seenIds on the next sync excludes these offers,
+  // preventing re-evaluation of already-rejected offers.
+  const now = new Date()
+  const preFilterRows = rejectedForDB.map(({ offer_id, reason }) => ({
+    user_id: userId,
+    offer_id,
+    status: 'pre_filter_rejected',
+    rejection_reason: reason || null,
+    claude_matched_reasons: [] as string[],
+    claude_missing_skills: [] as string[],
+    matched_at: now,
+    updated_at: now,
+  }))
+  if (preFilterRows.length > 0) {
+    const validPreFilterRows = preFilterRows.filter(r => r.offer_id != null)
+    const chunkSize = 100
+    for (let i = 0; i < validPreFilterRows.length; i += chunkSize) {
+      await prisma.userOffer.createMany({
+        data: validPreFilterRows.slice(i, i + chunkSize),
+        skipDuplicates: true,
+      })
+    }
+    console.log(`[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`)
+  }
+
   // ── 7. Sort + post-score filters ───────────────────────────────────────────
   pairs.sort((a, b) => sortOrder === 'asc' ? a.offer.score - b.offer.score : b.offer.score - a.offer.score)
   const filteredPairs = applyPostScoreFilters(pairs, opts?.filters)
@@ -165,20 +191,7 @@ export async function runMatchForUser(
     }
   }
 
-  // ── 9. Write user_offers ───────────────────────────────────────────────────
-  const now = new Date()
-
-  const preFilterRows = rejectedForDB.map(({ offer_id, reason }) => ({
-    user_id: userId,
-    offer_id,
-    status: 'pre_filter_rejected',
-    rejection_reason: reason || null,
-    claude_matched_reasons: [] as string[],
-    claude_missing_skills: [] as string[],
-    matched_at: now,
-    updated_at: now,
-  }))
-
+  // ── 9. Write claude-scored user_offers ────────────────────────────────────
   const claudeRows = filteredPairs
     .filter(p => p.offer.recommended !== null)
     .map(p => {
@@ -199,32 +212,20 @@ export async function runMatchForUser(
       }
     })
 
-  const rowsToInsert = [...preFilterRows, ...claudeRows]
-  const validRows = rowsToInsert.filter(r => r.offer_id != null)
-  if (validRows.length !== rowsToInsert.length) {
-    console.warn('[match] Skipped', rowsToInsert.length - validRows.length, 'rows with null offer_id')
-  }
-  if (validRows.length > 0) {
-    // In-memory dedup by offer_id — safety net; preFilterRows and claudeRows are
-    // disjoint by construction but this guards against any future overlap.
-    const seenOfferIds = new Set<string>()
-    const uniqueRows = validRows.filter(r => {
-      if (seenOfferIds.has(r.offer_id)) return false
-      seenOfferIds.add(r.offer_id)
-      return true
-    })
-    if (uniqueRows.length !== validRows.length) {
-      console.warn('[match] Deduplicated', validRows.length - uniqueRows.length, 'rows with duplicate offer_id')
+  if (claudeRows.length > 0) {
+    const validClaudeRows = claudeRows.filter(r => r.offer_id != null)
+    if (validClaudeRows.length !== claudeRows.length) {
+      console.warn('[match] Skipped', claudeRows.length - validClaudeRows.length, 'claude rows with null offer_id')
     }
-    console.log('[match] Writing to user_offers:', uniqueRows.length, 'rows for user:', userId)
+    console.log('[match] Writing to user_offers:', validClaudeRows.length, 'claude rows for user:', userId)
     const chunkSize = 100
     let totalWritten = 0
-    for (let i = 0; i < uniqueRows.length; i += chunkSize) {
-      const chunk = uniqueRows.slice(i, i + chunkSize)
+    for (let i = 0; i < validClaudeRows.length; i += chunkSize) {
+      const chunk = validClaudeRows.slice(i, i + chunkSize)
       const chunkResult = await prisma.userOffer.createMany({ data: chunk, skipDuplicates: true })
       totalWritten += chunkResult.count
     }
-    console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(uniqueRows.length / chunkSize), 'chunks')
+    console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(validClaudeRows.length / chunkSize), 'chunks')
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────

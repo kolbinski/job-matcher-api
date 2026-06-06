@@ -91,7 +91,7 @@ async function runJob(
       job.progress = Math.round(
         job.progress + (milestone - job.progress) * 0.1,
       );
-    }, 8000);
+    }, 15_000);
 
     try {
       const result = await runMatchForUser(user.id, { ai_scoring: true });
