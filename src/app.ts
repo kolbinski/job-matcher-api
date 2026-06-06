@@ -10,6 +10,8 @@ import { agentAuthRouter } from './routes/agentAuth'
 import { clientsRouter } from './routes/clients'
 import { cvGenerateRouter } from './routes/cvGenerate'
 import { offerMatchesRouter } from './routes/offerMatches'
+import { userOffersRouter } from './routes/userOffers'
+import { syncRouter } from './routes/sync'
 
 export const app = express()
 
@@ -22,7 +24,11 @@ app.use('/v1/pipeline', pipelineRouter)
 app.use('/v1/auth/agent', agentAuthRouter)
 app.use('/v1/clients', clientsRouter)
 app.use('/v1/offer-matches', offerMatchesRouter)
-// 120s timeout for CV generation (Puppeteer + Claude)
+app.use('/v1/user-offers', userOffersRouter)
+// 300s timeout for sync (runs match pipeline per client)
+app.use('/v1/sync', (req, _res, next) => { req.setTimeout(300_000); next() })
+app.use('/v1/sync', syncRouter)
+// 120s timeout for CV generation (Claude)
 app.use('/v1/cv', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/cv', cvGenerateRouter)
 
