@@ -6,6 +6,7 @@ import { AppError } from '../lib/errors'
 import { applyPreFilters } from './redFlagFilter'
 import { scoreOffer } from './scoring'
 import { evaluateOffers } from './claudeEvaluator'
+import type { ClaudeEvaluation } from './claudeEvaluator'
 import { normalizeProfile } from './profileParser'
 import { CandidateProfileSchema } from '../types/profile'
 import type { MatchResponse, MatchedOffer, UnmatchedOffer, OfferSalary, MatchFilters, StretchOffer } from '../types/match'
@@ -124,19 +125,29 @@ export async function runMatchForUser(
   if (doAiScoring && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
   } else if (doAiScoring) {
-    const offersToEvaluate = filteredPairs.slice(0, 100)
-    console.log(`[match] Sending ${offersToEvaluate.length} offers to Claude (capped at 100, total filtered: ${filteredPairs.length})`)
-    const claudeResults = await evaluateOffers(profile, offersToEvaluate.map(p => p.original))
-    console.log('[match] Claude response received:', claudeResults?.length, 'evaluations')
-    if (claudeResults) {
-      aiScoring = true
-      claudeEvaluationsCount = claudeResults.length
+    const BATCH_SIZE = 100
+    const totalBatches = Math.ceil(filteredPairs.length / BATCH_SIZE)
+    const claudeBySlug = new Map<string, ClaudeEvaluation>()
 
-      const claudeBySlug = new Map(
-        claudeResults
-          .filter(ev => ev.offer_index >= 0 && ev.offer_index < offersToEvaluate.length)
-          .map(ev => [offersToEvaluate[ev.offer_index].original.slug, ev])
-      )
+    for (let i = 0; i < filteredPairs.length; i += BATCH_SIZE) {
+      const batch = filteredPairs.slice(i, i + BATCH_SIZE)
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1
+      console.log(`[match] Claude batch ${batchNum}/${totalBatches} (${batch.length} offers)`)
+      const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
+      if (batchResults) {
+        for (const ev of batchResults) {
+          if (ev.offer_index >= 0 && ev.offer_index < batch.length) {
+            claudeBySlug.set(batch[ev.offer_index].original.slug, ev)
+          }
+        }
+      } else {
+        console.warn(`[match] Claude batch ${batchNum}/${totalBatches} returned null — skipping`)
+      }
+    }
+
+    if (claudeBySlug.size > 0) {
+      aiScoring = true
+      claudeEvaluationsCount = claudeBySlug.size
 
       for (const p of filteredPairs) {
         const claudeData = claudeBySlug.get(p.original.slug)

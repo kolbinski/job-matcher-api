@@ -32,7 +32,11 @@ export function getJob(jobId: string): SyncJob | undefined {
   return jobs.get(jobId);
 }
 
-export function startSyncJob(agentId: string, agentEmail: string, agentName: string): string {
+export function startSyncJob(
+  agentId: string,
+  agentEmail: string,
+  agentName: string,
+): string {
   const jobId = randomUUID();
   const job: SyncJob = {
     status: 'running',
@@ -87,7 +91,7 @@ async function runJob(
       job.progress = Math.round(
         job.progress + (milestone - job.progress) * 0.1,
       );
-    }, 3000);
+    }, 8000);
 
     try {
       const result = await runMatchForUser(user.id, { ai_scoring: true });

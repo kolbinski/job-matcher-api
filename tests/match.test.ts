@@ -1,8 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
 import { app } from '../src/app'
 import { prisma } from '../src/lib/prisma'
+
+vi.mock('../src/services/claudeEvaluator', () => ({
+  evaluateOffers: vi.fn((_profile: unknown, offers: unknown[]) =>
+    Promise.resolve(
+      offers.map((_, i) => ({
+        offer_index: i,
+        score: 75,
+        rank: i + 1,
+        matched_reasons: ['Good tech match'] as string[],
+        missing_skills: [] as string[],
+        salary_comparison: 'Within range',
+        role_fit: 'Strong match for the candidate profile.',
+        recommended: true,
+      }))
+    )
+  ),
+}))
 
 afterAll(async () => {
   await prisma.$disconnect()
@@ -93,7 +110,7 @@ describe('POST /v1/match', () => {
       expect(typeof offer.recommended).toBe('boolean')
       expect(typeof offer.role_fit).toBe('string')
     }
-  }, 300_000) // matches TIMEOUT_MS in claudeEvaluator.ts
+  }, 30_000)
 
   it('writes an api_calls row on success', async () => {
     await request(app)
