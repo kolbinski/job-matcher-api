@@ -41,7 +41,6 @@ export async function evaluateOffers(
 
   try {
     const prompt = buildPrompt(profile, offers);
-    console.log('[claudeEvaluator] Prompt preview:', prompt);
 
     const response = await anthropic.messages.create(
       {
@@ -72,7 +71,6 @@ export async function evaluateOffers(
     if (block?.type !== 'text') return null;
 
     const rawResponse = block.text;
-    console.log('[claudeEvaluator] Raw response:', rawResponse);
 
     const cleaned = stripCodeFences(rawResponse);
 

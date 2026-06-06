@@ -85,7 +85,6 @@ export async function runMatchForUser(
       if (result.rejectedByRedFlags)       rejectCounts.red_flags++
       if (result.rejectedByCity) {
         rejectCounts.city++
-        console.log(`[matcher] pre-filter rejected (city): ${offer.title} @ ${offer.city ?? 'unknown'}`)
       }
       rejectedForDB.push({ offer_id: offer.id, reason: result.reasons[0] ?? '' })
       if (includeUnmatched) unmatched.push(toUnmatchedOffer(offer, result.reasons))
