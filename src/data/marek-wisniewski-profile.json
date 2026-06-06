@@ -323,8 +323,6 @@
       "agency"
     ],
     "work_model": [
-      "remote",
-      "hybrid",
       "office"
     ],
     "max_office_days_per_week": 2,
