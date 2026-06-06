@@ -4,6 +4,12 @@ import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { sendMatchReport } from './emailService';
 
+const isTestUser = (email: string): boolean =>
+  email.includes('test') ||
+  email.includes('@jobmatche') ||
+  email.includes('@jobmatcl') ||
+  email.endsWith('.test');
+
 interface SyncClientResult {
   client_id: string;
   first_name: string | null;
@@ -105,8 +111,12 @@ async function runJob(
       const email_report = buildEmailReport(result, user);
 
       if (user.email) {
-        await sendMatchReport(agentEmail, agentName, user.email, email_report);
-        console.log(`[sync] Email sent to ${user.email}`);
+        if (isTestUser(user.email)) {
+          console.log(`[sync] Skipping email for test user: ${user.email}`);
+        } else {
+          await sendMatchReport(agentEmail, agentName, user.email, email_report);
+          console.log(`[sync] Email sent to ${user.email}`);
+        }
       }
 
       job.clients.push({
