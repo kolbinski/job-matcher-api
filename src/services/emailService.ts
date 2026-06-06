@@ -12,7 +12,7 @@ export async function sendMatchReport(
   await resend.emails.send({
     from: `${fromName} @ Homo Digital <${fromEmail}>`,
     to: toEmail,
-    subject: `Your job report — ${new Date().toLocaleDateString('pl-PL')}`,
+    subject: `Your job report — ${new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' })}`,
     text: emailReport,
   })
 }

@@ -104,6 +104,9 @@ export interface StretchOffer {
   role_fit: string | null
   missing_skills: string[]
   url: string | null
+  city: string | null
+  remote: boolean
+  hybrid: boolean
 }
 
 export interface MatchResponse {

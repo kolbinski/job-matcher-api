@@ -11,12 +11,13 @@ interface SalaryPref {
 export function buildEmailReport(
   result: MatchResponse,
   user: { first_name: string | null; profile_path: string | null },
-  totalOffersInDb: number,
 ): string {
   const { matched, stretch_offers: stretch } = result
+  const newlyProcessed = result.meta.total_offers_scanned
 
   let salaryPrefs: SalaryPref[] = []
   let learningGoals: string[] = []
+  let officeCities: string[] = []
 
   if (user.profile_path) {
     try {
@@ -24,34 +25,42 @@ export function buildEmailReport(
         preferences?: {
           salary?: Array<{ type?: string; currency?: string; min?: number }>
           learning_goals?: string[]
+          office_location_cities?: string[]
         }
       }
       salaryPrefs = (raw.preferences?.salary ?? [])
         .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null)
       learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase())
-    } catch { /* profile unreadable — skip salary labels */ }
+      officeCities = (raw.preferences?.office_location_cities ?? []).map(c => c.toLowerCase())
+    } catch { /* profile unreadable — skip labels */ }
   }
 
   const recommended = matched.filter(o => o.recommended === true)
   const considerApplying = matched.filter(o => o.recommended !== true && o.score >= 30)
 
   const firstName = user.first_name ?? 'there'
-  const newOffersCount = recommended.length + stretch.length
 
   const lines: string[] = []
 
-  lines.push(`Hi ${firstName}! Here are your job matches for ${todayDDMMYYYY()}`)
-  lines.push(`Found ${newOffersCount} new offers for you (from ${totalOffersInDb} offers in database)`)
+  lines.push(`Hi ${firstName}!`)
+  lines.push('')
+  lines.push('')
+  lines.push(`Today I scanned ${newlyProcessed} new offers for you.`)
 
   // Section 1 — Apply now
   const dedupedRecommended = dedupeByTitleCompany(recommended, o => o.company, o => o.score)
-  lines.push(`\n\n\n🎯 Apply now (${dedupedRecommended.length} offers)\n`)
-  if (dedupedRecommended.length === 0) {
+  const sortedRecommended = sortByDeltaThenCity(
+    dedupedRecommended, salaryPrefs, officeCities,
+    o => o.salaries ?? (o.salary ? [o.salary] : []),
+    o => o.city,
+  )
+  lines.push(`\n\n\n🎯 Apply now (${sortedRecommended.length} offers)\n`)
+  if (sortedRecommended.length === 0) {
     lines.push('  No strongly recommended offers this scan.')
   } else {
-    for (const offer of dedupedRecommended) {
+    for (const offer of sortedRecommended) {
       const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs)
-      lines.push(`${offer.score}/100  ${titleAtCompany(offer.title, offer.company)}`)
+      lines.push(`${offer.score}/100  ${titleAtCompany(offer.title, offer.company, offer.remote, offer.hybrid, offer.city)}`)
       for (const line of salaryLines) lines.push(`   ${line}`)
       if (offer.role_fit) lines.push(`   ${offer.role_fit}`)
       if (offer.url) lines.push(`   🔗 ${offer.url}`)
@@ -61,14 +70,19 @@ export function buildEmailReport(
 
   // Section 2 — Level up & earn more
   const dedupedStretch = dedupeByTitleCompany(stretch, o => o.company_name)
-  lines.push(`\n\n\n📚 Level up & earn more (${dedupedStretch.length} offers)\n`)
-  if (dedupedStretch.length === 0) {
+  const sortedStretch = sortByDeltaThenCity(
+    dedupedStretch, salaryPrefs, officeCities,
+    o => o.salaries ?? (o.salary ? [o.salary] : []),
+    o => o.city,
+  )
+  lines.push(`\n\n\n📚 Level up & earn more (${sortedStretch.length} offers)\n`)
+  if (sortedStretch.length === 0) {
     lines.push('  No stretch offers this scan.')
   } else {
-    for (const offer of dedupedStretch) {
+    for (const offer of sortedStretch) {
       const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs)
       const learningGoalHits = offer.missing_skills.filter(sk => learningGoals.includes(sk.toLowerCase()))
-      lines.push(titleAtCompany(offer.title, offer.company_name))
+      lines.push(titleAtCompany(offer.title, offer.company_name, offer.remote, offer.hybrid, offer.city))
       for (const line of salaryLines) lines.push(`   ${line}`)
       if (offer.role_fit) lines.push(`   ${offer.role_fit}`)
       if (learningGoalHits.length > 0) lines.push(`   Skills to learn: ${learningGoalHits.join(', ')}`)
@@ -91,37 +105,39 @@ export function buildEmailReport(
     if (matching.length === 0) return true
     return matching.some(s => { const min = resolveMin(s, salaryPrefs); return min === null || s.to >= min })
   })
+  const sortedConsider = sortByDeltaThenCity(
+    visibleConsider, salaryPrefs, officeCities,
+    o => o.salaries ?? (o.salary ? [o.salary] : []),
+    o => o.city,
+  )
 
-  lines.push(`\n\n\n💡 Worth considering (${visibleConsider.length} offers)\n`)
-  if (visibleConsider.length === 0) {
+  lines.push(`\n\n\n💡 Worth considering (${sortedConsider.length} offers)\n`)
+  if (sortedConsider.length === 0) {
     lines.push('  No additional offers above score threshold.')
   } else {
-    for (const offer of visibleConsider) {
+    for (const offer of sortedConsider) {
       const salaryLines = formatSalaryEmailLines(offer.salaries ?? (offer.salary ? [offer.salary] : []), salaryPrefs)
-      lines.push(titleAtCompany(offer.title, offer.company))
+      lines.push(titleAtCompany(offer.title, offer.company, offer.remote, offer.hybrid, offer.city))
       for (const line of salaryLines) lines.push(`   ${line}`)
+      if (offer.role_fit) lines.push(`   ${offer.role_fit}`)
       if (offer.url) lines.push(`   🔗 ${offer.url}`)
       lines.push('')
     }
   }
 
-  lines.push('\n\n\nNext scan: tomorrow morning')
+  lines.push('\n\n\nNext scan: tomorrow')
 
   return lines.join('\n')
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayDDMMYYYY(): string {
-  const d = new Date()
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${dd}/${mm}/${d.getFullYear()}`
-}
-
-function titleAtCompany(title: string, company: string): string {
-  if (/ @ .+$/.test(title.trimEnd())) return title.trimEnd()
-  return `${title} @ ${company}`
+function titleAtCompany(title: string, company: string, remote: boolean, hybrid: boolean, city: string | null): string {
+  const base = / @ .+$/.test(title.trimEnd()) ? title.trimEnd() : `${title} @ ${company}`
+  if (remote) return `${base} / remote`
+  if (hybrid && city) return `${base} / hybrid ${city}`
+  if (!remote && !hybrid && city) return `${base} / office ${city}`
+  return base
 }
 
 function dedupeByTitleCompany<T extends { title: string }>(
@@ -138,6 +154,44 @@ function dedupeByTitleCompany<T extends { title: string }>(
     }
   }
   return [...best.values()]
+}
+
+function getMaxDelta(salaries: OfferSalary[], prefs: SalaryPref[]): number | null {
+  if (prefs.length === 0) return null
+  const deltas: number[] = []
+  for (const s of salaries) {
+    const pref = prefs.find(p =>
+      p.type.toLowerCase() === s.type.toLowerCase() &&
+      p.currency.toUpperCase() === s.currency.toUpperCase()
+    )
+    if (!pref) continue
+    const effectiveTo = s.unit?.toLowerCase() === 'day' ? s.to * 20 : s.to
+    deltas.push(effectiveTo - pref.min)
+  }
+  return deltas.length > 0 ? Math.max(...deltas) : null
+}
+
+function sortByDeltaThenCity<T>(
+  offers: T[],
+  prefs: SalaryPref[],
+  officeCities: string[],
+  getSalaries: (o: T) => OfferSalary[],
+  getCity: (o: T) => string | null,
+): T[] {
+  return [...offers].sort((a, b) => {
+    const aDelta = getMaxDelta(getSalaries(a), prefs)
+    const bDelta = getMaxDelta(getSalaries(b), prefs)
+    if (aDelta !== null && bDelta !== null) return bDelta - aDelta
+    if (aDelta !== null) return -1
+    if (bDelta !== null) return 1
+    const aCity = getCity(a)?.toLowerCase() ?? null
+    const bCity = getCity(b)?.toLowerCase() ?? null
+    const aIdx = aCity !== null ? officeCities.indexOf(aCity) : -1
+    const bIdx = bCity !== null ? officeCities.indexOf(bCity) : -1
+    const aOrder = aIdx === -1 ? Infinity : aIdx
+    const bOrder = bIdx === -1 ? Infinity : bIdx
+    return aOrder - bOrder
+  })
 }
 
 function resolveMin(salary: OfferSalary | null, prefs: SalaryPref[]): number | null {

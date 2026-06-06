@@ -310,6 +310,9 @@ export async function buildStretchOffers(
       role_fit: row.claude_role_fit,
       missing_skills: row.claude_missing_skills,
       url: offer.url,
+      city: offer.city ?? null,
+      remote: offer.workplace_type === 'remote',
+      hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
     }]
   })
 }

@@ -60,7 +60,6 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
     select: { id: true, email: true, first_name: true, last_name: true, profile_path: true },
   })
 
-  const totalOffersInDb = await prisma.offer.count()
   job.total_clients = users.length
   console.log(`[sync] Starting job for ${users.length} users`)
 
@@ -75,7 +74,7 @@ async function runJob(job: SyncJob, agentEmail: string, agentName: string): Prom
 
       const newOffersCount = result.matched.filter(o => o.recommended === true).length
       const stretchCount = result.stretch_offers.length
-      const email_report = buildEmailReport(result, user, totalOffersInDb)
+      const email_report = buildEmailReport(result, user)
 
       let email_sent = false
       if (user.email) {
