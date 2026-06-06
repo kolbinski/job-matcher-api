@@ -195,10 +195,27 @@ export async function runMatchForUser(
     console.warn('[match] Skipped', rowsToInsert.length - validRows.length, 'rows with null offer_id')
   }
   if (validRows.length > 0) {
-    console.log('[match] Writing to user_offers:', validRows.length, 'rows for user:', userId)
+    // In-memory dedup by offer_id — safety net; preFilterRows and claudeRows are
+    // disjoint by construction but this guards against any future overlap.
+    const seenOfferIds = new Set<string>()
+    const uniqueRows = validRows.filter(r => {
+      if (seenOfferIds.has(r.offer_id)) return false
+      seenOfferIds.add(r.offer_id)
+      return true
+    })
+    if (uniqueRows.length !== validRows.length) {
+      console.warn('[match] Deduplicated', validRows.length - uniqueRows.length, 'rows with duplicate offer_id')
+    }
+    console.log('[match] Writing to user_offers:', uniqueRows.length, 'rows for user:', userId)
     try {
-      const result = await prisma.userOffer.createMany({ data: validRows, skipDuplicates: true })
-      console.log('[match] user_offers written:', result.count, 'rows')
+      const chunkSize = 100
+      let totalWritten = 0
+      for (let i = 0; i < uniqueRows.length; i += chunkSize) {
+        const chunk = uniqueRows.slice(i, i + chunkSize)
+        const chunkResult = await prisma.userOffer.createMany({ data: chunk, skipDuplicates: true })
+        totalWritten += chunkResult.count
+      }
+      console.log('[match] user_offers written:', totalWritten, 'rows in', Math.ceil(uniqueRows.length / chunkSize), 'chunks')
     } catch (err) {
       console.error('[match] user_offers insert FAILED:', err)
     }
