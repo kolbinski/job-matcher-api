@@ -23,6 +23,7 @@ export interface SyncJob {
   total_clients: number;
   processed_clients: number;
   total_new_offers: number;
+  total_offers_scanned: number;
   clients: SyncClientResult[];
 }
 
@@ -45,6 +46,7 @@ export function startSyncJob(
     total_clients: 0,
     processed_clients: 0,
     total_new_offers: 0,
+    total_offers_scanned: 0,
     clients: [],
   };
   jobs.set(jobId, job);
@@ -117,9 +119,10 @@ async function runJob(
         email_sent: !!user.email,
       });
       job.total_new_offers += newOffersCount + stretchCount;
+      job.total_offers_scanned += result.meta.total_offers_scanned;
 
       console.log(
-        `[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch`,
+        `[sync] ${user.email}: ${newOffersCount} new offers, ${stretchCount} stretch, ${result.meta.total_offers_scanned} scanned`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
