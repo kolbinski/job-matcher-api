@@ -179,24 +179,35 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     }
   }
 
+  const mapped = result.map(uo => ({
+    user_offer_id: uo.id,
+    offer_title: uo.offer.title,
+    offer_company: uo.offer.company_name,
+    offer_url: uo.offer.url,
+    claude_score: uo.claude_score,
+    claude_role_fit: uo.claude_role_fit,
+    claude_matched_reasons: uo.claude_matched_reasons,
+    claude_missing_skills: uo.claude_missing_skills,
+    claude_recommended: uo.claude_recommended,
+    rejection_reason: uo.rejection_reason,
+    matched_at: uo.matched_at,
+    salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs),
+    source: uo.offer.source,
+  }))
+
+  mapped.sort((a, b) => {
+    const aMax = a.salary.length > 0 ? Math.max(...a.salary.map(s => s.delta)) : null
+    const bMax = b.salary.length > 0 ? Math.max(...b.salary.map(s => s.delta)) : null
+    if (aMax === null && bMax === null) return 0
+    if (aMax === null) return 1
+    if (bMax === null) return -1
+    return bMax - aMax
+  })
+
   res.json({
     client_id,
     status,
-    count: result.length,
-    offers: result.map(uo => ({
-      user_offer_id: uo.id,
-      offer_title: uo.offer.title,
-      offer_company: uo.offer.company_name,
-      offer_url: uo.offer.url,
-      claude_score: uo.claude_score,
-      claude_role_fit: uo.claude_role_fit,
-      claude_matched_reasons: uo.claude_matched_reasons,
-      claude_missing_skills: uo.claude_missing_skills,
-      claude_recommended: uo.claude_recommended,
-      rejection_reason: uo.rejection_reason,
-      matched_at: uo.matched_at,
-      salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs),
-      source: uo.offer.source,
-    })),
+    count: mapped.length,
+    offers: mapped,
   })
 })

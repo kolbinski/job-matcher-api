@@ -11,6 +11,7 @@ export interface PreFilterResult {
   rejectedBySeniority: boolean
   rejectedByRedFlags: boolean
   rejectedByLanguage: boolean
+  rejectedByCity: boolean
 }
 
 // Maps canonical language name → detection keywords (all lowercase).
@@ -47,6 +48,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   let rejectedBySeniority = false
   let rejectedByRedFlags = false
   let rejectedByLanguage = false
+  let rejectedByCity = false
 
   // ── 1. Workplace filter ────────────────────────────────────────────────────
   const acceptedModels = (profile.preferences?.work_model ?? []).map(m => m.toLowerCase())
@@ -160,6 +162,24 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
     }
   }
 
+  // ── 7. Office location city filter ────────────────────────────────────────
+  const officeCities = profile.preferences?.office_location_cities ?? []
+  if (officeCities.length > 0) {
+    const raw = offer.workplace_type?.toLowerCase() ?? null
+    const normalizedType = raw === 'partly_remote' ? 'hybrid' : raw
+    // Remote offers have no location restriction — skip city check entirely
+    if (normalizedType === 'office' || normalizedType === 'hybrid') {
+      const offerCity = offer.city?.trim().toLowerCase() ?? null
+      const allowed = officeCities.map(c => c.trim().toLowerCase())
+      if (offerCity === null || !allowed.includes(offerCity)) {
+        reasons.push(
+          `Offer requires office presence in ${offer.city ?? 'unknown city'} but candidate only accepts: ${officeCities.join(', ')}`
+        )
+        rejectedByCity = true
+      }
+    }
+  }
+
   return {
     pass: reasons.length === 0,
     reasons,
@@ -169,6 +189,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
     rejectedBySeniority,
     rejectedByRedFlags,
     rejectedByLanguage,
+    rejectedByCity,
   }
 }
 

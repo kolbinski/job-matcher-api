@@ -6,6 +6,7 @@
     "linkedin": "linkedin.com/in/marek-wisniewski-dev",
     "github": "github.com/marek-wisniewski",
     "location": {
+      "country_code": "pl",
       "city": "Warszawa",
       "latitude": 52.2297,
       "longitude": 21.0122,
@@ -357,6 +358,12 @@
     "markets": [
       "poland",
       "europe"
+    ],
+    "office_location_cities": [
+      "Gdańsk",
+      "Gdansk",
+      "Kraków",
+      "Bruksela"
     ],
     "learning_goals": [
       "python",

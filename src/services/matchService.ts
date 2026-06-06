@@ -72,7 +72,7 @@ export async function runMatchForUser(
   const rejectedForDB: { offer_id: string; reason: string }[] = []
   const pairs: MatchedPair[] = []
   const unmatched: UnmatchedOffer[] = []
-  const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, language: 0, red_flags: 0 }
+  const rejectCounts = { workplace: 0, employment_type: 0, salary: 0, seniority: 0, language: 0, red_flags: 0, city: 0 }
 
   for (const offer of offers) {
     const result = applyPreFilters(profile, offer)
@@ -83,6 +83,10 @@ export async function runMatchForUser(
       if (result.rejectedBySeniority)      rejectCounts.seniority++
       if (result.rejectedByLanguage)       rejectCounts.language++
       if (result.rejectedByRedFlags)       rejectCounts.red_flags++
+      if (result.rejectedByCity) {
+        rejectCounts.city++
+        console.log(`[matcher] pre-filter rejected (city): ${offer.title} @ ${offer.city ?? 'unknown'}`)
+      }
       rejectedForDB.push({ offer_id: offer.id, reason: result.reasons[0] ?? '' })
       if (includeUnmatched) unmatched.push(toUnmatchedOffer(offer, result.reasons))
       continue
@@ -106,6 +110,7 @@ export async function runMatchForUser(
   console.log(`[preFilter] seniority: rejected ${rejectCounts.seniority}`)
   console.log(`[preFilter] language: rejected ${rejectCounts.language}`)
   console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`)
+  console.log(`[preFilter] city: rejected ${rejectCounts.city}`)
   console.log(`[preFilter] skill_excluded: ${skillExcluded.length}`)
   console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 

@@ -124,6 +124,7 @@ const PreferencesSchema = z.object({
   company_type_excluded: z.array(z.string()).optional(),
   work_model: z.array(z.string()).optional(),
   max_office_days_per_week: z.number().int().nonnegative().optional(),
+  office_location_cities: z.array(z.string()).optional(),
   team_size: SalaryRangeSchema.optional(),
   industries: z.array(z.string()).optional(),
   employment_type: z.array(z.string()).optional(),
