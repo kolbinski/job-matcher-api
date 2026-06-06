@@ -65,13 +65,15 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
   }
 
   const decodedUrl = decodeURIComponent(parsed.data.url)
+  console.log('[offer-matches] decoded url:', decodedUrl)
   // req.agent is guaranteed by validateAgentJwt middleware
   const agentId = req.agent!.id
 
   const offer = await prisma.offer.findFirst({
-    where: { url: decodedUrl, is_active: true },
-    select: { id: true, employment_types: true, source: true },
+    where: { url: decodedUrl },
+    select: { id: true, employment_types: true, source: true, is_active: true },
   })
+  console.log('[offer-matches] offer found:', offer?.id ?? 'NOT FOUND', '| is_active:', offer?.is_active ?? 'N/A')
 
   if (!offer) {
     return res.json({ matches: [] })
@@ -82,10 +84,17 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
     select: { user_id: true },
   })
   const clientIds = agentClients.map(c => c.user_id)
+  console.log('[offer-matches] agent clients:', clientIds.length)
 
   if (clientIds.length === 0) {
     return res.json({ matches: [] })
   }
+
+  const allUserOffers = await prisma.userOffer.findMany({
+    where: { offer_id: offer.id, user_id: { in: clientIds } },
+    select: { id: true, status: true, claude_score: true },
+  })
+  console.log('[offer-matches] user_offers for this offer:', allUserOffers.length, '| statuses:', allUserOffers.map(u => u.status).join(',') || 'none')
 
   const userOffers = await prisma.userOffer.findMany({
     where: {
