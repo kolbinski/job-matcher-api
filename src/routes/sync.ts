@@ -74,25 +74,35 @@ syncRouter.get('/progress', (req, res) => {
     return
   }
 
-  const interval = setInterval(() => {
+  const keepalive = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': keepalive\n\n')
+    }
+  }, 15000)
+
+  const pollInterval = setInterval(() => {
     try {
       const current = getJob(job_id)
       if (!current) {
-        clearInterval(interval)
+        clearInterval(pollInterval)
+        clearInterval(keepalive)
         res.end()
         return
       }
       res.write(`data: ${JSON.stringify(current)}\n\n`)
       if (current.status === 'done' || current.status === 'error') {
-        clearInterval(interval)
+        clearInterval(pollInterval)
+        clearInterval(keepalive)
         res.end()
       }
     } catch {
-      clearInterval(interval)
+      clearInterval(pollInterval)
+      clearInterval(keepalive)
     }
   }, 500)
 
   req.on('close', () => {
-    clearInterval(interval)
+    clearInterval(keepalive)
+    clearInterval(pollInterval)
   })
 })
