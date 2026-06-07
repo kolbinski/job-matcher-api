@@ -235,33 +235,91 @@
   },
   "technologies": {
     "Frontend": [
-      { "name": "react", "since": 2016 },
-      { "name": "next.js", "since": 2016 },
-      { "name": "vue.js", "since": 2018 }
+      {
+        "name": "react",
+        "since": 2016
+      },
+      {
+        "name": "next.js",
+        "since": 2016
+      },
+      {
+        "name": "vue.js",
+        "since": 2018
+      }
     ],
     "Backend": [
-      { "name": "node.js", "since": 2018 },
-      { "name": "express", "since": 2018 },
-      { "name": "nest.js", "since": 2021 },
-      { "name": "graphql", "since": 2020 }
+      {
+        "name": "node.js",
+        "since": 2018
+      },
+      {
+        "name": "express",
+        "since": 2018
+      },
+      {
+        "name": "nest.js",
+        "since": 2021
+      },
+      {
+        "name": "graphql",
+        "since": 2020
+      }
     ],
     "Databases": [
-      { "name": "postgresql", "since": 2016 },
-      { "name": "elasticsearch", "since": 2018 },
-      { "name": "redis", "since": 2020 }
+      {
+        "name": "postgresql",
+        "since": 2016
+      },
+      {
+        "name": "elasticsearch",
+        "since": 2018
+      },
+      {
+        "name": "redis",
+        "since": 2020
+      }
     ],
     "Cloud & Infra": [
-      { "name": "docker", "since": 2021 },
-      { "name": "kubernetes", "since": 2021 },
-      { "name": "aws", "since": 2021 }
+      {
+        "name": "docker",
+        "since": 2021
+      },
+      {
+        "name": "kubernetes",
+        "since": 2021
+      },
+      {
+        "name": "aws",
+        "since": 2021
+      }
     ],
     "Languages": [
-      { "name": "typescript", "since": 2018 }
+      {
+        "name": "typescript",
+        "since": 2018
+      }
     ],
     "Mobile": [
-      { "name": "react native", "since": 2022 }
+      {
+        "name": "react native",
+        "since": 2022
+      }
     ]
   },
+  "certifications": [
+    {
+      "name": "AWS Certified Solutions Architect – Associate",
+      "issuer": "Amazon Web Services",
+      "date": "2022-11",
+      "url": "https://www.credly.com/badges/..."
+    },
+    {
+      "name": "Certified Kubernetes Administrator (CKA)",
+      "issuer": "Cloud Native Computing Foundation",
+      "date": "2023-03"
+    }
+  ],
   "red_flags": [
     {
       "category": "company_type",
