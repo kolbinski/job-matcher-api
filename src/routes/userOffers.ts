@@ -26,6 +26,7 @@ interface SalaryEntry {
   currency: string
   type: string
   delta: number
+  delta_normalized: number
 }
 
 interface ClientProfile {
@@ -56,7 +57,17 @@ async function loadClientProfile(clientId: string): Promise<ClientProfile> {
   }
 }
 
-function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[]): SalaryEntry[] {
+async function loadExchangeRates(): Promise<Record<string, number>> {
+  const setting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
+  if (!setting) return {}
+  try {
+    return JSON.parse(setting.value) as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
+function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[], rates: Record<string, number>): SalaryEntry[] {
   if (salaryPrefs.length === 0) return []
   const types = Array.isArray(employmentTypes)
     ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
@@ -71,7 +82,9 @@ function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[])
     )
     if (!pref) continue
     const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
-    entries.push({ min: from, max: to, currency, type: etType, delta: effectiveTo - pref.min })
+    const delta = effectiveTo - pref.min
+    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
+    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
   }
   return entries
 }
@@ -167,7 +180,10 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     orderBy: { matched_at: 'desc' },
   })
 
-  const { learningGoals, salaryPrefs } = await loadClientProfile(client_id)
+  const [{ learningGoals, salaryPrefs }, rates] = await Promise.all([
+    loadClientProfile(client_id),
+    loadExchangeRates(),
+  ])
 
   let result = userOffers
 
@@ -191,13 +207,13 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     claude_recommended: uo.claude_recommended,
     rejection_reason: uo.rejection_reason,
     matched_at: uo.matched_at,
-    salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs),
+    salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
     source: uo.offer.source,
   }))
 
   mapped.sort((a, b) => {
-    const aMax = a.salary.length > 0 ? Math.max(...a.salary.map(s => s.delta)) : null
-    const bMax = b.salary.length > 0 ? Math.max(...b.salary.map(s => s.delta)) : null
+    const aMax = a.salary.length > 0 ? Math.max(...a.salary.map(s => s.delta_normalized)) : null
+    const bMax = b.salary.length > 0 ? Math.max(...b.salary.map(s => s.delta_normalized)) : null
     if (aMax === null && bMax === null) return 0
     if (aMax === null) return 1
     if (bMax === null) return -1
