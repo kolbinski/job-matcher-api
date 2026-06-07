@@ -1,5 +1,9 @@
+import fs from 'fs'
+import path from 'path'
 import type { CandidateProfile } from '../types/profile'
 import { env } from '../lib/env'
+
+const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html')
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
 
@@ -114,29 +118,35 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
 
   // Own projects section — only if Claude selected any
   const showOwnProjects = (profileProjects ?? []).length > 0 && cv.own_projects.length > 0
-  const ownProjHtml = showOwnProjects
-    ? cv.own_projects
-        .map(p => {
-          const url = p.url
-          const nameInner = url
-            ? `<a href="${url.startsWith('http') ? '' : 'https://'}${esc(url)}">${esc(p.name)}</a>`
-            : esc(p.name)
-          const techsHtml = p.technologies.length
-            ? `<div class="own-project-techs">${p.technologies.map(t => esc(t)).join(' · ')}</div>`
-            : ''
-          return `<div class="own-project">
+  const ownProjectsSection = showOwnProjects
+    ? `<h2>Projekty własne</h2>
+  <div class="own-projects">
+  ${cv.own_projects
+    .map(p => {
+      const url = p.url
+      const nameInner = url
+        ? `<a href="${url.startsWith('http') ? '' : 'https://'}${esc(url)}">${esc(p.name)}</a>`
+        : esc(p.name)
+      const techsHtml = p.technologies.length
+        ? `<div class="own-project-techs">${p.technologies.map(t => esc(t)).join(' · ')}</div>`
+        : ''
+      return `<div class="own-project">
           <div class="own-project-name">${nameInner}</div>
           ${techsHtml}
           <div class="own-project-desc">${esc(p.description)}</div>
         </div>`
-        })
-        .join('\n')
+    })
+    .join('\n')}
+  </div>`
     : ''
 
   // Skills — highlighted first, then profile categories
-  const highlightedPillsHtml = cv.highlighted_skills
-    .map(s => `<span class="pill highlighted">${esc(s)}</span>`)
-    .join('')
+  const highlightedSkillsHtml = cv.highlighted_skills.length
+    ? `<div class="highlighted-row">
+    <div class="highlighted-label">Kluczowe dla tej roli</div>
+    <div class="skills-pills">${cv.highlighted_skills.map(s => `<span class="pill highlighted">${esc(s)}</span>`).join('')}</div>
+  </div>`
+    : ''
 
   const categorySkillsHtml = Object.entries(technologies)
     .filter(([, techs]) => techs.length > 0)
@@ -168,7 +178,9 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
     .join(', ')
 
   // Certifications
-  const certHtml = cv.certifications
+  const certificationsSection = cv.certifications.length
+    ? `<h2>Certyfikaty</h2>
+  ${cv.certifications
     .map(c => {
       const meta = [c.issuer, c.date ? fmtDate(c.date) : null].filter(Boolean).map(s => esc(s!)).join(', ')
       return `<div class="cert-item">
@@ -176,98 +188,25 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
         ${meta ? `<span class="cert-meta"> — ${meta}</span>` : ''}
       </div>`
     })
-    .join('\n')
+    .join('\n')}`
+    : ''
 
-  return `<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CV — ${esc(basic_info.first_name)} ${esc(basic_info.last_name)}</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; line-height: 1.55; }
-.cv { max-width: 820px; margin: 0 auto; padding: 40px 48px; }
-h1 { font-size: 26px; font-weight: 700; color: #111; letter-spacing: -0.3px; }
-.target-role { font-size: 14px; color: #2563eb; font-weight: 600; margin: 3px 0 8px; }
-.contacts { font-size: 12px; color: #555; display: flex; flex-wrap: wrap; }
-.contacts a { color: #555; text-decoration: none; }
-.sep { margin: 0 8px; color: #ccc; }
-h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #2563eb; border-bottom: 1.5px solid #e5e7eb; padding-bottom: 4px; margin: 24px 0 12px; }
-.job { margin-bottom: 18px; }
-.job-header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-.job-title { font-weight: 600; font-size: 13.5px; }
-.job-company { color: #555; font-size: 13px; }
-.job-dates { margin-left: auto; font-size: 12px; color: #666; white-space: nowrap; }
-.job-meta { width: 100%; font-size: 11.5px; color: #777; margin-top: 1px; }
-.project { margin: 0 0 10px 12px; padding-left: 10px; border-left: 2px solid #e5e7eb; }
-.project-name { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
-.project-techs { font-size: 11.5px; color: #2563eb; margin-bottom: 4px; }
-.project-achievements { margin: 0; padding-left: 16px; }
-.project-achievements li { font-size: 12.5px; color: #333; margin-bottom: 2px; }
-.own-projects { display: flex; flex-direction: column; gap: 10px; }
-.own-project-name { font-weight: 600; font-size: 13px; }
-.own-project-name a { color: #2563eb; text-decoration: none; }
-.own-project-techs { font-size: 11.5px; color: #2563eb; margin: 2px 0; }
-.own-project-desc { font-size: 12.5px; color: #333; }
-.highlighted-row { margin-bottom: 10px; }
-.highlighted-label { font-size: 11px; font-weight: 700; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
-.skills-row { margin-bottom: 8px; }
-.skills-label { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
-.skills-pills { display: flex; flex-wrap: wrap; gap: 4px; }
-.pill { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 8px; font-size: 12px; color: #374151; }
-.pill.highlighted { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; font-weight: 500; }
-.education-item { margin-bottom: 10px; }
-.edu-institution { font-weight: 600; font-size: 13px; }
-.edu-degree { color: #333; font-size: 12.5px; }
-.edu-dates { font-size: 12px; color: #666; margin-top: 1px; }
-.cert-item { margin-bottom: 5px; font-size: 12.5px; }
-.cert-name { font-weight: 500; }
-.cert-meta { color: #666; }
-@media print {
-  .cv { padding: 20px 24px; }
-  h2 { margin-top: 16px; }
-  a { color: inherit !important; text-decoration: none !important; }
-}
-</style>
-</head>
-<body>
-<div class="cv">
-  <header>
-    <h1>${esc(basic_info.first_name)} ${esc(basic_info.last_name)}</h1>
-    <div class="target-role">${esc(cv.target_role)}</div>
-    <div class="contacts">${contactsHtml}</div>
-  </header>
+  const fullName = `${esc(basic_info.first_name)} ${esc(basic_info.last_name)}`
+  const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8')
 
-  <h2>Podsumowanie</h2>
-  <p>${esc(cv.summary)}</p>
-
-  <h2>Doświadczenie</h2>
-  ${expHtml}
-
-  ${showOwnProjects ? `<h2>Projekty własne</h2>
-  <div class="own-projects">
-  ${ownProjHtml}
-  </div>` : ''}
-
-  <h2>Umiejętności</h2>
-  ${cv.highlighted_skills.length ? `<div class="highlighted-row">
-    <div class="highlighted-label">Kluczowe dla tej roli</div>
-    <div class="skills-pills">${highlightedPillsHtml}</div>
-  </div>` : ''}
-  ${categorySkillsHtml}
-
-  <h2>Wykształcenie</h2>
-  ${eduHtml}
-
-  <h2>Języki</h2>
-  <p>${langsText}</p>
-
-  ${cv.certifications.length ? `<h2>Certyfikaty</h2>
-  ${certHtml}` : ''}
-</div>
-</body>
-</html>`
+  return template
+    .replace('{{CV_TITLE}}', fullName)
+    .replace('{{FULL_NAME}}', fullName)
+    .replace('{{TARGET_ROLE}}', esc(cv.target_role))
+    .replace('{{CONTACTS}}', contactsHtml)
+    .replace('{{SUMMARY}}', esc(cv.summary))
+    .replace('{{EXPERIENCE}}', expHtml)
+    .replace('{{OWN_PROJECTS_SECTION}}', ownProjectsSection)
+    .replace('{{HIGHLIGHTED_SKILLS}}', highlightedSkillsHtml)
+    .replace('{{CATEGORY_SKILLS}}', categorySkillsHtml)
+    .replace('{{EDUCATION}}', eduHtml)
+    .replace('{{LANGUAGES}}', langsText)
+    .replace('{{CERTIFICATIONS_SECTION}}', certificationsSection)
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
