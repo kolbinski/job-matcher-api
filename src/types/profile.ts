@@ -108,6 +108,9 @@ const SoftSkillSchema = z.object({
 
 const CertificationSchema = z.object({
   name: z.string(),
+  issuer: z.string().optional(),
+  date: z.string().optional(),
+  url: z.string().optional(),
   status: z.string().optional(),
   planned_date: z.string().optional(),
   issued_date: z.string().optional(),
