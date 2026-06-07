@@ -21,6 +21,11 @@ const BasicInfoSchema = z.object({
   experience_since: z.number().int().optional(),
   languages: z.array(z.string()).optional(),
   job_search_status: z.string().optional(),
+  experience_in_country_markets: z.array(z.string()).optional(),
+  experience_in_industry: z.array(z.string()).optional(),
+  english_level: z.string().optional(),
+  cv_summary_bullets: z.array(z.string()).optional(),
+  soft_skills: z.array(z.string()).optional(),
 })
 
 const SalaryRangeSchema = z.object({

@@ -19,7 +19,20 @@
       "polish",
       "english"
     ],
-    "job_search_status": "actively_looking"
+    "job_search_status": "actively_looking",
+    "experience_in_country_markets": ["pl", "de"],
+    "experience_in_industry": ["fintech", "proptech", "e-commerce"],
+    "english_level": "C1",
+    "cv_summary_bullets": [
+      "10+ years building fullstack and distributed systems at scale",
+      "Led cross-functional teams of 3-6 engineers in fintech and proptech",
+      "Track record of measurable impact: 91% latency reduction, 12,000 tx/min throughput"
+    ],
+    "soft_skills": [
+      "Comfortable leading technical decisions in ambiguous early-stage environments",
+      "Strong written communicator — documented APIs used by 47 partners",
+      "Bias toward end-to-end ownership over handoffs"
+    ]
   },
   "education": [
     {

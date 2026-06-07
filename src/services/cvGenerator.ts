@@ -282,6 +282,11 @@ export async function generateCV(
       last_name: profile.basic_info.last_name,
       experience_level: profile.basic_info.experience_level,
       experience_since: profile.basic_info.experience_since,
+      experience_in_country_markets: profile.basic_info.experience_in_country_markets,
+      experience_in_industry: profile.basic_info.experience_in_industry,
+      english_level: profile.basic_info.english_level,
+      cv_summary_bullets: profile.basic_info.cv_summary_bullets,
+      soft_skills: profile.basic_info.soft_skills,
     },
     work_experience: profile.work_experience ?? [],
     own_projects: profile.own_projects ?? [],
@@ -300,7 +305,7 @@ ${offerText.slice(0, 3000)}
 Return ONLY valid JSON (no markdown, no code fences, no explanation) matching this exact structure:
 {
   "target_role": "job title tailored to this offer",
-  "summary": "2-3 sentence professional summary in ${cvLanguage} tailored to this offer",
+  "summary": "2-3 sentence professional summary in ${cvLanguage} tailored to this offer. Use cv_summary_bullets as inspiration. Highlight experience_in_industry and experience_in_country_markets where relevant. Weave soft_skills naturally into prose — do not list them verbatim.",
   "highlighted_skills": ["skill1", "skill2"],
   "work_experience": [
     {
