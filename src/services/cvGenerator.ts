@@ -8,12 +8,20 @@ const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html')
 // ─── Date formatting ──────────────────────────────────────────────────────────
 
 const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru']
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function fmtDate(raw: string | null | undefined): string {
-  if (!raw) return 'obecnie'
+function fmtDate(raw: string | null | undefined, lang: string): string {
+  const isPolish = lang.toLowerCase().startsWith('pol')
+  if (!raw) return isPolish ? 'obecnie' : 'present'
   const [year, mm] = raw.split('-')
   const m = parseInt(mm ?? '1', 10)
-  return `${MONTHS_PL[m - 1] ?? ''} ${year}`.trim()
+  const months = isPolish ? MONTHS_PL : MONTHS_EN
+  return `${months[m - 1] ?? ''} ${year}`.trim()
+}
+
+function fmtYear(raw: string | null | undefined): string {
+  if (!raw) return ''
+  return raw.split('-')[0] ?? ''
 }
 
 function esc(s: string): string {
@@ -66,7 +74,7 @@ interface CvContent {
 
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
-function buildHtml(cv: CvContent, profile: CandidateProfile): string {
+function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string): string {
   const { basic_info, education, own_projects: profileProjects, technologies } = profile
 
   // Header contacts
@@ -108,7 +116,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
         <div class="job-header">
           <span class="job-title">${esc(job.title)}</span>
           <span class="job-company">@ ${esc(job.company)}</span>
-          <span class="job-dates">${fmtDate(job.date_from)} – ${fmtDate(job.date_to)}</span>
+          <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${fmtDate(job.date_to, cvLanguage)}</span>
           ${meta ? `<span class="job-meta">${meta}</span>` : ''}
         </div>
         ${projHtml}
@@ -123,15 +131,14 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
   <div class="own-projects">
   ${cv.own_projects
     .map(p => {
-      const url = p.url
-      const nameInner = url
-        ? `<a href="${url.startsWith('http') ? '' : 'https://'}${esc(url)}">${esc(p.name)}</a>`
-        : esc(p.name)
+      const urlSpan = p.url
+        ? ` <span style="font-weight:400; color:#4a4a4a; font-size:12px;">· ${esc(p.url)}</span>`
+        : ''
       const techsHtml = p.technologies.length
         ? `<div class="own-project-techs">${p.technologies.map(t => esc(t)).join(' · ')}</div>`
         : ''
       return `<div class="own-project">
-          <div class="own-project-name">${nameInner}</div>
+          <div class="own-project-name">${esc(p.name)}${urlSpan}</div>
           ${techsHtml}
           <div class="own-project-desc">${esc(p.description)}</div>
         </div>`
@@ -161,14 +168,16 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
 
   // Education
   const eduHtml = (education ?? [])
-    .map(
-      e =>
-        `<div class="education-item">
-        <div class="edu-institution">${esc(e.institution)}</div>
+    .map(e => {
+      const dateRange = [fmtYear(e.date_from), fmtYear(e.date_to)].filter(Boolean).join(' – ')
+      return `<div class="education-item">
+        <div style="display:flex; justify-content:space-between;">
+          <span class="edu-institution">${esc(e.institution)}</span>
+          <span class="edu-dates">${dateRange}</span>
+        </div>
         ${e.degree || e.field ? `<div class="edu-degree">${[e.degree, e.field].filter(Boolean).map(s => esc(s!)).join(', ')}</div>` : ''}
-        <div class="edu-dates">${fmtDate(e.date_from)} – ${fmtDate(e.date_to)}</div>
-      </div>`,
-    )
+      </div>`
+    })
     .join('\n')
 
   // Languages
@@ -182,7 +191,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
     ? `<h2>Certyfikaty</h2>
   ${cv.certifications
     .map(c => {
-      const meta = [c.issuer, c.date ? fmtDate(c.date) : null].filter(Boolean).map(s => esc(s!)).join(', ')
+      const meta = [c.issuer, c.date ? fmtDate(c.date, cvLanguage) : null].filter(Boolean).map(s => esc(s!)).join(', ')
       return `<div class="cert-item">
         <span class="cert-name">${esc(c.name)}</span>
         ${meta ? `<span class="cert-meta"> — ${meta}</span>` : ''}
@@ -310,5 +319,5 @@ Rules:
     .trim()
 
   const cv = JSON.parse(raw) as CvContent
-  return buildHtml(cv, profile)
+  return buildHtml(cv, profile, cvLanguage)
 }

@@ -46,8 +46,11 @@ h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacin
 .cert-name { font-weight: 500; color: #1a1a1a; }
 .cert-meta { color: #4a4a4a; }
 @media print {
-  .cv { padding: 20px 24px; }
+  body { margin: 15mm 0; }
+  .cv { padding: 0 48px; }
   h2 { margin-top: 16px; }
+  .job { page-break-inside: avoid; }
+  .project { page-break-inside: avoid; }
   a { color: inherit !important; text-decoration: none !important; }
 }
 </style>
