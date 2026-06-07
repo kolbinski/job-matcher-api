@@ -130,6 +130,10 @@ userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
     data: { status: parsed.data.status },
   })
 
+  await prisma.userOfferStatus.create({
+    data: { user_offer_id: id, status: parsed.data.status },
+  })
+
   return res.json(updated)
 })
 

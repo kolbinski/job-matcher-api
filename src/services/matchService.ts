@@ -137,6 +137,15 @@ export async function runMatchForUser(
       })
     }
     console.log(`[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`)
+    const newPreFilter = await prisma.userOffer.findMany({
+      where: { user_id: userId, status: 'pre_filter_rejected', matched_at: now },
+      select: { id: true },
+    })
+    if (newPreFilter.length > 0) {
+      await prisma.userOfferStatus.createMany({
+        data: newPreFilter.map(r => ({ user_offer_id: r.id, status: 'pre_filter_rejected' })),
+      })
+    }
   }
 
   // ── 7. Sort + post-score filters ───────────────────────────────────────────
@@ -207,7 +216,16 @@ export async function runMatchForUser(
       if (batchRows.length > 0) {
         const writeResult = await prisma.userOffer.createMany({ data: batchRows, skipDuplicates: true })
         console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
-        if (writeResult.count > 0) aiScoring = true
+        if (writeResult.count > 0) {
+          aiScoring = true
+          const inserted = await prisma.userOffer.findMany({
+            where: { user_id: userId, offer_id: { in: batchRows.map(r => r.offer_id) }, matched_at: now },
+            select: { id: true, status: true },
+          })
+          await prisma.userOfferStatus.createMany({
+            data: inserted.map(r => ({ user_offer_id: r.id, status: r.status })),
+          })
+        }
       }
     }
 
