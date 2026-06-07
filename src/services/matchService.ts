@@ -167,6 +167,7 @@ export async function runMatchForUser(
       }
 
       // Apply evaluations to this batch's pairs in-place
+      const cvLanguageByIndex = new Map<number, 'pl' | 'en'>()
       for (const ev of batchResults) {
         if (ev.offer_index < 0 || ev.offer_index >= batch.length) continue
         const p = batch[ev.offer_index]
@@ -177,13 +178,14 @@ export async function runMatchForUser(
         p.offer.salary_comparison = ev.salary_comparison
         p.offer.role_fit = ev.role_fit
         p.offer.recommended = ev.recommended
+        cvLanguageByIndex.set(ev.offer_index, ev.offer_language)
         claudeEvaluationsCount++
       }
 
       // Insert this batch's rows immediately
       const batchRows = batch
         .filter(p => p.offer.recommended !== null && p.original.id != null)
-        .map(p => {
+        .map((p, idx) => {
           const isPendingApply = p.offer.recommended === true && p.offer.role_fit !== null
           return {
             user_id: userId,
@@ -196,6 +198,7 @@ export async function runMatchForUser(
             claude_missing_skills: p.offer.missing_skills,
             claude_salary_comparison: p.offer.salary_comparison ?? null,
             claude_recommended: p.offer.recommended,
+            cv_language: cvLanguageByIndex.get(idx) ?? 'en',
             matched_at: now,
             updated_at: now,
           }

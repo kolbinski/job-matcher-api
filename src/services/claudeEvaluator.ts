@@ -24,6 +24,7 @@ export interface ClaudeEvaluation {
   salary_comparison: string;
   role_fit: string;
   recommended: boolean;
+  offer_language: 'pl' | 'en';
 }
 
 // Evaluates all pre-filtered offers in a single Claude call.
@@ -188,6 +189,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     '  salary_comparison (string): one phrase comparing offered salary to the target',
     '  role_fit (string): one sentence on role alignment',
     '  recommended (boolean): true if candidate should apply',
+    '  offer_language ("pl" | "en"): detected language of the offer title and requirements',
     '',
   ];
 
@@ -262,6 +264,10 @@ function validateEvaluation(
   const recommended =
     typeof obj['recommended'] === 'boolean' ? obj['recommended'] : false;
 
+  const rawLang = obj['offer_language'];
+  const offer_language: 'pl' | 'en' =
+    rawLang === 'pl' ? 'pl' : 'en';
+
   return {
     offer_index,
     score,
@@ -271,5 +277,6 @@ function validateEvaluation(
     salary_comparison,
     role_fit,
     recommended,
+    offer_language,
   };
 }

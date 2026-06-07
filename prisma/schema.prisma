@@ -108,6 +108,7 @@ model UserOffer {
   claude_missing_skills    String[]
   claude_salary_comparison String?
   claude_recommended       Boolean?
+  cv_language              String?
   matched_at               DateTime @default(now())
   updated_at               DateTime @updatedAt
 

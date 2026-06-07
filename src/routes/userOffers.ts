@@ -245,6 +245,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     matched_at: uo.matched_at,
     salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
     source: uo.offer.source,
+    cv_language: uo.cv_language,
   }))
 
   mapped.sort((a, b) => {
