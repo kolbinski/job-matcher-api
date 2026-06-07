@@ -150,13 +150,13 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
         .join('\n')
 
       const profileJob = (profile.work_experience ?? []).find(pj => pj.company === job.company)
-      const workModelStr = formatWorkModel(job.work_model, profileJob?.location)
+      const workModelStr = formatWorkModel(profileJob?.work_model, profileJob?.location)
       const companyParts = [esc(job.company), job.industry ? esc(job.industry) : null, workModelStr || null].filter((x): x is string => x !== null)
       return `<div class="job">
         <div class="job-header">
-          <span class="job-title">${esc(job.title)}</span>
-          <span class="job-company">@ ${companyParts.join(' · ')}</span>
+          <span class="job-company">${companyParts.join(' · ')}</span>
           <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${fmtDate(job.date_to, cvLanguage)}</span>
+          <span class="job-title">${esc(job.title)}</span>
         </div>
         ${projHtml}
       </div>`
