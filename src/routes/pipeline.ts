@@ -12,7 +12,7 @@ const PIPELINE_STATUSES = [
   'pending_apply',
   'applied',
   'pending_reply_from_recruiter',
-  'rejected',
+  'recruiter_rejected',
   'offer_received',
   'accepted',
   'client_withdrawn',

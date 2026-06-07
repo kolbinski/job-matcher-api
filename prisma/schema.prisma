@@ -93,7 +93,7 @@ model Offer {
 }
 
 // status values: pre_filter_rejected | ai_rejected | pending_apply | applied |
-//   pending_reply_from_recruiter | rejected | offer_received | accepted |
+//   pending_reply_from_recruiter | recruiter_rejected | offer_received | accepted |
 //   client_withdrawn | offer_expired | agent_withdrawn
 model UserOffer {
   id                       String   @id @default(uuid())
