@@ -222,6 +222,11 @@ export async function syncOffers(cleanupEnabled = true): Promise<{ fetched: numb
     syncNfj(existingSlugs, fetchedAt, nfjMaxPages),
   ])
 
+  await Promise.all([
+    prisma.offerFetch.create({ data: { source: 'justjoin', new_upserts_count: jjResult.inserted, fetched_at: fetchedAt } }),
+    prisma.offerFetch.create({ data: { source: 'nofluffjobs', new_upserts_count: nfjResult.inserted, fetched_at: fetchedAt } }),
+  ])
+
   const totalFetched  = jjResult.fetched  + nfjResult.fetched
   const totalInserted = jjResult.inserted + nfjResult.inserted
   const totalUpdated  = jjResult.updated  + nfjResult.updated
