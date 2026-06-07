@@ -233,68 +233,35 @@
       ]
     }
   },
-  "technologies": [
-    {
-      "name": "typescript",
-      "since": 2018
-    },
-    {
-      "name": "react",
-      "since": 2016
-    },
-    {
-      "name": "next.js",
-      "since": 2016
-    },
-    {
-      "name": "node.js",
-      "since": 2018
-    },
-    {
-      "name": "express",
-      "since": 2018
-    },
-    {
-      "name": "nest.js",
-      "since": 2021
-    },
-    {
-      "name": "graphql",
-      "since": 2020
-    },
-    {
-      "name": "postgresql",
-      "since": 2016
-    },
-    {
-      "name": "docker",
-      "since": 2021
-    },
-    {
-      "name": "kubernetes",
-      "since": 2021
-    },
-    {
-      "name": "aws",
-      "since": 2021
-    },
-    {
-      "name": "elasticsearch",
-      "since": 2018
-    },
-    {
-      "name": "redis",
-      "since": 2020
-    },
-    {
-      "name": "react native",
-      "since": 2022
-    },
-    {
-      "name": "vue.js",
-      "since": 2018
-    }
-  ],
+  "technologies": {
+    "Frontend": [
+      { "name": "react", "since": 2016 },
+      { "name": "next.js", "since": 2016 },
+      { "name": "vue.js", "since": 2018 }
+    ],
+    "Backend": [
+      { "name": "node.js", "since": 2018 },
+      { "name": "express", "since": 2018 },
+      { "name": "nest.js", "since": 2021 },
+      { "name": "graphql", "since": 2020 }
+    ],
+    "Databases": [
+      { "name": "postgresql", "since": 2016 },
+      { "name": "elasticsearch", "since": 2018 },
+      { "name": "redis", "since": 2020 }
+    ],
+    "Cloud & Infra": [
+      { "name": "docker", "since": 2021 },
+      { "name": "kubernetes", "since": 2021 },
+      { "name": "aws", "since": 2021 }
+    ],
+    "Languages": [
+      { "name": "typescript", "since": 2018 }
+    ],
+    "Mobile": [
+      { "name": "react native", "since": 2022 }
+    ]
+  },
   "red_flags": [
     {
       "category": "company_type",

@@ -147,7 +147,7 @@ export const CandidateProfileSchema = z.object({
   education: z.array(EducationSchema).optional(),
   work_experience: z.array(WorkExperienceSchema).optional(),
   own_projects: z.array(OwnProjectSchema).optional(),
-  technologies: z.array(TechnologySchema),
+  technologies: z.record(z.string(), z.array(TechnologySchema)),
   soft_skills: z.array(SoftSkillSchema).optional(),
   certifications: z.array(CertificationSchema).optional(),
   preferences: PreferencesSchema,

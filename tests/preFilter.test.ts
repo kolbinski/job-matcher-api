@@ -41,7 +41,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
 function makeProfile(overrides: Partial<CandidateProfile> = {}): CandidateProfile {
   return {
     basic_info: { full_name: 'Test User' },
-    technologies: [],
+    technologies: {},
     preferences: {},
     red_flags: [],
     ...overrides,

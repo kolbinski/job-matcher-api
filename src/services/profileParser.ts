@@ -12,7 +12,7 @@ export interface NormalizedProfile {
 
 export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
   const techs = new Set(
-    profile.technologies.map(t => t.name.toLowerCase().trim())
+    Object.values(profile.technologies).flat().map(t => t.name.toLowerCase().trim())
   )
 
   const salaryMinPln =

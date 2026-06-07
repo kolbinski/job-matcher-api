@@ -153,7 +153,7 @@ export function stripCodeFences(raw: string): string {
 function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
   // Profile — only essential fields sent to Claude (no employment_history, education, personal_projects)
   const name = profile.basic_info.full_name;
-  const techs = profile.technologies.map(t => t.name).join(', ');
+  const techs = Object.values(profile.technologies).flat().map(t => t.name).join(', ');
   const salaryPref = profile.preferences?.salary?.find(
     s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN',
   );

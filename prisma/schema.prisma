@@ -9,6 +9,14 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model Skill {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  created_at DateTime @default(now())
+
+  @@map("skills")
+}
+
 model Settings {
   id         String   @id @default(uuid())
   key        String   @unique

@@ -50,7 +50,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
 function makeProfile(overrides: Partial<CandidateProfile> = {}): CandidateProfile {
   return {
     basic_info: { full_name: 'Test User' },
-    technologies: [],
+    technologies: {},
     preferences: {},
     red_flags: [],
     ...overrides,
@@ -98,24 +98,24 @@ describe('filterRedFlags', () => {
 
 describe('scoreOffer — techScore', () => {
   it('returns 100 when candidate has all required skills', () => {
-    const profile = makeProfile({ technologies: [{ name: 'React' }, { name: 'TypeScript' }, { name: 'Node.js' }] })
+    const profile = makeProfile({ technologies: { Frontend: [{ name: 'React' }], Backend: [{ name: 'Node.js' }], Languages: [{ name: 'TypeScript' }] } })
     const result = score(profile, makeOffer({ required_skills: ['react', 'typescript', 'node.js'] }))
     expect(result.techScore).toBe(100)
     expect(result.missingSkills).toHaveLength(0)
   })
 
   it('returns 0 when candidate has none of the required skills', () => {
-    const result = score(makeProfile({ technologies: [] }), makeOffer({ required_skills: ['react', 'typescript', 'graphql'] }))
+    const result = score(makeProfile({ technologies: {} }), makeOffer({ required_skills: ['react', 'typescript', 'graphql'] }))
     expect(result.techScore).toBe(0)
     expect(result.missingSkills).toHaveLength(3)
   })
 
   it('returns 50 when offer has no required skills', () => {
-    expect(score(makeProfile({ technologies: [] }), makeOffer({ required_skills: [] })).techScore).toBe(50)
+    expect(score(makeProfile({ technologies: {} }), makeOffer({ required_skills: [] })).techScore).toBe(50)
   })
 
   it('identifies missing skills correctly', () => {
-    const profile = makeProfile({ technologies: [{ name: 'React' }] })
+    const profile = makeProfile({ technologies: { Frontend: [{ name: 'React' }] } })
     const result = score(profile, makeOffer({ required_skills: ['react', 'typescript', 'graphql'] }))
     expect(result.missingSkills).toContain('typescript')
     expect(result.missingSkills).toContain('graphql')
@@ -123,7 +123,7 @@ describe('scoreOffer — techScore', () => {
   })
 
   it('weighted score is well below 50 when tech score is 0', () => {
-    const result = score(makeProfile({ technologies: [] }), makeOffer({ required_skills: ['react', 'typescript'] }))
+    const result = score(makeProfile({ technologies: {} }), makeOffer({ required_skills: ['react', 'typescript'] }))
     // tech 0*0.40 + salary 50*0.25 + remote 70*0.20 + expLevel 75*0.15 = 0+12.5+14+11.25 = 37.75
     expect(result.score).toBeLessThan(45)
   })
@@ -195,7 +195,7 @@ describe('skillMatches', () => {
 
 describe('techScore — compound skill matching', () => {
   it('matches "react (typescript)" offer skill when candidate has "react"', () => {
-    const profile = makeProfile({ technologies: [{ name: 'react' }, { name: 'node.js' }] })
+    const profile = makeProfile({ technologies: { Frontend: [{ name: 'react' }, { name: 'node.js' }] } })
     const offer = makeOffer({ required_skills: ['react (typescript)', 'node.js'] })
     const result = score(profile, offer)
     expect(result.techScore).toBe(100)
@@ -203,14 +203,14 @@ describe('techScore — compound skill matching', () => {
   })
 
   it('case-insensitive: "React" offer skill matches candidate "react"', () => {
-    const profile = makeProfile({ technologies: [{ name: 'react' }] })
+    const profile = makeProfile({ technologies: { Frontend: [{ name: 'react' }] } })
     const offer = makeOffer({ required_skills: ['React'] })
     const result = score(profile, offer)
     expect(result.techScore).toBe(100)
   })
 
   it('compound unmatched skill appears in missingSkills', () => {
-    const profile = makeProfile({ technologies: [{ name: 'react' }] })
+    const profile = makeProfile({ technologies: { Frontend: [{ name: 'react' }] } })
     const offer = makeOffer({ required_skills: ['python (django)', 'react'] })
     const result = score(profile, offer)
     expect(result.missingSkills).toContain('python (django)')
