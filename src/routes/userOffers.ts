@@ -12,6 +12,7 @@ const QuerySchema = z.object({
   status: z.string().min(1),
   has_learning_goals: z.enum(['true', 'false']).optional(),
   count_only: z.enum(['true', 'false']).optional(),
+  source: z.string().optional(),
 })
 
 interface SalaryPref {
@@ -142,7 +143,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     })
   }
 
-  const { client_id, status, has_learning_goals, count_only } = parsed.data
+  const { client_id, status, has_learning_goals, count_only, source } = parsed.data
   const agentId = req.agent!.id
 
   const agentClient = await prisma.agentClient.findUnique({
@@ -157,7 +158,11 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
     return res.json({ client_id, status, count: 0, offers: [] })
   }
 
-  const where = { user_id: client_id, status }
+  const where = {
+    user_id: client_id,
+    status,
+    ...(source && source !== 'all' ? { offer: { source } } : {}),
+  }
 
   // count_only=true without has_learning_goals: pure DB count, no data transfer
   if (count_only === 'true' && has_learning_goals !== 'true') {
