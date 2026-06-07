@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import slugify from 'slugify'
 import type { CandidateProfile } from '../types/profile'
 import { env } from '../lib/env'
 
@@ -151,10 +152,15 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
 
       const profileJob = (profile.work_experience ?? []).find(pj => pj.company === job.company)
       const workModelStr = formatWorkModel(profileJob?.work_model, profileJob?.location)
-      const companyParts = [esc(job.company), job.industry ? esc(job.industry) : null, workModelStr || null].filter((x): x is string => x !== null)
+      const metaParts = [job.industry ? esc(job.industry) : null, workModelStr || null].filter((x): x is string => x !== null)
+      const metaHtml = metaParts.length
+        ? `<span class="job-company-meta"> · ${metaParts.join(' · ')}</span>`
+        : ''
       return `<div class="job">
         <div class="job-header">
-          <span class="job-company">${companyParts.join(' · ')}</span>
+          <span>
+            <span class="job-company-name">${esc(job.company)}</span>${metaHtml}
+          </span>
           <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${fmtDate(job.date_to, cvLanguage)}</span>
           <span class="job-title">${esc(job.title)}</span>
         </div>
@@ -243,7 +249,6 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8')
 
   return template
-    .replace('{{CV_TITLE}}', fullName)
     .replace('{{FULL_NAME}}', fullName)
     .replace('{{TARGET_ROLE}}', esc(cv.target_role))
     .replace('{{CONTACTS}}', contactsHtml)
@@ -268,7 +273,9 @@ export async function generateCV(
   profile: CandidateProfile,
   offerText: string,
   cvLanguage: string,
-): Promise<string> {
+  jobTitle?: string,
+  companyName?: string,
+): Promise<{ html: string; filename: string }> {
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -363,5 +370,20 @@ Rules:
     .trim()
 
   const cv = JSON.parse(raw) as CvContent
-  return buildHtml(cv, profile, cvLanguage)
+
+  const opts = { lower: true, strict: true }
+  const slug = (s: string) => slugify(s, opts)
+  const { first_name, last_name } = profile.basic_info
+  const filenameParts = [
+    'cv',
+    slug(first_name),
+    slug(last_name),
+    jobTitle ? slug(jobTitle) : null,
+    companyName ? slug(companyName) : null,
+  ].filter((p): p is string => p !== null && p.length > 0)
+  const filename = filenameParts.join('-') + '.pdf'
+
+  const html = buildHtml(cv, profile, cvLanguage).replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
+
+  return { html, filename }
 }

@@ -2,7 +2,6 @@ import fs from 'fs'
 import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
-import slugify from 'slugify'
 import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { generateCV } from '../services/cvGenerator'
@@ -64,17 +63,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')
   }
 
-  const html = await generateCV(profileParsed.data, offer_text, cv_language)
-
-  const opts = { lower: true, strict: true }
-  const parts = [
-    'cv',
-    slugify(user.first_name ?? '', opts),
-    slugify(user.last_name ?? '', opts),
-    slugify(job_title ?? '', opts),
-    slugify(company_name ?? '', opts),
-  ].filter(p => p.length > 0)
-  const filename = parts.join('-') + '.pdf'
+  const { html, filename } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name)
 
   res.json({ html, filename })
 })
