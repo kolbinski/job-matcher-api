@@ -99,7 +99,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
         })
         .join('\n')
 
-      const meta = [job.work_model, job.industry].filter(Boolean).map(s => esc(s!)).join(' · ')
+      const meta = job.industry ? esc(job.industry) : ''
       return `<div class="job">
         <div class="job-header">
           <span class="job-title">${esc(job.title)}</span>
@@ -184,7 +184,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CV — ${esc(basic_info.full_name)}</title>
+<title>CV — ${esc(basic_info.first_name)} ${esc(basic_info.last_name)}</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; line-height: 1.55; }
@@ -235,7 +235,7 @@ h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacin
 <body>
 <div class="cv">
   <header>
-    <h1>${esc(basic_info.full_name)}</h1>
+    <h1>${esc(basic_info.first_name)} ${esc(basic_info.last_name)}</h1>
     <div class="target-role">${esc(cv.target_role)}</div>
     <div class="contacts">${contactsHtml}</div>
   </header>
@@ -281,7 +281,7 @@ export async function generateCV(
   const visibleOwnProjects = (profile.own_projects ?? []).filter(p => p.status !== 'private')
 
   const profileForClaude = {
-    basic_info: { full_name: profile.basic_info.full_name },
+    basic_info: { first_name: profile.basic_info.first_name, last_name: profile.basic_info.last_name },
     work_experience: profile.work_experience ?? [],
     own_projects: visibleOwnProjects,
     certifications: profile.certifications ?? [],

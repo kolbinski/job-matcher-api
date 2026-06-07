@@ -40,7 +40,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
 
 function makeProfile(overrides: Partial<CandidateProfile> = {}): CandidateProfile {
   return {
-    basic_info: { full_name: 'Test User' },
+    basic_info: { first_name: 'Test', last_name: 'User' },
     technologies: {},
     preferences: {},
     red_flags: [],
@@ -279,51 +279,51 @@ describe('salary filter', () => {
 
 describe('seniority filter', () => {
   it('rejects junior offer for senior candidate (gap > 1)', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'senior' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'senior' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'junior' }))
     expect(result.pass).toBe(false)
     expect(result.rejectedBySeniority).toBe(true)
   })
 
   it('passes senior offer for senior candidate', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'senior' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'senior' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'senior' }))
     expect(result.rejectedBySeniority).toBe(false)
   })
 
   it('passes mid offer for senior candidate (gap = 1)', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'senior' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'senior' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'mid' }))
     expect(result.rejectedBySeniority).toBe(false)
   })
 
   it('rejects c-level offer for mid candidate (gap > 1)', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'mid' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'mid' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'c-level' }))
     expect(result.pass).toBe(false)
     expect(result.rejectedBySeniority).toBe(true)
   })
 
   it('passes senior offer for mid candidate (gap = 1)', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'mid' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'mid' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'senior' }))
     expect(result.rejectedBySeniority).toBe(false)
   })
 
   it('passes mid offer for mid candidate', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'mid' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'mid' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'mid' }))
     expect(result.rejectedBySeniority).toBe(false)
   })
 
   it('passes any offer when offer experience_level is null', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', experience_level: 'senior' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', experience_level: 'senior' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: null }))
     expect(result.rejectedBySeniority).toBe(false)
   })
 
   it('passes any offer when candidate has no experience_level set', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User' } })
     const result = applyPreFilters(profile, makeOffer({ experience_level: 'junior' }))
     expect(result.rejectedBySeniority).toBe(false)
   })
@@ -379,44 +379,44 @@ describe('red flag filter — workplace via pre-filter', () => {
 
 describe('language filter', () => {
   it('rejects when offer requires german and candidate only speaks english and polish', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english', 'polish'] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: ['english', 'polish'] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'german language'] }))
     expect(result.pass).toBe(false)
     expect(result.rejectedByLanguage).toBe(true)
   })
 
   it('passes when candidate speaks the required language', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english', 'polish'] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: ['english', 'polish'] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'english'] }))
     expect(result.rejectedByLanguage).toBe(false)
   })
 
   it('detects deutsch as german', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['english'] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: ['english'] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['java', 'deutsch'] }))
     expect(result.rejectedByLanguage).toBe(true)
   })
 
   it('detects język angielski as english and rejects when candidate lacks it', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['polish'] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: ['polish'] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['react', 'język angielski'] }))
     expect(result.rejectedByLanguage).toBe(true)
   })
 
   it('detects język angielski as english and passes when candidate speaks english', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: ['polish', 'english'] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: ['polish', 'english'] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['react', 'język angielski'] }))
     expect(result.rejectedByLanguage).toBe(false)
   })
 
   it('skips language filter when candidate has no languages set', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test' } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User' } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'german language'] }))
     expect(result.rejectedByLanguage).toBe(false)
   })
 
   it('skips language filter when candidate languages array is empty', () => {
-    const profile = makeProfile({ basic_info: { full_name: 'Test', languages: [] } })
+    const profile = makeProfile({ basic_info: { first_name: 'Test', last_name: 'User', languages: [] } })
     const result = applyPreFilters(profile, makeOffer({ required_skills: ['typescript', 'french language'] }))
     expect(result.rejectedByLanguage).toBe(false)
   })

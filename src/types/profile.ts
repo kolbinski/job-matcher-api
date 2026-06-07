@@ -9,7 +9,8 @@ const LocationSchema = z.object({
 })
 
 const BasicInfoSchema = z.object({
-  full_name: z.string(),
+  first_name: z.string(),
+  last_name: z.string(),
   current_title: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional(),
