@@ -79,6 +79,7 @@ const WorkExperienceSchema = z.object({
   company_size: z.string().optional(),
   industry: z.string().optional(),
   work_model: z.string().optional(),
+  location: z.string().optional(),
   projects: z.array(ProjectSchema).optional(),
   technologies: z.array(z.string()).optional(),
   achievements: z.array(z.string()).optional(),

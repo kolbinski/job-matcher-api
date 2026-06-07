@@ -41,6 +41,7 @@
       "company_type": "product",
       "industry": "fintech",
       "work_model": "remote",
+      "location": "Warszawa",
       "projects": [
         {
           "name": "System real-time płatności",
@@ -89,6 +90,7 @@
       "company_type": "outsourcing",
       "industry": "e-commerce",
       "work_model": "hybrid",
+      "location": "Warszawa",
       "projects": [
         {
           "name": "E-commerce Niemcy (~2M SKU)",
@@ -124,6 +126,7 @@
       "company_type": "product",
       "industry": "proptech",
       "work_model": "onsite",
+      "location": "Warszawa",
       "projects": [
         {
           "name": "Platforma wynajmu nieruchomości",
@@ -146,6 +149,7 @@
       "date_to": "2016-03",
       "company_type": "agency",
       "industry": "digital",
+      "location": "Warszawa",
       "projects": [
         {
           "name": "Projekty agencyjne",

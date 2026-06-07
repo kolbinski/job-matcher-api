@@ -72,9 +72,47 @@ interface CvContent {
   certifications: CvCert[]
 }
 
+// ─── Work model / location formatting ────────────────────────────────────────
+
+function formatWorkModel(work_model?: string, location?: string): string {
+  if (work_model === 'remote') return 'Remote'
+  if (work_model === 'hybrid' && location) return `Hybrid · ${location}`
+  if (work_model === 'onsite' && location) return location
+  if (location) return location
+  return ''
+}
+
+// ─── Section labels ───────────────────────────────────────────────────────────
+
+const SECTION_LABELS = {
+  pl: {
+    summary: 'Podsumowanie',
+    experience: 'Doświadczenie',
+    own_projects: 'Projekty własne',
+    skills: 'Umiejętności',
+    highlighted: 'Kluczowe dla tej roli',
+    education: 'Wykształcenie',
+    languages: 'Języki',
+    certifications: 'Certyfikaty',
+  },
+  en: {
+    summary: 'Summary',
+    experience: 'Experience',
+    own_projects: 'Own projects',
+    skills: 'Skills',
+    highlighted: 'Highlighted for this role',
+    education: 'Education',
+    languages: 'Languages',
+    certifications: 'Certifications',
+  },
+}
+
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
 function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string): string {
+  const langKey = cvLanguage.toLowerCase().startsWith('pol') ? 'pl' : 'en'
+  const labels = SECTION_LABELS[langKey]
+
   const { basic_info, education, own_projects: profileProjects, technologies } = profile
 
   // Header contacts
@@ -111,13 +149,14 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
         })
         .join('\n')
 
-      const meta = job.industry ? esc(job.industry) : ''
+      const profileJob = (profile.work_experience ?? []).find(pj => pj.company === job.company)
+      const workModelStr = formatWorkModel(job.work_model, profileJob?.location)
+      const companyParts = [esc(job.company), job.industry ? esc(job.industry) : null, workModelStr || null].filter((x): x is string => x !== null)
       return `<div class="job">
         <div class="job-header">
           <span class="job-title">${esc(job.title)}</span>
-          <span class="job-company">@ ${esc(job.company)}</span>
+          <span class="job-company">@ ${companyParts.join(' · ')}</span>
           <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${fmtDate(job.date_to, cvLanguage)}</span>
-          ${meta ? `<span class="job-meta">${meta}</span>` : ''}
         </div>
         ${projHtml}
       </div>`
@@ -127,7 +166,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
   // Own projects section — only if Claude selected any
   const showOwnProjects = (profileProjects ?? []).length > 0 && cv.own_projects.length > 0
   const ownProjectsSection = showOwnProjects
-    ? `<h2>Projekty własne</h2>
+    ? `<h2>${labels.own_projects}</h2>
   <div class="own-projects">
   ${cv.own_projects
     .map(p => {
@@ -150,7 +189,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
   // Skills — highlighted first, then profile categories
   const highlightedSkillsHtml = cv.highlighted_skills.length
     ? `<div class="highlighted-row">
-    <div class="highlighted-label">Kluczowe dla tej roli</div>
+    <div class="highlighted-label">${labels.highlighted}</div>
     <div class="skills-pills">${cv.highlighted_skills.map(s => `<span class="pill highlighted">${esc(s)}</span>`).join('')}</div>
   </div>`
     : ''
@@ -188,7 +227,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
 
   // Certifications
   const certificationsSection = cv.certifications.length
-    ? `<h2>Certyfikaty</h2>
+    ? `<h2>${labels.certifications}</h2>
   ${cv.certifications
     .map(c => {
       const meta = [c.issuer, c.date ? fmtDate(c.date, cvLanguage) : null].filter(Boolean).map(s => esc(s!)).join(', ')
@@ -208,12 +247,17 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
     .replace('{{FULL_NAME}}', fullName)
     .replace('{{TARGET_ROLE}}', esc(cv.target_role))
     .replace('{{CONTACTS}}', contactsHtml)
+    .replace('{{LABEL_SUMMARY}}', labels.summary)
     .replace('{{SUMMARY}}', esc(cv.summary))
+    .replace('{{LABEL_EXPERIENCE}}', labels.experience)
     .replace('{{EXPERIENCE}}', expHtml)
     .replace('{{OWN_PROJECTS_SECTION}}', ownProjectsSection)
     .replace('{{HIGHLIGHTED_SKILLS}}', highlightedSkillsHtml)
+    .replace('{{LABEL_SKILLS}}', labels.skills)
     .replace('{{CATEGORY_SKILLS}}', categorySkillsHtml)
+    .replace('{{LABEL_EDUCATION}}', labels.education)
     .replace('{{EDUCATION}}', eduHtml)
+    .replace('{{LABEL_LANGUAGES}}', labels.languages)
     .replace('{{LANGUAGES}}', langsText)
     .replace('{{CERTIFICATIONS_SECTION}}', certificationsSection)
 }
