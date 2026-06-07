@@ -113,8 +113,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile): string {
     .join('\n')
 
   // Own projects section — only if Claude selected any
-  const visibleProfileProjects = (profileProjects ?? []).filter(p => p.status !== 'private')
-  const showOwnProjects = visibleProfileProjects.length > 0 && cv.own_projects.length > 0
+  const showOwnProjects = (profileProjects ?? []).length > 0 && cv.own_projects.length > 0
   const ownProjHtml = showOwnProjects
     ? cv.own_projects
         .map(p => {
@@ -278,12 +277,15 @@ export async function generateCV(
   offerText: string,
   cvLanguage: string,
 ): Promise<string> {
-  const visibleOwnProjects = (profile.own_projects ?? []).filter(p => p.status !== 'private')
-
   const profileForClaude = {
-    basic_info: { first_name: profile.basic_info.first_name, last_name: profile.basic_info.last_name },
+    basic_info: {
+      first_name: profile.basic_info.first_name,
+      last_name: profile.basic_info.last_name,
+      experience_level: profile.basic_info.experience_level,
+      experience_since: profile.basic_info.experience_since,
+    },
     work_experience: profile.work_experience ?? [],
-    own_projects: visibleOwnProjects,
+    own_projects: profile.own_projects ?? [],
     certifications: profile.certifications ?? [],
     technologies: profile.technologies,
   }

@@ -86,13 +86,9 @@ const WorkExperienceSchema = z.object({
 
 const OwnProjectSchema = z.object({
   name: z.string(),
-  github: z.string().optional(),
-  demo_url: z.string().optional(),
-  npm: z.string().optional(),
-  technologies: z.array(z.string()).optional(),
-  status: z.string().optional(),
-  users: z.number().int().nonnegative().optional(),
-  github_stars: z.number().int().nonnegative().optional(),
+  url: z.string().optional(),
+  technologies: z.array(z.string()),
+  achievements: z.array(z.string()),
 })
 
 const TechnologySchema = z.object({

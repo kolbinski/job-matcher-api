@@ -184,36 +184,21 @@
   "own_projects": [
     {
       "name": "BudgetFlow",
-      "demo_url": "budgetflow.app",
-      "technologies": [
-        "next.js",
-        "typescript",
-        "postgresql",
-        "prisma",
-        "openai"
-      ],
-      "status": "active",
-      "users": 40
-    },
-    {
-      "name": "JobRadar",
-      "technologies": [
-        "node.js",
-        "typescript",
-        "puppeteer",
-        "redis"
-      ],
-      "status": "private"
+      "url": "budgetflow.app",
+      "technologies": ["next.js", "typescript", "postgresql", "prisma", "openai"],
+      "achievements": [
+        "40 aktywnych użytkowników",
+        "Produkcyjny SaaS z AI-powered budgeting"
+      ]
     },
     {
       "name": "pg-migrate-cli",
-      "npm": "npmjs.com/package/pg-migrate-cli",
-      "technologies": [
-        "node.js",
-        "typescript"
-      ],
-      "status": "open_source",
-      "github_stars": 180
+      "url": "npmjs.com/package/pg-migrate-cli",
+      "technologies": ["node.js", "typescript"],
+      "achievements": [
+        "180 gwiazdek na GitHubie",
+        "Open source — opublikowane na npm"
+      ]
     }
   ],
   "career_goals": {
