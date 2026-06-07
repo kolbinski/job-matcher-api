@@ -93,6 +93,42 @@ const BodySchema = z.object({
   reason: z.string().min(1),
 })
 
+const StatusBodySchema = z.object({
+  status: z.enum(['applied', 'agent_withdrawn']),
+})
+
+userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
+  const { id } = req.params as { id: string }
+  const parsed = StatusBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'status must be applied or agent_withdrawn' })
+  }
+
+  const agentId = req.agent!.id
+
+  const userOffer = await prisma.userOffer.findUnique({
+    where: { id },
+    select: { id: true, user_id: true },
+  })
+  if (!userOffer) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'User offer not found' })
+  }
+
+  const agentClient = await prisma.agentClient.findUnique({
+    where: { agent_id_user_id: { agent_id: agentId, user_id: userOffer.user_id } },
+  })
+  if (!agentClient) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer does not belong to your client' })
+  }
+
+  const updated = await prisma.userOffer.update({
+    where: { id },
+    data: { status: parsed.data.status },
+  })
+
+  return res.json(updated)
+})
+
 userOffersRouter.post('/:id/withdraw', validateAgentJwt, async (req, res) => {
   const { id } = req.params as { id: string }
   const parsed = BodySchema.safeParse(req.body)
