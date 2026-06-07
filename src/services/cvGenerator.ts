@@ -11,7 +11,7 @@ const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz'
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function fmtDate(raw: string | null | undefined, lang: string): string {
-  const isPolish = lang.toLowerCase().startsWith('pol')
+  const isPolish = lang.toLowerCase() === 'pl' || lang.toLowerCase().startsWith('pol')
   if (!raw) return isPolish ? 'obecnie' : 'present'
   const [year, mm] = raw.split('-')
   const m = parseInt(mm ?? '1', 10)
@@ -110,7 +110,7 @@ const SECTION_LABELS = {
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
 function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string): string {
-  const langKey = cvLanguage.toLowerCase().startsWith('pol') ? 'pl' : 'en'
+  const langKey = (cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')) ? 'pl' : 'en'
   const labels = SECTION_LABELS[langKey]
 
   const { basic_info, education, own_projects: profileProjects, technologies } = profile
