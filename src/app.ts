@@ -14,6 +14,8 @@ import { offerMatchesRouter } from './routes/offerMatches'
 import { userOffersRouter } from './routes/userOffers'
 import { syncRouter } from './routes/sync'
 import { prospectsRouter } from './routes/prospects'
+import { pushTokensRouter } from './routes/pushTokens'
+import { notificationsRouter } from './routes/notifications'
 
 export const app = express()
 
@@ -35,6 +37,8 @@ app.use('/v1/sync', syncRouter)
 app.use('/v1/cv', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/cv', cvGenerateRouter)
 app.use('/v1/prospects', prospectsRouter)
+app.use('/v1/push-tokens', pushTokensRouter)
+app.use('/v1/notifications', notificationsRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {
