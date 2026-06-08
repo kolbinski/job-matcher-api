@@ -304,7 +304,7 @@ ${offerText.slice(0, 3000)}
 Return ONLY valid JSON (no markdown, no code fences, no explanation) matching this exact structure:
 {
   "target_role": "job title tailored to this offer",
-  "summary": "2-3 sentence professional summary in ${cvLanguage} tailored to this offer. Use cv_summary_bullets as inspiration. Highlight experience_in_industry and experience_in_country_markets where relevant. Weave soft_skills naturally into prose — do not list them verbatim.",
+  "summary": "2-3 sentence professional summary in ${cvLanguage} tailored to this offer. Write in first person (I, my, me) — never third person (he, she, they). Example: 'I led a cross-functional team...' not 'He led a cross-functional team...'. Use cv_summary_bullets as inspiration. Highlight experience_in_industry and experience_in_country_markets where relevant. Weave soft_skills naturally into prose — do not list them verbatim.",
   "highlighted_skills": ["skill1", "skill2"],
   "work_experience": [
     {
