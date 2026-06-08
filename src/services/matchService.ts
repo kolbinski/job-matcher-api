@@ -353,6 +353,7 @@ export async function buildStretchOffers(
       city: offer.city ?? null,
       remote: offer.workplace_type === 'remote',
       hybrid: offer.workplace_type === 'hybrid' || offer.workplace_type === 'partly_remote',
+      source: offer.source,
     }]
   })
 }

@@ -107,6 +107,7 @@ export interface StretchOffer {
   city: string | null
   remote: boolean
   hybrid: boolean
+  source: string
 }
 
 export interface MatchResponse {

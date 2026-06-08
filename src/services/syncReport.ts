@@ -24,6 +24,7 @@ interface OfferEntry {
   salary: SalaryEntry[]
   role_fit: string | null
   url: string | null
+  source: string
 }
 
 interface LevelUpEntry extends OfferEntry {
@@ -86,6 +87,7 @@ function matchedToEntry(o: MatchedOffer, prefs: SalaryPref[], rates: Record<stri
     salary: computeSalaryEntries(salariesFor(o.salaries, o.salary), prefs, rates),
     role_fit: o.role_fit,
     url: o.url,
+    source: o.source,
   }
 }
 
@@ -100,6 +102,7 @@ function stretchToEntry(o: StretchOffer, prefs: SalaryPref[], rates: Record<stri
     role_fit: o.role_fit,
     url: o.url,
     skills_to_learn: o.missing_skills,
+    source: o.source,
   }
 }
 
