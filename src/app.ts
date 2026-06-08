@@ -13,6 +13,7 @@ import { cvGenerateRouter } from './routes/cvGenerate'
 import { offerMatchesRouter } from './routes/offerMatches'
 import { userOffersRouter } from './routes/userOffers'
 import { syncRouter } from './routes/sync'
+import { prospectsRouter } from './routes/prospects'
 
 export const app = express()
 
@@ -33,6 +34,7 @@ app.use('/v1/sync', syncRouter)
 // 120s timeout for CV generation (Claude)
 app.use('/v1/cv', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/cv', cvGenerateRouter)
+app.use('/v1/prospects', prospectsRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {

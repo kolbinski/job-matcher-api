@@ -191,3 +191,14 @@ model UserSync {
 
   @@map("user_syncs")
 }
+
+model Prospect {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  role       String
+  status     String   @default("pending")
+  notes      String?
+  created_at DateTime @default(now())
+
+  @@map("prospects")
+}

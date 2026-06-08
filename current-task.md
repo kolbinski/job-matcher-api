@@ -86,6 +86,12 @@ Ship a working `POST /v1/match` endpoint that:
 - **Test spy fix** — match.test.ts origFindMany pass-through added for `where.id.in` queries so FK existence checks reach the real DB during tests.
 - **user_syncs salary delta** — `syncReport.ts` now computes `delta`/`delta_normalized` per salary entry using candidate salary prefs + exchange rates from settings; `syncService.ts` loads rates once per job and extracts prefs per user.
 
+## Recent Changes (2026-06-08 session 4)
+
+- **Unified auth** — `POST /v1/auth/login` added in `src/routes/auth.ts`; tries agent (uses `password_hash`) then user (uses `password`); JWT payload includes `role: 'agent'|'client'`; old `POST /v1/auth/agent/login` kept for R backward compat.
+- **users.password** — `password String?` added to User model; migration `20260608000004_add_user_password` applied.
+- **set-passwords.ts** — script hashes and stores `agent123` for `krzysztof.olbinski@homodigital.io` and `client123` for Marek (id `7ca43c93-...`).
+
 ## Next Action
 
 No blocking work. Potential next tasks:
