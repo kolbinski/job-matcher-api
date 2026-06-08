@@ -107,6 +107,7 @@ export async function runMatchForUser(
   // Inserting before Claude so seenIds on the next sync excludes these offers,
   // preventing re-evaluation of already-rejected offers.
   const now = new Date()
+  let newlyInserted = 0
   const preFilterRows = rejectedForDB.map(({ offer_id, reason }) => ({
     user_id: userId,
     offer_id,
@@ -129,10 +130,11 @@ export async function runMatchForUser(
     }
     const chunkSize = 100
     for (let i = 0; i < validPreFilterRows.length; i += chunkSize) {
-      await prisma.userOffer.createMany({
+      const r = await prisma.userOffer.createMany({
         data: validPreFilterRows.slice(i, i + chunkSize),
         skipDuplicates: true,
       })
+      newlyInserted += r.count
     }
     console.log(`[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`)
     const newPreFilter = await prisma.userOffer.findMany({
@@ -223,6 +225,7 @@ export async function runMatchForUser(
         }
         if (validBatchRows.length > 0) {
           const writeResult = await prisma.userOffer.createMany({ data: validBatchRows, skipDuplicates: true })
+          newlyInserted += writeResult.count
           console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
           if (writeResult.count > 0) {
             aiScoring = true
@@ -272,6 +275,7 @@ export async function runMatchForUser(
       generated_at: new Date().toISOString(),
       response_ms: responseMs,
       total_offers_scanned: offers.length + skillExcluded.length,
+      newly_inserted: newlyInserted,
       matched_count: limitedMatched.length,
       unmatched_count: unmatched.length,
       ai_scoring: aiScoring,

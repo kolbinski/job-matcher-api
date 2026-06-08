@@ -46,6 +46,7 @@ export interface MatchMeta {
   generated_at: string
   response_ms: number
   total_offers_scanned: number
+  newly_inserted: number
   matched_count: number
   unmatched_count: number
   ai_scoring: boolean

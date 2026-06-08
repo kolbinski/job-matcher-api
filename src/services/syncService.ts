@@ -113,9 +113,7 @@ async function runJob(
     try {
       const result = await runMatchForUser(user.id, { ai_scoring: true });
 
-      const newOffersCount = result.matched.filter(
-        o => o.recommended === true,
-      ).length;
+      const newOffersCount = result.meta.newly_inserted;
       const stretchCount = result.stretch_offers.length;
       const email_report = buildEmailReport(result, user);
 
