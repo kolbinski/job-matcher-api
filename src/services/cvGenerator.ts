@@ -342,7 +342,8 @@ Rules:
 - own_projects: include all provided projects with a tailored 1-sentence description in ${cvLanguage}
 - certifications: include only if relevant to this offer, otherwise return []
 - date_to: null means currently employed there
-- dates must be in YYYY-MM format (e.g. "2021-03")`
+- dates must be in YYYY-MM format (e.g. "2021-03")
+- IMPORTANT: if a project has name="" (empty string) in the profile, do NOT invent or generate a project name — output name="" in your JSON response. The CV template hides it automatically.`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -374,6 +375,20 @@ Rules:
     .trim()
 
   const cv = JSON.parse(raw) as CvContent
+
+  // Enforce empty project names regardless of what Claude generated.
+  // Claude may invent a name even when told not to — the profile is the source of truth.
+  const profileWorkExp = profile.work_experience ?? []
+  for (const cvJob of cv.work_experience) {
+    const profileJob = profileWorkExp.find(pj => pj.company === cvJob.company)
+    if (!profileJob?.projects) continue
+    cvJob.projects.forEach((cvProj, idx) => {
+      const profileProj = profileJob.projects?.[idx]
+      if (profileProj && profileProj.name === '') {
+        cvProj.name = ''
+      }
+    })
+  }
 
   const opts = { lower: true, strict: true }
   const slug = (s: string) => slugify(s, opts)
