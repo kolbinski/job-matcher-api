@@ -117,7 +117,7 @@ export function buildSyncReport(
     worth_applying: matched
       .filter(o => o.recommended === true)
       .map(o => matchedToEntry(o, salaryPrefs, rates)),
-    level_up: stretch.map(o => stretchToEntry(o, salaryPrefs, rates)),
+    level_up: stretch.slice(0, 40).map(o => stretchToEntry(o, salaryPrefs, rates)),
     worth_considering: matched
       .filter(o => o.recommended !== true && o.score >= 30)
       .map(o => matchedToEntry(o, salaryPrefs, rates)),
