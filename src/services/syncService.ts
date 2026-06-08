@@ -12,6 +12,27 @@ const isTestUser = (email: string): boolean =>
   email.includes('@jobmatcl') ||
   email.endsWith('.test');
 
+async function sendPushToClient(userId: string, title: string, body: string): Promise<void> {
+  const tokens = await prisma.pushToken.findMany({
+    where: { user_id: userId },
+    select: { token: true },
+  })
+  if (tokens.length === 0) return
+
+  const messages = tokens.map(pt => ({
+    to: pt.token,
+    title,
+    body,
+    data: { type: 'sync_complete' },
+  }))
+
+  await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(messages),
+  })
+}
+
 interface SyncClientResult {
   client_id: string;
   first_name: string | null;
@@ -135,6 +156,12 @@ async function runJob(
           await sendMatchReport(agentEmail, agentName, user.email, email_report);
           console.log(`[sync] Email sent to ${user.email}`);
         }
+      }
+
+      if (newOffersCount > 0 || stretchCount > 0) {
+        const agentFirstName = agentName.split(' ')[0]
+        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`
+        await sendPushToClient(user.id, 'Homo Digital', pushBody)
       }
 
       job.clients.push({
