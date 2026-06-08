@@ -113,6 +113,11 @@ async function runJob(
     },
   });
 
+  const agent = await prisma.agent.findUnique({
+    where: { id: agentId },
+    select: { first_name: true },
+  })
+
   job.total_clients = users.length;
   console.log(`[sync] Starting job for ${users.length} users`);
 
@@ -159,7 +164,7 @@ async function runJob(
       }
 
       if (newOffersCount > 0 || stretchCount > 0) {
-        const agentFirstName = agentName.split(' ')[0]
+        const agentFirstName = agent?.first_name ?? agentName
         const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`
         await sendPushToClient(user.id, 'Homo Digital', pushBody)
       }
