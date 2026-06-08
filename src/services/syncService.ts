@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
+import { buildSyncReport } from './syncReport';
 import { sendMatchReport } from './emailService';
 
 const isTestUser = (email: string): boolean =>
@@ -110,6 +111,11 @@ async function runJob(
       ).length;
       const stretchCount = result.stretch_offers.length;
       const email_report = buildEmailReport(result, user);
+
+      const syncReport = buildSyncReport(result);
+      await prisma.userSync.create({
+        data: { user_id: user.id, report: syncReport as unknown as Prisma.InputJsonValue },
+      });
 
       if (user.email) {
         if (isTestUser(user.email)) {

@@ -52,6 +52,7 @@ model User {
   api_calls     ApiCall[]
   user_offers   UserOffer[]
   agent_clients AgentClient[]
+  user_syncs    UserSync[]
 
   @@map("users")
 }
@@ -177,4 +178,15 @@ model OfferFetch {
   fetched_at         DateTime
 
   @@map("offer_fetches")
+}
+
+model UserSync {
+  id         String   @id @default(uuid())
+  user_id    String
+  report     Json
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("user_syncs")
 }

@@ -45,14 +45,14 @@ export function buildEmailReport(
   lines.push('')
   lines.push(`Today I scanned ${newlyProcessed} new offers for you.`)
 
-  // Section 1 — Apply now
+  // Section 1 — Worth applying
   const dedupedRecommended = dedupeByTitleCompany(recommended, o => o.company, o => o.score)
   const sortedRecommended = sortByDeltaThenCity(
     dedupedRecommended, salaryPrefs, officeCities,
     o => o.salaries ?? (o.salary ? [o.salary] : []),
     o => o.city,
   )
-  lines.push(`\n\n\n🎯 Apply now (${sortedRecommended.length} offers)\n`)
+  lines.push(`\n\n\n🎯 Worth applying (${sortedRecommended.length} offers)\n`)
   if (sortedRecommended.length === 0) {
     lines.push('  No strongly recommended offers this scan.')
   } else {
