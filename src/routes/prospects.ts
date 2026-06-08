@@ -8,6 +8,7 @@ export const prospectsRouter = Router()
 const CreateProspectSchema = z.object({
   email: z.string().email(),
   role: z.enum(['client', 'agent']),
+  notes: z.string().optional(),
 })
 
 prospectsRouter.post('/', async (req, res) => {
@@ -15,14 +16,14 @@ prospectsRouter.post('/', async (req, res) => {
   if (!parsed.success) {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
-  const { email, role } = parsed.data
+  const { email, role, notes } = parsed.data
 
   const existing = await prisma.prospect.findUnique({ where: { email } })
   if (existing) {
     return res.status(200).json(existing)
   }
 
-  const prospect = await prisma.prospect.create({ data: { email, role } })
+  const prospect = await prisma.prospect.create({ data: { email, role, notes } })
   return res.status(201).json(prospect)
 })
 
