@@ -31,7 +31,7 @@ authRouter.post('/login', async (req, res) => {
       env.JWT_SECRET,
       { expiresIn: '30d' },
     )
-    return res.json({ token, role: 'agent' })
+    return res.json({ token, role: 'agent', agent_id: agent.id })
   }
 
   // 2. Client/user lookup — uses password column
@@ -46,7 +46,7 @@ authRouter.post('/login', async (req, res) => {
       env.JWT_SECRET,
       { expiresIn: '30d' },
     )
-    return res.json({ token, role: 'client' })
+    return res.json({ token, role: 'client', user_id: user.id })
   }
 
   // 3. Not found or no password set
