@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
 import { prisma } from '../lib/prisma';
 
@@ -168,9 +166,9 @@ async function main(): Promise<void> {
 
   let salaryPrefs: SalaryPref[] = [];
   let learningGoals: string[] = [];
-  if (user.profile_path) {
+  if (user.profile) {
     try {
-      const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
+      const raw = user.profile as {
         preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }>; learning_goals?: string[] }
       };
       salaryPrefs = (raw.preferences?.salary ?? [])

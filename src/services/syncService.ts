@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
@@ -78,7 +79,7 @@ async function runJob(
 ): Promise<void> {
   const users = await prisma.user.findMany({
     where: {
-      profile_path: { not: null },
+      profile: { not: Prisma.DbNull },
       agent_clients: { some: { agent_id: agentId } },
     },
     select: {
@@ -86,7 +87,7 @@ async function runJob(
       email: true,
       first_name: true,
       last_name: true,
-      profile_path: true,
+      profile: true,
     },
   });
 

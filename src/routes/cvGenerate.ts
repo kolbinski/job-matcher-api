@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
@@ -42,22 +40,14 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   }
 
   const { user } = link
-  console.log('[cvGenerate] user found: id=%s profile_path=%s', user.id, user.profile_path)
+  console.log('[cvGenerate] user found: id=%s profile_set=%s', user.id, user.profile != null)
 
-  if (!user.profile_path) {
-    console.log('[cvGenerate] no profile_path on user')
+  if (!user.profile) {
+    console.log('[cvGenerate] no profile on user')
     throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this client')
   }
 
-  let rawProfile: unknown
-  try {
-    rawProfile = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8'))
-  } catch (err) {
-    console.log('[cvGenerate] profile file read failed: path=%s error=%s', user.profile_path, String(err))
-    throw new AppError(422, 'INVALID_PROFILE', `Profile file not found: ${user.profile_path}`)
-  }
-
-  const profileParsed = CandidateProfileSchema.safeParse(rawProfile)
+  const profileParsed = CandidateProfileSchema.safeParse(user.profile)
   if (!profileParsed.success) {
     console.log('[cvGenerate] profile schema invalid:', JSON.stringify(profileParsed.error.issues))
     throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')

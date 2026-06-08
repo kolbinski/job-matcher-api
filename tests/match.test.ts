@@ -1,6 +1,8 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import type { Offer } from '@prisma/client'
 import { app } from '../src/app'
 import { prisma } from '../src/lib/prisma'
@@ -24,6 +26,7 @@ vi.mock('../src/services/claudeEvaluator', () => ({
 }))
 
 const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
+const TEST_PROFILE = JSON.parse(fs.readFileSync(path.resolve(TEST_PROFILE_PATH), 'utf-8')) as object
 
 let fixtureOffers: Offer[] = []
 
@@ -57,7 +60,7 @@ describe('POST /v1/match', () => {
       data: {
         email: `match-test-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
         jobmatcher_api_key: apiKey,
-        profile_path: TEST_PROFILE_PATH,
+        profile: TEST_PROFILE,
       },
     })
     userId = user.id
@@ -85,7 +88,7 @@ describe('POST /v1/match', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 422 when user has no profile_path configured', async () => {
+  it('returns 422 when user has no profile configured', async () => {
     const noProfileKey = `jm_live_${crypto.randomBytes(16).toString('hex')}`
     const noProfileUser = await prisma.user.create({
       data: {

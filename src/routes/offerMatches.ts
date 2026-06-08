@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
@@ -25,10 +23,10 @@ interface SalaryEntry {
   delta: number
 }
 
-function loadSalaryPrefs(profilePath: string | null): SalaryPref[] {
-  if (!profilePath) return []
+function loadSalaryPrefs(profile: unknown): SalaryPref[] {
+  if (!profile) return []
   try {
-    const raw = JSON.parse(fs.readFileSync(path.resolve(profilePath), 'utf-8')) as {
+    const raw = profile as {
       preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
     }
     return (raw.preferences?.salary ?? [])
@@ -104,7 +102,7 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
       claude_score: { not: null },
     },
     include: {
-      user: { select: { id: true, first_name: true, last_name: true, profile_path: true } },
+      user: { select: { id: true, first_name: true, last_name: true, profile: true } },
     },
   })
 
@@ -117,7 +115,7 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
       claude_score: uo.claude_score,
       claude_role_fit: uo.claude_role_fit,
       claude_matched_reasons: uo.claude_matched_reasons,
-      salary: buildSalaryEntries(offer.employment_types, loadSalaryPrefs(uo.user.profile_path)),
+      salary: buildSalaryEntries(offer.employment_types, loadSalaryPrefs(uo.user.profile)),
       source: offer.source,
     })),
   })

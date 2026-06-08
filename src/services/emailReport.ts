@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import type { MatchResponse, OfferSalary } from '../types/match'
 
 interface SalaryPref {
@@ -10,7 +8,7 @@ interface SalaryPref {
 
 export function buildEmailReport(
   result: MatchResponse,
-  user: { first_name: string | null; profile_path: string | null },
+  user: { first_name: string | null; profile: unknown },
 ): string {
   const { matched, stretch_offers: stretch } = result
   const newlyProcessed = result.meta.total_offers_scanned
@@ -19,9 +17,9 @@ export function buildEmailReport(
   let learningGoals: string[] = []
   let officeCities: string[] = []
 
-  if (user.profile_path) {
+  if (user.profile) {
     try {
-      const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
+      const raw = user.profile as {
         preferences?: {
           salary?: Array<{ type?: string; currency?: string; min?: number }>
           learning_goals?: string[]

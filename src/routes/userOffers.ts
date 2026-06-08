@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
@@ -38,11 +36,11 @@ interface ClientProfile {
 async function loadClientProfile(clientId: string): Promise<ClientProfile> {
   const user = await prisma.user.findUnique({
     where: { id: clientId },
-    select: { profile_path: true },
+    select: { profile: true },
   })
-  if (!user?.profile_path) return { learningGoals: [], salaryPrefs: [] }
+  if (!user?.profile) return { learningGoals: [], salaryPrefs: [] }
   try {
-    const raw = JSON.parse(fs.readFileSync(path.resolve(user.profile_path), 'utf-8')) as {
+    const raw = user.profile as {
       preferences?: {
         learning_goals?: string[]
         salary?: Array<{ type?: string; currency?: string; min?: number }>

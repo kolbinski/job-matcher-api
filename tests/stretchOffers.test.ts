@@ -1,11 +1,14 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import { app } from '../src/app'
 import { prisma } from '../src/lib/prisma'
 
 // Profile on disk has preferences.learning_goals: ['python', 'terraform']
 const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
+const TEST_PROFILE = JSON.parse(fs.readFileSync(path.resolve(TEST_PROFILE_PATH), 'utf-8')) as object
 const TEST_SLUG_PREFIX = 'test-stretch-'
 
 // Capture the real findMany before spying so the stretch-offer lookup
@@ -45,7 +48,7 @@ describe('stretch_offers — DB integration', () => {
       data: {
         email: `stretch-test-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
         jobmatcher_api_key: apiKey,
-        profile_path: TEST_PROFILE_PATH,
+        profile: TEST_PROFILE,
       },
     })
     userId = user.id

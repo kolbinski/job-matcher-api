@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
@@ -28,19 +26,11 @@ export async function runMatchForUser(
   const sortOrder = opts?.sort?.order ?? 'desc'
 
   // ── 1. Load profile ────────────────────────────────────────────────────────
-  const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { profile_path: true } })
-  const profilePath = dbUser?.profile_path
-  if (!profilePath) throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this user')
+  const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { profile: true } })
+  if (!dbUser?.profile) throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this user')
 
-  let rawProfile: unknown
-  try {
-    rawProfile = JSON.parse(fs.readFileSync(path.resolve(profilePath), 'utf-8'))
-  } catch {
-    throw new AppError(422, 'INVALID_PROFILE', `Profile file not found: ${profilePath}`)
-  }
-
-  const profileParsed = CandidateProfileSchema.safeParse(rawProfile)
-  if (!profileParsed.success) throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')
+  const profileParsed = CandidateProfileSchema.safeParse(dbUser.profile)
+  if (!profileParsed.success) throw new AppError(422, 'INVALID_PROFILE', 'Profile is invalid')
   const profile = profileParsed.data
 
   // ── 2. Normalize profile once ──────────────────────────────────────────────

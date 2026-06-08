@@ -2,6 +2,8 @@
 import { vi, describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import { app } from '../../src/app'
 import { prisma } from '../../src/lib/prisma'
 
@@ -22,7 +24,7 @@ vi.mock('../../src/services/claudeEvaluator', () => ({
   ),
 }))
 
-const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
+const TEST_PROFILE = JSON.parse(fs.readFileSync(path.resolve('src/data/marek-wisniewski-profile.json'), 'utf-8')) as object
 
 afterAll(async () => {
   await prisma.$disconnect()
@@ -38,7 +40,7 @@ describe('POST /v1/match — deduplication (integration)', () => {
       data: {
         email: `match-dedup-${crypto.randomBytes(8).toString('hex')}@jobmatcher-test.invalid`,
         jobmatcher_api_key: apiKey,
-        profile_path: TEST_PROFILE_PATH,
+        profile: TEST_PROFILE,
       },
     })
     userId = user.id
