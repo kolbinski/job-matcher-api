@@ -144,7 +144,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
             ? `<ul class="project-achievements">${p.highlighted_achievements.map(a => `<li>${esc(a)}</li>`).join('')}</ul>`
             : ''
           return `<div class="project">
-          <div class="project-name">${esc(p.name)}</div>
+          ${p.name ? `<div class="project-name">${esc(p.name)}</div>` : ''}
           ${techsHtml}${achieveHtml}
         </div>`
         })
