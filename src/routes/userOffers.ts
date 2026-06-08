@@ -12,6 +12,8 @@ const QuerySchema = z.object({
   has_learning_goals: z.enum(['true', 'false']).optional(),
   count_only: z.enum(['true', 'false']).optional(),
   source: z.string().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
 })
 
 interface SalaryPref {
@@ -146,7 +148,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     })
   }
 
-  const { status, has_learning_goals, count_only, source } = parsed.data
+  const { status, has_learning_goals, count_only, source, date_from, date_to } = parsed.data
   const { role, agent_id, user_id } = req.jwt!
 
   let clientId: string
@@ -196,6 +198,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     where,
     include: {
       offer: { select: { title: true, company_name: true, url: true, employment_types: true, source: true } },
+      status_history: {
+        where: { status: 'applied' },
+        orderBy: { created_at: 'desc' },
+        take: 1,
+      },
     },
     orderBy: { matched_at: 'desc' },
   })
@@ -227,12 +234,23 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     claude_recommended: uo.claude_recommended,
     rejection_reason: uo.rejection_reason,
     matched_at: uo.matched_at,
+    applied_at: uo.status_history[0]?.created_at ?? null,
     salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
     source: uo.offer.source,
     cv_language: uo.cv_language,
   }))
 
-  mapped.sort((a, b) => {
+  let filtered = mapped
+  if (date_from) {
+    const from = new Date(date_from)
+    filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) >= from)
+  }
+  if (date_to) {
+    const to = new Date(date_to)
+    filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) <= to)
+  }
+
+  filtered.sort((a, b) => {
     const aMax = a.salary.length > 0 ? Math.max(...a.salary.map(s => s.delta_normalized)) : null
     const bMax = b.salary.length > 0 ? Math.max(...b.salary.map(s => s.delta_normalized)) : null
     if (aMax === null && bMax === null) return 0
@@ -244,7 +262,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   res.json({
     client_id: clientId,
     status,
-    count: mapped.length,
-    offers: mapped,
+    count: filtered.length,
+    offers: filtered,
   })
 })
