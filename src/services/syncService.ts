@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
-import { buildSyncReport } from './syncReport';
+import { buildSyncReport, type SalaryPref } from './syncReport';
 import { sendMatchReport } from './emailService';
 
 const isTestUser = (email: string): boolean =>
@@ -95,6 +95,13 @@ async function runJob(
   job.total_clients = users.length;
   console.log(`[sync] Starting job for ${users.length} users`);
 
+  // Exchange rates are constant for the entire job run — load once
+  let exchangeRates: Record<string, number> = {}
+  try {
+    const ratesSetting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
+    if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
+  } catch { /* rates stay empty — delta_normalized will equal delta */ }
+
   for (const user of users) {
     const milestone = ((job.processed_clients + 1) / job.total_clients) * 100;
     const easeInterval = setInterval(() => {
@@ -112,7 +119,13 @@ async function runJob(
       const stretchCount = result.stretch_offers.length;
       const email_report = buildEmailReport(result, user);
 
-      const syncReport = buildSyncReport(result);
+      const rawProfile = (user.profile as unknown) as {
+        preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
+      }
+      const salaryPrefs: SalaryPref[] = (rawProfile?.preferences?.salary ?? [])
+        .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null)
+
+      const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates);
       await prisma.userSync.create({
         data: { user_id: user.id, report: syncReport as unknown as Prisma.InputJsonValue },
       });

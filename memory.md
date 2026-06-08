@@ -180,6 +180,10 @@ Replaced by client-side polling of `GET /v1/sync/status`. Removed jwt/env import
 **[2026-06-06] total_offers_scanned in SyncJob**
 `SyncJob` interface and `runJob` accumulate `total_offers_scanned` per client from `result.meta.total_offers_scanned`. Used in email report ("Today I scanned X new offers").
 
+**[2026-06-08] FK guard before user_offers createMany**
+Both pre_filter_rejected and claude batch insertions in `matchService.ts` now do a `prisma.offer.findMany({ where: { id: { in: [...] } }, select: { id: true } })` existence check first. Rows whose offer_id is no longer in the offers table are filtered out with a `console.warn`. This prevents FK constraint violations when an offer is deleted between the step-4 scan and the step-6b/8 insert.
+*Gotcha:* The `findMany` spy in `tests/match.test.ts` intercepts `select: { id: true }` queries and returns `[]`. Fixed by adding `if (args?.where?.id?.in) return origFindMany(args)` as the first branch in the mock so existence-check queries pass through to the real DB.
+
 **[2026-06-08] user_syncs table — structured report persistence**
 `user_syncs` (id, user_id, report JSONB, created_at) stores a structured report per sync run per user. Report shape: `{scanned: number, worth_applying: OfferEntry[], level_up: (OfferEntry & {skills_to_learn})[],  worth_considering: OfferEntry[]}`. Built by `buildSyncReport()` in `src/services/syncReport.ts`. Saved in `syncService.ts` before `sendMatchReport()` so the record exists even if email delivery fails.
 `OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary, role_fit, url}`

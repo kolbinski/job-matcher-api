@@ -81,6 +81,9 @@ Ship a working `POST /v1/match` endpoint that:
 
 - **Email label** — renamed "Apply now" → "Worth applying" in emailReport.ts section 1 header.
 - **user_syncs table** — migration `20260608000003_add_user_syncs` applied; `UserSync` model in schema; `buildSyncReport()` in `src/services/syncReport.ts` maps `MatchResponse` → `{scanned, worth_applying, level_up, worth_considering}`; `syncService.ts` saves a `UserSync` row before sending email on each client sync.
+- **FK guard on createMany** — matchService.ts now queries offer existence before both pre_filter_rejected and claude batch createMany calls; rows with missing offer_ids are skipped with a console.warn.
+- **Sync error visibility** — syncService.ts catch block sets `email_report: '[SYNC ERROR] <message>'` so R shows the actual error instead of blank/default text.
+- **Test spy fix** — match.test.ts origFindMany pass-through added for `where.id.in` queries so FK existence checks reach the real DB during tests.
 
 ## Next Action
 

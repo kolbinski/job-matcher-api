@@ -130,6 +130,10 @@ Three API changes that silently break v3 code under v4:
 **Why:** Tests that call `POST /v1/match` hit the real DB and load all active offers (8000+), making each test take 30+ seconds. With Claude mocked but offers un-mocked, total check time was 241s.
 **How to apply:** In `beforeAll`, capture `prisma.offer.findMany.bind(prisma.offer)` as `origFindMany`, then `(vi.spyOn(prisma.offer, 'findMany') as any).mockImplementation(...)`. Return controlled fixtures for the main query, `[]` for skill-excluded (identified by `args?.select?.id`), and `origFindMany(args)` for stretch-offer lookups (identified by `args?.where?.id?.in`). Cast the spy to `any` before `.mockImplementation` — Prisma's `PrismaPromise` return type is incompatible with `async` functions but irrelevant at runtime.
 
+**RULE T-6: When adding a new `prisma.model.findMany` call that uses `select: { id: true }`, update the test spy to pass it through.**
+**Why:** The `match.test.ts` spy identifies the skill-excluded query by `args?.select?.id` and returns `[]`. Any new existence-check query that also uses `select: { id: true }` will be silently intercepted and return `[]`, making the FK guard filter out all rows.
+**How to apply:** Add `if (args?.where?.id?.in) return origFindMany(args)` as the first branch in the spy, before the `select?.id → []` branch. This distinguishes existence checks (`where.id.in`) from the skill-excluded query (`where.id.notIn`).
+
 **RULE T-5: Tests that verify seenIds deduplication must stay as integration tests.**
 **Why:** The `does not re-process` test asserts that `total_offers_scanned` decreases on the second call. With mocked `findMany` that ignores WHERE clauses, both calls return the same fixtures — the assertion fails. Only a real DB query that honours `NOT { id: { in: seenIds } }` gives the correct behaviour.
 **How to apply:** Move deduplication tests to `tests/integration/` (excluded from default `vitest run`). Run via `npm run test:integration`.
