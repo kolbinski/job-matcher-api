@@ -37,7 +37,7 @@ function esc(s: string): string {
 
 interface CvProject {
   name: string
-  technologies: string[]
+  skills: string[]
   highlighted_achievements: string[]
 }
 
@@ -54,7 +54,7 @@ interface CvJob {
 interface CvOwnProject {
   name: string
   url?: string | null
-  technologies: string[]
+  skills: string[]
   description: string
 }
 
@@ -137,8 +137,8 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
     .map(job => {
       const projHtml = job.projects
         .map(p => {
-          const techsHtml = p.technologies.length
-            ? `<div class="project-techs">${p.technologies.map(t => esc(t)).join(' · ')}</div>`
+          const techsHtml = p.skills.length
+            ? `<div class="project-techs">${p.skills.map(t => esc(t)).join(' · ')}</div>`
             : ''
           const achieveHtml = p.highlighted_achievements.length
             ? `<ul class="project-achievements">${p.highlighted_achievements.map(a => `<li>${esc(a)}</li>`).join('')}</ul>`
@@ -179,8 +179,8 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
       const urlSpan = p.url
         ? ` <span style="font-weight:400; color:#4a4a4a; font-size:12px;">· ${esc(p.url)}</span>`
         : ''
-      const techsHtml = p.technologies.length
-        ? `<div class="own-project-techs">${p.technologies.map(t => esc(t)).join(' · ')}</div>`
+      const techsHtml = p.skills.length
+        ? `<div class="own-project-techs">${p.skills.map(t => esc(t)).join(' · ')}</div>`
         : ''
       return `<div class="own-project">
           <div class="own-project-name">${esc(p.name)}${urlSpan}</div>
@@ -227,8 +227,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
 
   // Languages
   const langsText = (basic_info.languages ?? [])
-    .map(l => l.charAt(0).toUpperCase() + l.slice(1))
-    .map(esc)
+    .map(l => esc(`${l.name.charAt(0).toUpperCase() + l.name.slice(1)} (${l.level})`))
     .join(', ')
 
   // Certifications
@@ -284,7 +283,7 @@ export async function generateCV(
       experience_since: profile.basic_info.experience_since,
       experience_in_country_markets: profile.basic_info.experience_in_country_markets,
       experience_in_industry: profile.basic_info.experience_in_industry,
-      english_level: profile.basic_info.english_level,
+      languages: profile.basic_info.languages,
       cv_summary_bullets: profile.basic_info.cv_summary_bullets,
       soft_skills: profile.basic_info.soft_skills,
     },
@@ -318,7 +317,7 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation) matching th
       "projects": [
         {
           "name": "project name",
-          "technologies": ["tech1", "tech2"],
+          "skills": ["tech1", "tech2"],
           "highlighted_achievements": ["most relevant achievement for this offer"]
         }
       ]
@@ -328,7 +327,7 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation) matching th
     {
       "name": "project name",
       "url": "url or null",
-      "technologies": ["tech1", "tech2"],
+      "skills": ["tech1", "tech2"],
       "description": "1 sentence tailored to this offer in ${cvLanguage}"
     }
   ],

@@ -16,13 +16,12 @@
     "experience_level": "senior",
     "experience_since": 2014,
     "languages": [
-      "polish",
-      "english"
+      { "name": "polish", "level": "native" },
+      { "name": "english", "level": "C1" }
     ],
     "job_search_status": "actively_looking",
     "experience_in_country_markets": ["pl", "de"],
     "experience_in_industry": ["fintech", "proptech", "e-commerce"],
-    "english_level": "C1",
     "cv_summary_bullets": [
       "10+ years building fullstack and distributed systems at scale",
       "Led cross-functional teams of 3-6 engineers in fintech and proptech",
@@ -58,7 +57,7 @@
       "projects": [
         {
           "name": "System real-time płatności",
-          "technologies": [
+          "skills": [
             "react",
             "typescript",
             "node.js",
@@ -78,7 +77,7 @@
         },
         {
           "name": "Developer Portal (API docs + sandbox)",
-          "technologies": [
+          "skills": [
             "next.js",
             "typescript",
             "graphql",
@@ -107,7 +106,7 @@
       "projects": [
         {
           "name": "E-commerce Niemcy (~2M SKU)",
-          "technologies": [
+          "skills": [
             "vue.js",
             "typescript",
             "elasticsearch",
@@ -120,7 +119,7 @@
         },
         {
           "name": "WMS (logistyka)",
-          "technologies": [
+          "skills": [
             "node.js",
             "websockets",
             "postgresql"
@@ -143,7 +142,7 @@
       "projects": [
         {
           "name": "Platforma wynajmu nieruchomości",
-          "technologies": [
+          "skills": [
             "react",
             "node.js",
             "postgresql"
@@ -166,7 +165,7 @@
       "projects": [
         {
           "name": "Projekty agencyjne",
-          "technologies": [
+          "skills": [
             "javascript",
             "php",
             "css"
@@ -186,7 +185,7 @@
       "projects": [
         {
           "name": "System rezerwacji siłowni",
-          "technologies": [
+          "skills": [
             "php",
             "javascript",
             "mysql"
@@ -202,7 +201,7 @@
     {
       "name": "BudgetFlow",
       "url": "budgetflow.app",
-      "technologies": ["next.js", "typescript", "postgresql", "prisma", "openai"],
+      "skills": ["next.js", "typescript", "postgresql", "prisma", "openai"],
       "achievements": [
         "40 aktywnych użytkowników",
         "Produkcyjny SaaS z AI-powered budgeting"
@@ -211,7 +210,7 @@
     {
       "name": "pg-migrate-cli",
       "url": "npmjs.com/package/pg-migrate-cli",
-      "technologies": ["node.js", "typescript"],
+      "skills": ["node.js", "typescript"],
       "achievements": [
         "180 gwiazdek na GitHubie",
         "Open source — opublikowane na npm"

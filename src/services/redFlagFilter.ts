@@ -126,7 +126,7 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   }
 
   // ── 5. Language filter ─────────────────────────────────────────────────────
-  const candidateLanguages = (profile.basic_info.languages ?? []).map(l => l.toLowerCase())
+  const candidateLanguages = (profile.basic_info.languages ?? []).map(l => l.name.toLowerCase())
   if (candidateLanguages.length > 0) {
     const offerSkillsLower = offer.required_skills.map(s => s.toLowerCase())
     for (const [lang, keywords] of Object.entries(LANGUAGE_KEYWORDS)) {

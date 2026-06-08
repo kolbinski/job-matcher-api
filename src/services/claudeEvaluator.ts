@@ -161,7 +161,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     : 'not specified';
   const workModel = (profile.preferences?.work_model ?? []).join(', ');
   const targetRoles = (profile.preferences?.target_role ?? []).join(', ');
-  const redFlags = profile.red_flags.map(f => f.description).join(', ');
+  const redFlagsText = profile.red_flags.map(f => `[${f.category}] ${f.description}`).join('; ');
 
   const lines: string[] = [
     '## Candidate Profile',
@@ -170,7 +170,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     `Target roles: ${targetRoles || 'not specified'}`,
     `Salary targets: ${salaryText}`,
     `Accepted work models: ${workModel || 'not specified'}`,
-    `Dealbreakers (auto-rejected if matched): ${redFlags || 'none'}`,
+    `Dealbreakers by category: ${redFlagsText || 'none'}`,
     '',
     `## ${offers.length} Job Offers to Evaluate`,
     '',

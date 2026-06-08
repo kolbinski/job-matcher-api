@@ -19,11 +19,10 @@ const BasicInfoSchema = z.object({
   location: LocationSchema.optional(),
   experience_level: z.enum(['junior', 'mid', 'senior', 'c_level']).optional(),
   experience_since: z.number().int().optional(),
-  languages: z.array(z.string()).optional(),
+  languages: z.array(z.object({ name: z.string(), level: z.string() })).optional(),
   job_search_status: z.string().optional(),
   experience_in_country_markets: z.array(z.string()).optional(),
   experience_in_industry: z.array(z.string()).optional(),
-  english_level: z.string().optional(),
   cv_summary_bullets: z.array(z.string()).optional(),
   soft_skills: z.array(z.string()).optional(),
 })
@@ -51,7 +50,7 @@ const EducationSchema = z.object({
 
 const ProjectSchema = z.object({
   name: z.string(),
-  technologies: z.array(z.string()).optional(),
+  skills: z.array(z.string()).optional(),
   team_size: z.number().int().positive().optional(),
   role: z.string().optional(),
   achievements: z.array(z.string()).optional(),
@@ -75,7 +74,7 @@ const WorkExperienceSchema = z.object({
 const OwnProjectSchema = z.object({
   name: z.string(),
   url: z.string().optional(),
-  technologies: z.array(z.string()),
+  skills: z.array(z.string()),
   achievements: z.array(z.string()),
 })
 
