@@ -45,6 +45,7 @@ model User {
   jobmatcher_api_key String   @unique
   first_name         String?
   last_name          String?
+  password           String?
   profile            Json?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt

@@ -186,4 +186,5 @@ Both pre_filter_rejected and claude batch insertions in `matchService.ts` now do
 
 **[2026-06-08] user_syncs table — structured report persistence**
 `user_syncs` (id, user_id, report JSONB, created_at) stores a structured report per sync run per user. Report shape: `{scanned: number, worth_applying: OfferEntry[], level_up: (OfferEntry & {skills_to_learn})[],  worth_considering: OfferEntry[]}`. Built by `buildSyncReport()` in `src/services/syncReport.ts`. Saved in `syncService.ts` before `sendMatchReport()` so the record exists even if email delivery fails.
-`OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary, role_fit, url}`
+`OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary: SalaryEntry[], role_fit, url}`
+`SalaryEntry` = `{min, max, currency, type, delta, delta_normalized}` — delta/delta_normalized computed the same way as `buildSalaryEntries` in `userOffers.ts`. Exchange rates loaded once per job from `settings.exchange_rates`; falls back to rate=1 (delta_normalized=delta) if key missing.

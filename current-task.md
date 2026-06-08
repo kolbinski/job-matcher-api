@@ -84,6 +84,7 @@ Ship a working `POST /v1/match` endpoint that:
 - **FK guard on createMany** — matchService.ts now queries offer existence before both pre_filter_rejected and claude batch createMany calls; rows with missing offer_ids are skipped with a console.warn.
 - **Sync error visibility** — syncService.ts catch block sets `email_report: '[SYNC ERROR] <message>'` so R shows the actual error instead of blank/default text.
 - **Test spy fix** — match.test.ts origFindMany pass-through added for `where.id.in` queries so FK existence checks reach the real DB during tests.
+- **user_syncs salary delta** — `syncReport.ts` now computes `delta`/`delta_normalized` per salary entry using candidate salary prefs + exchange rates from settings; `syncService.ts` loads rates once per job and extracts prefs per user.
 
 ## Next Action
 
