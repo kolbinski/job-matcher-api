@@ -16,6 +16,7 @@ import { syncRouter } from './routes/sync'
 import { prospectsRouter } from './routes/prospects'
 import { pushTokensRouter } from './routes/pushTokens'
 import { notificationsRouter } from './routes/notifications'
+import { agentMeRouter } from './routes/agentMe'
 
 export const app = express()
 
@@ -39,6 +40,7 @@ app.use('/v1/cv', cvGenerateRouter)
 app.use('/v1/prospects', prospectsRouter)
 app.use('/v1/push-tokens', pushTokensRouter)
 app.use('/v1/notifications', notificationsRouter)
+app.use('/v1/agent', agentMeRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {
