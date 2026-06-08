@@ -167,11 +167,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     }
   }
 
-  if (status === 'agent_withdrawn') {
-    if (count_only === 'true') return res.json({ count: 0 })
-    return res.json({ client_id: clientId, status, count: 0, offers: [] })
-  }
-
   const where = {
     user_id: clientId,
     status,
