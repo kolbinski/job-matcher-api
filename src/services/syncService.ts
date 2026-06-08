@@ -150,7 +150,7 @@ async function runJob(
         last_name: user.last_name,
         new_offers_count: 0,
         stretch_offers_count: 0,
-        email_report: '',
+        email_report: `[SYNC ERROR] ${message}`,
         email_sent: false,
         error: message,
       });

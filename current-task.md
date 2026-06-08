@@ -77,6 +77,11 @@ Ship a working `POST /v1/match` endpoint that:
 - **Email sender** — removed `@ Homo Digital` suffix from the `from` field in `emailService.ts`.
 - **Email "Worth considering"** — header changed to `💡 Top N worth considering` and capped at top 3 offers (`sortedConsider.slice(0, 3)`).
 
+## Recent Changes (2026-06-08 session 3)
+
+- **Email label** — renamed "Apply now" → "Worth applying" in emailReport.ts section 1 header.
+- **user_syncs table** — migration `20260608000003_add_user_syncs` applied; `UserSync` model in schema; `buildSyncReport()` in `src/services/syncReport.ts` maps `MatchResponse` → `{scanned, worth_applying, level_up, worth_considering}`; `syncService.ts` saves a `UserSync` row before sending email on each client sync.
+
 ## Next Action
 
 No blocking work. Potential next tasks:

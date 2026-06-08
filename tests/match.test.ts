@@ -28,6 +28,8 @@ vi.mock('../src/services/claudeEvaluator', () => ({
 const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
 const TEST_PROFILE = JSON.parse(fs.readFileSync(path.resolve(TEST_PROFILE_PATH), 'utf-8')) as object
 
+const origFindMany = prisma.offer.findMany.bind(prisma.offer)
+
 let fixtureOffers: Offer[] = []
 
 beforeAll(async () => {
@@ -35,10 +37,13 @@ beforeAll(async () => {
   fixtureOffers = await createFixtureOffers()
 
   // Return only the 6 controlled fixtures instead of loading 8000+ live offers.
-  // The skill-excluded query (select: { id: true }) returns [] so scanned = 6 exactly.
+  // id.in queries (FK existence checks) pass through to the real DB so the
+  // pre_filter_rejected createMany doesn't skip valid fixture offer IDs.
+  // The skill-excluded query (id.notIn + select.id) still returns [] so scanned = 6.
   // Cast to any: PrismaPromise vs Promise mismatch is irrelevant at runtime.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(vi.spyOn(prisma.offer, 'findMany') as any).mockImplementation(async (args?: any) => {
+    if (args?.where?.id?.in) return origFindMany(args)
     if (args?.select?.id) return []
     return fixtureOffers
   })

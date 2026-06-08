@@ -179,3 +179,7 @@ Replaced by client-side polling of `GET /v1/sync/status`. Removed jwt/env import
 
 **[2026-06-06] total_offers_scanned in SyncJob**
 `SyncJob` interface and `runJob` accumulate `total_offers_scanned` per client from `result.meta.total_offers_scanned`. Used in email report ("Today I scanned X new offers").
+
+**[2026-06-08] user_syncs table — structured report persistence**
+`user_syncs` (id, user_id, report JSONB, created_at) stores a structured report per sync run per user. Report shape: `{scanned: number, worth_applying: OfferEntry[], level_up: (OfferEntry & {skills_to_learn})[],  worth_considering: OfferEntry[]}`. Built by `buildSyncReport()` in `src/services/syncReport.ts`. Saved in `syncService.ts` before `sendMatchReport()` so the record exists even if email delivery fails.
+`OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary, role_fit, url}`

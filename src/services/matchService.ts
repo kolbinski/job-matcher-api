@@ -118,7 +118,15 @@ export async function runMatchForUser(
     updated_at: now,
   }))
   if (preFilterRows.length > 0) {
-    const validPreFilterRows = preFilterRows.filter(r => r.offer_id != null)
+    const existingOffers = await prisma.offer.findMany({
+      where: { id: { in: preFilterRows.map(r => r.offer_id) } },
+      select: { id: true },
+    })
+    const existingIds = new Set(existingOffers.map(o => o.id))
+    const validPreFilterRows = preFilterRows.filter(r => existingIds.has(r.offer_id))
+    if (validPreFilterRows.length !== preFilterRows.length) {
+      console.warn(`[match] Skipping ${preFilterRows.length - validPreFilterRows.length} pre_filter rows with missing offer_ids`)
+    }
     const chunkSize = 100
     for (let i = 0; i < validPreFilterRows.length; i += chunkSize) {
       await prisma.userOffer.createMany({
@@ -204,17 +212,28 @@ export async function runMatchForUser(
         })
 
       if (batchRows.length > 0) {
-        const writeResult = await prisma.userOffer.createMany({ data: batchRows, skipDuplicates: true })
-        console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
-        if (writeResult.count > 0) {
-          aiScoring = true
-          const inserted = await prisma.userOffer.findMany({
-            where: { user_id: userId, offer_id: { in: batchRows.map(r => r.offer_id) }, matched_at: now },
-            select: { id: true, status: true },
-          })
-          await prisma.userOfferStatus.createMany({
-            data: inserted.map(r => ({ user_offer_id: r.id, status: r.status })),
-          })
+        const existingClaudeOffers = await prisma.offer.findMany({
+          where: { id: { in: batchRows.map(r => r.offer_id) } },
+          select: { id: true },
+        })
+        const existingClaudeIds = new Set(existingClaudeOffers.map(o => o.id))
+        const validBatchRows = batchRows.filter(r => existingClaudeIds.has(r.offer_id))
+        if (validBatchRows.length !== batchRows.length) {
+          console.warn(`[match] Skipping ${batchRows.length - validBatchRows.length} claude rows with missing offer_ids`)
+        }
+        if (validBatchRows.length > 0) {
+          const writeResult = await prisma.userOffer.createMany({ data: validBatchRows, skipDuplicates: true })
+          console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
+          if (writeResult.count > 0) {
+            aiScoring = true
+            const inserted = await prisma.userOffer.findMany({
+              where: { user_id: userId, offer_id: { in: validBatchRows.map(r => r.offer_id) }, matched_at: now },
+              select: { id: true, status: true },
+            })
+            await prisma.userOfferStatus.createMany({
+              data: inserted.map(r => ({ user_offer_id: r.id, status: r.status })),
+            })
+          }
         }
       }
     }
