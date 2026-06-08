@@ -18,6 +18,8 @@ prospectsRouter.post('/', async (req, res) => {
   }
   const { email, role, notes } = parsed.data
 
+  console.log('[prospects] body:', JSON.stringify(req.body))
+
   const existing = await prisma.prospect.findUnique({ where: { email } })
   if (existing) {
     return res.status(200).json(existing)
