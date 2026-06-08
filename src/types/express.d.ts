@@ -5,6 +5,7 @@ declare global {
     interface Request {
       user?: User
       agent?: { id: string; email: string }
+      jwt?: { role: 'agent' | 'client'; agent_id?: string; user_id?: string; email: string }
     }
   }
 }

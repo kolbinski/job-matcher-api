@@ -2,11 +2,12 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
+import { validateJwt } from '../middleware/validateJwt'
 
 export const userOffersRouter = Router()
 
 const QuerySchema = z.object({
-  client_id: z.string().min(1),
+  client_id: z.string().min(1).optional(),
   status: z.string().min(1),
   has_learning_goals: z.enum(['true', 'false']).optional(),
   count_only: z.enum(['true', 'false']).optional(),
@@ -135,33 +136,44 @@ userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
   return res.json(updated)
 })
 
-userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
+userOffersRouter.get('/', validateJwt, async (req, res) => {
   const parsed = QuerySchema.safeParse(req.query)
   if (!parsed.success) {
     return res.status(422).json({
       error: 'INVALID_REQUEST',
-      message: 'Missing required query params: client_id, status',
+      message: 'Missing required query param: status',
       issues: parsed.error.issues,
     })
   }
 
-  const { client_id, status, has_learning_goals, count_only, source } = parsed.data
-  const agentId = req.agent!.id
+  const { status, has_learning_goals, count_only, source } = parsed.data
+  const { role, agent_id, user_id } = req.jwt!
 
-  const agentClient = await prisma.agentClient.findUnique({
-    where: { agent_id_user_id: { agent_id: agentId, user_id: client_id } },
-  })
-  if (!agentClient) {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
+  let clientId: string
+
+  if (role === 'client') {
+    clientId = user_id!
+  } else {
+    if (!parsed.data.client_id) {
+      return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: client_id' })
+    }
+    clientId = parsed.data.client_id
+
+    const agentClient = await prisma.agentClient.findUnique({
+      where: { agent_id_user_id: { agent_id: agent_id!, user_id: clientId } },
+    })
+    if (!agentClient) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
+    }
   }
 
   if (status === 'agent_withdrawn') {
     if (count_only === 'true') return res.json({ count: 0 })
-    return res.json({ client_id, status, count: 0, offers: [] })
+    return res.json({ client_id: clientId, status, count: 0, offers: [] })
   }
 
   const where = {
-    user_id: client_id,
+    user_id: clientId,
     status,
     ...(source && source !== 'all' ? { offer: { source } } : {}),
   }
@@ -178,7 +190,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
       where,
       select: { claude_missing_skills: true },
     })
-    const { learningGoals } = await loadClientProfile(client_id)
+    const { learningGoals } = await loadClientProfile(clientId)
     const count = learningGoals.length > 0
       ? rows.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))).length
       : rows.length
@@ -194,7 +206,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   })
 
   const [{ learningGoals, salaryPrefs }, rates] = await Promise.all([
-    loadClientProfile(client_id),
+    loadClientProfile(clientId),
     loadExchangeRates(),
   ])
 
@@ -235,7 +247,7 @@ userOffersRouter.get('/', validateAgentJwt, async (req, res) => {
   })
 
   res.json({
-    client_id,
+    client_id: clientId,
     status,
     count: mapped.length,
     offers: mapped,
