@@ -14,7 +14,7 @@ agentMeRouter.get('/me', validateJwt, async (req, res) => {
     where: { user_id: user_id! },
     include: {
       agent: {
-        select: { id: true, first_name: true, last_name: true, email: true, phone: true },
+        select: { id: true, first_name: true, last_name: true, email: true, phone: true, photo_url: true },
       },
     },
   })
