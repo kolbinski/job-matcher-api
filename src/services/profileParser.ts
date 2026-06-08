@@ -12,14 +12,13 @@ export interface NormalizedProfile {
 
 export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
   const techs = new Set(
-    Object.values(profile.technologies).flat().map(t => t.name.toLowerCase().trim())
+    Object.values(profile.skills).flat().map(t => t.name.toLowerCase().trim())
   )
 
   const salaryMinPln =
     profile.preferences?.salary?.find(
       s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN'
     )?.min ??
-    profile.career_goals?.short_term?.salary_target_pln_net_b2b?.min ??
     null
 
   const workModel = (profile.preferences?.work_model ?? []).map(m => m.toLowerCase())

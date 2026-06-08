@@ -218,25 +218,7 @@
       ]
     }
   ],
-  "career_goals": {
-    "short_term": {
-      "target_role": [
-        "Senior Fullstack Engineer"
-      ],
-      "company_type": "product",
-      "salary_target_pln_net_b2b": {
-        "min": 22000,
-        "max": 28000
-      }
-    },
-    "long_term": {
-      "markets_considered": [
-        "poland",
-        "europe"
-      ]
-    }
-  },
-  "technologies": {
+  "skills": {
     "Frontend": [
       {
         "name": "react",
@@ -395,6 +377,7 @@
     "learning_goals": [
       "python",
       "terraform"
-    ]
+    ],
+    "target_role": ["Senior Fullstack Engineer"]
   }
 }

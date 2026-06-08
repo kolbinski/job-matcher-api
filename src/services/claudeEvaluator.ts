@@ -154,18 +154,13 @@ export function stripCodeFences(raw: string): string {
 function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
   // Profile — only essential fields sent to Claude (no employment_history, education, personal_projects)
   const name = `${profile.basic_info.first_name} ${profile.basic_info.last_name}`;
-  const techs = Object.values(profile.technologies).flat().map(t => t.name).join(', ');
-  const salaryPref = profile.preferences?.salary?.find(
-    s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN',
-  );
-  const salaryMin =
-    salaryPref?.min ??
-    profile.career_goals?.short_term?.salary_target_pln_net_b2b?.min ??
-    null;
+  const techs = Object.values(profile.skills).flat().map(t => t.name).join(', ');
+  const salaryPrefs = profile.preferences?.salary ?? [];
+  const salaryText = salaryPrefs.length > 0
+    ? salaryPrefs.map(s => `${s.type} ${s.currency} min ${s.min}`).join(', ')
+    : 'not specified';
   const workModel = (profile.preferences?.work_model ?? []).join(', ');
-  const targetRoles = (
-    profile.career_goals?.short_term?.target_role ?? []
-  ).join(', ');
+  const targetRoles = (profile.preferences?.target_role ?? []).join(', ');
   const redFlags = profile.red_flags.map(f => f.description).join(', ');
 
   const lines: string[] = [
@@ -173,7 +168,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     `Name: ${name}`,
     `Technologies: ${techs || 'not specified'}`,
     `Target roles: ${targetRoles || 'not specified'}`,
-    `Salary target (PLN net B2B, minimum): ${salaryMin ?? 'not specified'}`,
+    `Salary targets: ${salaryText}`,
     `Accepted work models: ${workModel || 'not specified'}`,
     `Dealbreakers (auto-rejected if matched): ${redFlags || 'none'}`,
     '',

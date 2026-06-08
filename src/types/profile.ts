@@ -33,24 +33,6 @@ const SalaryRangeSchema = z.object({
   max: z.number().nonnegative(),
 })
 
-const CareerGoalsSchema = z.object({
-  short_term: z
-    .object({
-      timeframe_months: z.number().int().positive().optional(),
-      target_role: z.array(z.string()).optional(),
-      company_type: z.string().optional(),
-      salary_target_pln_net_b2b: SalaryRangeSchema.optional(),
-      current_salary_pln_net_b2b: z.number().nonnegative().optional(),
-    })
-    .optional(),
-  long_term: z
-    .object({
-      timeframe_years: z.number().int().positive().optional(),
-      target_role: z.array(z.string()).optional(),
-      markets_considered: z.array(z.string()).optional(),
-    })
-    .optional(),
-})
 
 const WorkStyleSchema = z.object({
   environment_preferences: z.record(z.string(), z.string()).optional(),
@@ -137,6 +119,7 @@ const PreferencesSchema = z.object({
   salary: z.array(SalaryPreferenceSchema).optional(),
   markets: z.array(z.string()).optional(),
   learning_goals: z.array(z.string()).optional(),
+  target_role: z.array(z.string()).optional(),
 })
 
 const RedFlagSchema = z.object({
@@ -148,12 +131,11 @@ export const CandidateProfileSchema = z.object({
   profile_version: z.string().optional(),
   created_at: z.string().optional(),
   basic_info: BasicInfoSchema,
-  career_goals: CareerGoalsSchema.optional(),
   work_style: WorkStyleSchema.optional(),
   education: z.array(EducationSchema).optional(),
   work_experience: z.array(WorkExperienceSchema).optional(),
   own_projects: z.array(OwnProjectSchema).optional(),
-  technologies: z.record(z.string(), z.array(TechnologySchema)),
+  skills: z.record(z.string(), z.array(TechnologySchema)),
   soft_skills: z.array(SoftSkillSchema).optional(),
   certifications: z.array(CertificationSchema).optional(),
   preferences: PreferencesSchema,

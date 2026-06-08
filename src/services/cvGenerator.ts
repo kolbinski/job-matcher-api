@@ -114,7 +114,7 @@ function buildHtml(cv: CvContent, profile: CandidateProfile, cvLanguage: string)
   const langKey = (cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')) ? 'pl' : 'en'
   const labels = SECTION_LABELS[langKey]
 
-  const { basic_info, education, own_projects: profileProjects, technologies } = profile
+  const { basic_info, education, own_projects: profileProjects, skills: technologies } = profile
 
   // Header contacts
   const contactParts = [
@@ -291,7 +291,7 @@ export async function generateCV(
     work_experience: profile.work_experience ?? [],
     own_projects: profile.own_projects ?? [],
     certifications: profile.certifications ?? [],
-    technologies: profile.technologies,
+    skills: profile.skills,
   }
 
   const prompt = `You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
