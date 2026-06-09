@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import { syncOffers } from '../jobs/offerSync'
 import { sendPushToClient, syncUserById } from '../services/syncService'
@@ -37,6 +38,27 @@ async function isWithinSchedule(): Promise<boolean> {
   return day >= minDay && day <= maxDay && afterStart && beforeEnd
 }
 
+function utcDateString(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+async function acquireNotificationLock(lockKey: string): Promise<boolean> {
+  try {
+    await prisma.notificationLock.create({ data: { lock_key: lockKey } })
+    return true
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return false
+    }
+    throw err
+  }
+}
+
+async function cleanupOldLocks(): Promise<void> {
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+  await prisma.notificationLock.deleteMany({ where: { created_at: { lt: twoDaysAgo } } })
+}
+
 function cetTimeString(): string {
   return new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' })
 }
@@ -64,6 +86,8 @@ async function runSync(): Promise<void> {
 
 async function runHourlyNotifications(): Promise<void> {
   try {
+    await cleanupOldLocks()
+
     const currentUtcHour = new Date().getUTCHours()
     // Match users whose local hour (UTC + utc_offset) equals send_job_applied_notifications_hour.
     // Modulo 24 handles wrap-around (e.g. UTC 23 + offset 2 = 1am local).
@@ -86,6 +110,13 @@ async function runHourlyNotifications(): Promise<void> {
       })
 
       if (unnotified.length === 0) continue
+
+      const lockKey = `job_applied:${user.id}:${utcDateString()}`
+      const locked = await acquireNotificationLock(lockKey)
+      if (!locked) {
+        console.log(`[scheduler] Lock already held for ${lockKey} — skipping`)
+        continue
+      }
 
       const agentClient = await prisma.agentClient.findFirst({
         where: { user_id: user.id },
@@ -112,6 +143,8 @@ async function runHourlyNotifications(): Promise<void> {
 
 async function runHourlySyncReports(): Promise<void> {
   try {
+    await cleanupOldLocks()
+
     const currentUtcHour = new Date().getUTCHours()
     const matchedRows = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM users
@@ -123,6 +156,13 @@ async function runHourlySyncReports(): Promise<void> {
     startOfToday.setUTCHours(0, 0, 0, 0)
 
     for (const row of matchedRows) {
+      const lockKey = `sync_report:${row.id}:${utcDateString()}`
+      const locked = await acquireNotificationLock(lockKey)
+      if (!locked) {
+        console.log(`[sync-cron] Lock already held for ${lockKey} — skipping`)
+        continue
+      }
+
       const todaySync = await prisma.userSync.findFirst({
         where: { user_id: row.id, created_at: { gte: startOfToday } },
       })

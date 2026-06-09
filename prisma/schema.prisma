@@ -210,3 +210,11 @@ model PushToken {
 
   @@map("push_tokens")
 }
+
+model NotificationLock {
+  id         String   @id @default(cuid())
+  lock_key   String   @unique
+  created_at DateTime @default(now())
+
+  @@map("notification_locks")
+}
