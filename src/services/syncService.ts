@@ -16,6 +16,7 @@ export async function sendPushToClient(
   userId: string,
   title: string,
   body: string,
+  data: Record<string, string> = {},
 ): Promise<void> {
   const tokens = await prisma.pushToken.findMany({
     where: { user_id: userId },
@@ -27,7 +28,7 @@ export async function sendPushToClient(
     to: pt.token,
     title,
     body,
-    data: { type: 'sync_complete' },
+    data,
   }));
 
   console.log('[push] Sending to tokens:', tokens.length);
@@ -172,7 +173,7 @@ async function runJob(
       );
 
       const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates);
-      await prisma.userSync.create({
+      const userSync = await prisma.userSync.create({
         data: {
           user_id: user.id,
           report: syncReport as unknown as Prisma.InputJsonValue,
@@ -193,15 +194,14 @@ async function runJob(
         }
       }
 
-      console.log(
-        '[push] newly_inserted:',
-        newOffersCount,
-        'stretch:',
-        stretchCount,
-      );
-      const agentFirstName = agent?.first_name ?? agentName;
-      const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`;
-      await sendPushToClient(user.id, 'Homo Digital', pushBody);
+      if (newOffersCount > 0 || stretchCount > 0) {
+        const agentFirstName = agent?.first_name ?? agentName;
+        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`;
+        await sendPushToClient(user.id, 'Homo Digital', pushBody, {
+          type: 'sync_complete',
+          user_sync_id: userSync.id,
+        });
+      }
 
       job.clients.push({
         client_id: user.id,
