@@ -411,6 +411,7 @@ Rules:
 - dates must be in YYYY-MM format (e.g. "2021-03")
 - IMPORTANT: if a project has name="" (empty string) in the profile, do NOT invent or generate a project name — output name="" in your JSON response. The CV template hides it automatically.`;
 
+  console.log('[cvGenerator] calling Claude API, prompt length:', prompt.length);
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -423,6 +424,7 @@ Rules:
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     }),
+    signal: AbortSignal.timeout(55_000),
   });
 
   if (!response.ok) {
