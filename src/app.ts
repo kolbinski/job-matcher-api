@@ -19,6 +19,7 @@ import { notificationsRouter } from './routes/notifications'
 import { agentMeRouter } from './routes/agentMe'
 import { userSyncsRouter } from './routes/userSyncs'
 import { settingsRouter } from './routes/settings'
+import { feedbackRouter } from './routes/feedback'
 
 export const app = express()
 
@@ -45,6 +46,7 @@ app.use('/v1/notifications', notificationsRouter)
 app.use('/v1/agent', agentMeRouter)
 app.use('/v1/user-syncs', userSyncsRouter)
 app.use('/v1/settings', settingsRouter)
+app.use('/v1/feedback', feedbackRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {

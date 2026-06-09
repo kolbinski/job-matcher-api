@@ -58,6 +58,7 @@ model User {
   push_tokens                         PushToken[]
   user_offers                         UserOffer[]
   user_syncs                          UserSync[]
+  feedbacks                           Feedback[]
 
   @@map("users")
 }
@@ -140,6 +141,7 @@ model Agent {
   phone         String?
   photo_url     String?
   clients       AgentClient[]
+  feedbacks     Feedback[]
 
   @@map("agents")
 }
@@ -209,6 +211,19 @@ model PushToken {
   user       User     @relation(fields: [user_id], references: [id])
 
   @@map("push_tokens")
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  message    String
+  user_id    String?
+  agent_id   String?
+  source     String
+  created_at DateTime @default(now())
+  user       User?    @relation(fields: [user_id], references: [id])
+  agent      Agent?   @relation(fields: [agent_id], references: [id])
+
+  @@map("feedbacks")
 }
 
 model NotificationLock {
