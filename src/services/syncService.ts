@@ -4,13 +4,13 @@ import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
-import { sendMatchReport } from './emailService';
+// import { sendMatchReport } from './emailService';
 
-const isTestUser = (email: string): boolean =>
-  email.includes('test') ||
-  email.includes('@jobmatche') ||
-  email.includes('@jobmatcl') ||
-  email.endsWith('.test');
+// const isTestUser = (email: string): boolean =>
+//   email.includes('test') ||
+//   email.includes('@jobmatche') ||
+//   email.includes('@jobmatcl') ||
+//   email.endsWith('.test');
 
 export async function sendPushToClient(
   userId: string,
@@ -133,7 +133,7 @@ async function runJob(
   job.total_clients = users.length;
   console.log(`[sync] Starting job for ${users.length} users`);
 
-  // Exchange rates are constant for the entire job run — load once
+  // Settings that are constant for the entire job run — load once
   let exchangeRates: Record<string, number> = {};
   try {
     const ratesSetting = await prisma.settings.findUnique({
@@ -144,6 +144,11 @@ async function runJob(
   } catch {
     /* rates stay empty — delta_normalized will equal delta */
   }
+
+  const maxLevelUpSetting = await prisma.settings.findUnique({
+    where: { key: 'max_level_up' },
+  });
+  const maxLevelUp = parseInt(maxLevelUpSetting?.value ?? '40', 10);
 
   for (const user of users) {
     const milestone = ((job.processed_clients + 1) / job.total_clients) * 100;
@@ -172,7 +177,7 @@ async function runJob(
           p.type != null && p.currency != null && p.min != null,
       );
 
-      const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates);
+      const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates, maxLevelUp);
       const userSync = await prisma.userSync.create({
         data: {
           user_id: user.id,
@@ -180,23 +185,19 @@ async function runJob(
         },
       });
 
-      if (user.email) {
-        if (isTestUser(user.email)) {
-          console.log(`[sync] Skipping email for test user: ${user.email}`);
-        } else {
-          await sendMatchReport(
-            agentEmail,
-            agentName,
-            user.email,
-            email_report,
-          );
-          console.log(`[sync] Email sent to ${user.email}`);
-        }
-      }
+      // if (user.email) {
+      //   if (isTestUser(user.email)) {
+      //     console.log(`[sync] Skipping email for test user: ${user.email}`);
+      //   } else {
+      //     await sendMatchReport(agentEmail, agentName, user.email, email_report);
+      //     console.log(`[sync] Email sent to ${user.email}`);
+      //   }
+      // }
 
       if (newOffersCount > 0 || stretchCount > 0) {
         const agentFirstName = agent?.first_name ?? agentName;
-        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`;
+        const worthApplyingCount = result.matched.filter(o => o.recommended === true).length;
+        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${worthApplyingCount} are worth applying and ${Math.min(stretchCount, maxLevelUp)} look promising for level up.`;
         await sendPushToClient(user.id, 'Homo Digital', pushBody, {
           type: 'sync_complete',
           user_sync_id: userSync.id,
