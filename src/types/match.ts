@@ -69,6 +69,11 @@ export interface MatchedOffer {
   remote: boolean
   hybrid: boolean
   experience_level: string | null
+  workplace_type: string | null
+  working_time: string | null
+  required_skills: string[]
+  nice_to_have_skills: string[]
+  employment_types: unknown
   salary: OfferSalary | null
   salaries: OfferSalary[]
   matched_reasons: string[]
@@ -100,6 +105,12 @@ export interface UnmatchedOffer {
 export interface StretchOffer {
   title: string
   company_name: string
+  experience_level: string | null
+  workplace_type: string | null
+  working_time: string | null
+  required_skills: string[]
+  nice_to_have_skills: string[]
+  employment_types: unknown
   salary: OfferSalary | null
   salaries: OfferSalary[]
   role_fit: string | null

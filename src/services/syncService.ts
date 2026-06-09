@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
+import { deduplicateMatchResult } from '../utils/deduplicateOffers';
 // import { sendMatchReport } from './emailService';
 
 // const isTestUser = (email: string): boolean =>
@@ -177,7 +178,8 @@ async function runJob(
           p.type != null && p.currency != null && p.min != null,
       );
 
-      const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates, maxLevelUp);
+      const dedupedResult = deduplicateMatchResult(result);
+      const syncReport = buildSyncReport(dedupedResult, salaryPrefs, exchangeRates, maxLevelUp);
       const userSync = await prisma.userSync.create({
         data: {
           user_id: user.id,
@@ -196,8 +198,7 @@ async function runJob(
 
       if (newOffersCount > 0 || stretchCount > 0) {
         const agentFirstName = agent?.first_name ?? agentName;
-        const worthApplyingCount = result.matched.filter(o => o.recommended === true).length;
-        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${worthApplyingCount} are worth applying and ${Math.min(stretchCount, maxLevelUp)} look promising for level up.`;
+        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${syncReport.worth_applying.length} are worth applying and ${syncReport.level_up.length} look promising for level up.`;
         await sendPushToClient(user.id, 'Homo Digital', pushBody, {
           type: 'sync_complete',
           user_sync_id: userSync.id,
@@ -277,7 +278,8 @@ export async function syncUserById(userId: string): Promise<void> {
     (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
   );
 
-  const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates, maxLevelUp);
+  const dedupedResult = deduplicateMatchResult(result);
+  const syncReport = buildSyncReport(dedupedResult, salaryPrefs, exchangeRates, maxLevelUp);
   const userSync = await prisma.userSync.create({
     data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
   });
@@ -286,8 +288,7 @@ export async function syncUserById(userId: string): Promise<void> {
   const stretchCount = result.stretch_offers.length;
 
   if (newOffersCount > 0 || stretchCount > 0) {
-    const worthApplyingCount = result.matched.filter(o => o.recommended === true).length;
-    const pushBody = `Your agent ${agentName} scanned ${result.meta.total_offers_scanned} new offers. ${worthApplyingCount} are worth applying and ${Math.min(stretchCount, maxLevelUp)} look promising for level up.`;
+    const pushBody = `Your agent ${agentName} scanned ${result.meta.total_offers_scanned} new offers. ${syncReport.worth_applying.length} are worth applying and ${syncReport.level_up.length} look promising for level up.`;
     await sendPushToClient(userId, 'Homo Digital', pushBody, {
       type: 'sync_complete',
       user_sync_id: userSync.id,

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { validateJwt } from '../middleware/validateJwt'
+import { dedupKey } from '../utils/deduplicateOffers'
 
 export const userOffersRouter = Router()
 
@@ -67,38 +68,6 @@ async function loadExchangeRates(): Promise<Record<string, number>> {
   } catch {
     return {}
   }
-}
-
-type EtEntry = { type?: string; currency?: string; unit?: string; from?: number; to?: number }
-
-function dedupKey(offer: {
-  source: string
-  title: string
-  company_name: string
-  experience_level: string | null
-  workplace_type: string | null
-  working_time: string | null
-  required_skills: string[]
-  nice_to_have_skills: string[]
-  employment_types: unknown
-  city: string | null
-}): string {
-  const req = [...offer.required_skills].sort()
-  const nth = [...offer.nice_to_have_skills].sort()
-  const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
-    .slice()
-    .sort((a, b) => {
-      if ((a.type ?? '') !== (b.type ?? '')) return (a.type ?? '') < (b.type ?? '') ? -1 : 1
-      if ((a.currency ?? '') !== (b.currency ?? '')) return (a.currency ?? '') < (b.currency ?? '') ? -1 : 1
-      if ((a.unit ?? '') !== (b.unit ?? '')) return (a.unit ?? '') < (b.unit ?? '') ? -1 : 1
-      if ((a.from ?? 0) !== (b.from ?? 0)) return (a.from ?? 0) - (b.from ?? 0)
-      return (a.to ?? 0) - (b.to ?? 0)
-    })
-  return JSON.stringify([
-    offer.source, offer.title, offer.company_name,
-    offer.experience_level, offer.workplace_type, offer.working_time,
-    req, nth, ets, offer.city,
-  ])
 }
 
 function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[], rates: Record<string, number>): SalaryEntry[] {
