@@ -53,7 +53,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')
   }
 
-  const { html, filename } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name)
+  const { html, filename } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name, user)
 
   res.json({ html, filename })
 })

@@ -3,6 +3,7 @@ import path from 'path'
 import slugify from 'slugify'
 import type { CandidateProfile } from '../types/profile'
 import { env } from '../lib/env'
+import { prisma } from '../lib/prisma'
 
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html')
 
@@ -274,6 +275,7 @@ export async function generateCV(
   cvLanguage: string,
   jobTitle?: string,
   companyName?: string,
+  user?: { id: string; show_agent_info_in_cv: boolean },
 ): Promise<{ html: string; filename: string }> {
   const profileForClaude = {
     basic_info: {
@@ -402,7 +404,39 @@ Rules:
   ].filter((p): p is string => p !== null && p.length > 0)
   const filename = filenameParts.join('-') + '.pdf'
 
-  const html = buildHtml(cv, profile, cvLanguage).replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
+  let html = buildHtml(cv, profile, cvLanguage).replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
+
+  // Agent info + GDPR footer
+  const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
+  const footerParts: string[] = []
+
+  if (user?.show_agent_info_in_cv) {
+    const agentClient = await prisma.agentClient.findFirst({
+      where: { user_id: user.id },
+      include: { agent: true },
+    })
+    if (agentClient) {
+      const { agent } = agentClient
+      const agentPhone = agent.phone ? ` · ${esc(agent.phone)}` : ''
+      const agentLine = isPl
+        ? `Jestem reprezentowany/a przez ${esc(agent.first_name)} ${esc(agent.last_name)} z Homo Digital — ${esc(agent.email)}${agentPhone}`
+        : `I am represented by ${esc(agent.first_name)} ${esc(agent.last_name)} from Homo Digital — ${esc(agent.email)}${agentPhone}`
+      footerParts.push(
+        `<p style="font-size:10px;color:#9ca3af;text-align:center;margin-top:24px;">${agentLine}</p>`,
+      )
+    }
+  }
+
+  const gdprText = isPl
+    ? 'Wyrażam zgodę na przetwarzanie moich danych osobowych zawartych w niniejszym CV dla potrzeb niezbędnych do realizacji procesu rekrutacji, zgodnie z Rozporządzeniem Parlamentu Europejskiego i Rady (UE) 2016/679 (RODO).'
+    : 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).'
+  footerParts.push(
+    `<p style="font-size:9px;color:#b0aca6;text-align:center;margin-top:8px;font-style:italic;">${gdprText}</p>`,
+  )
+
+  if (footerParts.length > 0) {
+    html = html.replace('</body>', `${footerParts.join('\n')}\n  </body>`)
+  }
 
   return { html, filename }
 }
