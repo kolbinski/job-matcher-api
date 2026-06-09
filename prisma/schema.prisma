@@ -52,6 +52,7 @@ model User {
   utc_offset                          Int           @default(1)
   send_sync_report_notifications_hour Int           @default(9)
   show_agent_info_in_cv               Boolean       @default(true)
+  gender                              String?
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

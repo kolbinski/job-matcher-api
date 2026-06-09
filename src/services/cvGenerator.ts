@@ -275,7 +275,7 @@ export async function generateCV(
   cvLanguage: string,
   jobTitle?: string,
   companyName?: string,
-  user?: { id: string; show_agent_info_in_cv: boolean },
+  user?: { id: string; show_agent_info_in_cv: boolean; gender: string | null },
 ): Promise<{ html: string; filename: string }> {
   const profileForClaude = {
     basic_info: {
@@ -418,8 +418,9 @@ Rules:
     if (agentClient) {
       const { agent } = agentClient
       const agentPhone = agent.phone ? ` · ${esc(agent.phone)}` : ''
+      const represented = user.gender === 'F' ? 'Jestem reprezentowana' : 'Jestem reprezentowany'
       const agentLine = isPl
-        ? `Jestem reprezentowany/a przez ${esc(agent.first_name)} ${esc(agent.last_name)} z Homo Digital — ${esc(agent.email)}${agentPhone}`
+        ? `${represented} przez ${esc(agent.first_name)} ${esc(agent.last_name)} z Homo Digital — ${esc(agent.email)}${agentPhone}`
         : `I am represented by ${esc(agent.first_name)} ${esc(agent.last_name)} from Homo Digital — ${esc(agent.email)}${agentPhone}`
       footerParts.push(
         `<p style="font-size:10px;color:#9ca3af;text-align:center;margin-top:24px;">${agentLine}</p>`,
