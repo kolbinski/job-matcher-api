@@ -69,6 +69,38 @@ async function loadExchangeRates(): Promise<Record<string, number>> {
   }
 }
 
+type EtEntry = { type?: string; currency?: string; unit?: string; from?: number; to?: number }
+
+function dedupKey(offer: {
+  source: string
+  title: string
+  company_name: string
+  experience_level: string | null
+  workplace_type: string | null
+  working_time: string | null
+  required_skills: string[]
+  nice_to_have_skills: string[]
+  employment_types: unknown
+  city: string | null
+}): string {
+  const req = [...offer.required_skills].sort()
+  const nth = [...offer.nice_to_have_skills].sort()
+  const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
+    .slice()
+    .sort((a, b) => {
+      if ((a.type ?? '') !== (b.type ?? '')) return (a.type ?? '') < (b.type ?? '') ? -1 : 1
+      if ((a.currency ?? '') !== (b.currency ?? '')) return (a.currency ?? '') < (b.currency ?? '') ? -1 : 1
+      if ((a.unit ?? '') !== (b.unit ?? '')) return (a.unit ?? '') < (b.unit ?? '') ? -1 : 1
+      if ((a.from ?? 0) !== (b.from ?? 0)) return (a.from ?? 0) - (b.from ?? 0)
+      return (a.to ?? 0) - (b.to ?? 0)
+    })
+  return JSON.stringify([
+    offer.source, offer.title, offer.company_name,
+    offer.experience_level, offer.workplace_type, offer.working_time,
+    req, nth, ets, offer.city,
+  ])
+}
+
 function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[], rates: Record<string, number>): SalaryEntry[] {
   if (salaryPrefs.length === 0) return []
   const types = Array.isArray(employmentTypes)
@@ -197,7 +229,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   const userOffers = await prisma.userOffer.findMany({
     where,
     include: {
-      offer: { select: { title: true, company_name: true, url: true, employment_types: true, source: true, city: true, workplace_type: true } },
+      offer: { select: { title: true, company_name: true, url: true, employment_types: true, source: true, city: true, workplace_type: true, experience_level: true, working_time: true, required_skills: true, nice_to_have_skills: true } },
       status_history: {
         where: { status: 'applied' },
         orderBy: { created_at: 'desc' },
@@ -212,7 +244,23 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     loadExchangeRates(),
   ])
 
-  let result = userOffers
+  // Dedup: one row per unique offer fingerprint; prefer highest claude_score, then most recent matched_at
+  const seen = new Map<string, typeof userOffers[number]>()
+  for (const uo of userOffers) {
+    const key = dedupKey(uo.offer)
+    const prev = seen.get(key)
+    if (!prev) {
+      seen.set(key, uo)
+    } else {
+      const prevScore = prev.claude_score ?? -1
+      const newScore = uo.claude_score ?? -1
+      if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+        seen.set(key, uo)
+      }
+    }
+  }
+
+  let result = [...seen.values()]
 
   if (has_learning_goals === 'true' && status === 'ai_rejected') {
     if (learningGoals.length > 0) {
