@@ -189,6 +189,10 @@ Both pre_filter_rejected and claude batch insertions in `matchService.ts` now do
 `OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary: SalaryEntry[], role_fit, url}`
 `SalaryEntry` = `{min, max, currency, type, delta, delta_normalized}` — delta/delta_normalized computed the same way as `buildSalaryEntries` in `userOffers.ts`. Exchange rates loaded once per job from `settings.exchange_rates`; falls back to rate=1 (delta_normalized=delta) if key missing.
 
+**[2026-06-09] Per-user notification hour with UTC offset**
+`users.send_notifications_hour` (INT NOT NULL DEFAULT 17) + `users.utc_offset` (INT NOT NULL DEFAULT 1, CET winter) control per-user push notification timing. The hourly cron job `'0 * * * *'` uses `getUTCHours()` and a `$queryRaw` with `WHERE send_notifications_hour = (utc_offset + $hour) % 24` to match users by their local time regardless of server timezone. Two-step pattern: raw query returns `id[]`, `findMany` fetches full objects. Modulo 24 handles midnight wrap-around. Default utc_offset=1 suits CET; Poland in summer (CEST) needs utc_offset=2 — set manually per user.
+The manual trigger `POST /v1/notifications/send` (agent JWT) is kept for R's use and runs identical logic scoped to the calling agent's clients.
+
 **[2026-06-08] Unified auth endpoint — POST /v1/auth/login**
 `src/routes/auth.ts` handles both agent and client login. Tries agent first (email → `agents.password_hash` via bcrypt), then user (`users.password`). Returns `{ token, role }` where JWT payload is `{ role: 'agent', agent_id, email }` or `{ role: 'client', user_id, email }`. Same 401 for all failure cases (not-found, wrong password, no password set) — prevents email enumeration.
 Old `POST /v1/auth/agent/login` kept intact at `/v1/auth/agent` — R depends on it; its JWT is `{ agentId, email }` (no role).

@@ -1,6 +1,7 @@
 import cron from 'node-cron'
 import { prisma } from './prisma'
 import { syncOffers } from '../jobs/offerSync'
+import { sendPushToClient } from '../services/syncService'
 
 const STARTUP_GRACE_MS = 5 * 60 * 1000
 const startupTime = Date.now()
@@ -61,6 +62,54 @@ async function runSync(): Promise<void> {
   }
 }
 
+async function runHourlyNotifications(): Promise<void> {
+  try {
+    const currentUtcHour = new Date().getUTCHours()
+    // Match users whose local hour (UTC + utc_offset) equals send_notifications_hour.
+    // Modulo 24 handles wrap-around (e.g. UTC 23 + offset 2 = 1am local).
+    const matchedRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM users
+      WHERE send_notifications_hour = (utc_offset + ${currentUtcHour}) % 24
+    `
+    const usersToNotify = await prisma.user.findMany({
+      where: { id: { in: matchedRows.map(r => r.id) } },
+    })
+
+    for (const user of usersToNotify) {
+      const unnotified = await prisma.userOfferStatus.findMany({
+        where: {
+          client_notified: false,
+          status: 'applied',
+          user_offer: { user_id: user.id },
+        },
+        select: { id: true },
+      })
+
+      if (unnotified.length === 0) continue
+
+      const agentClient = await prisma.agentClient.findFirst({
+        where: { user_id: user.id },
+        include: { agent: { select: { first_name: true } } },
+      })
+
+      const agentName = agentClient?.agent.first_name ?? 'Your agent'
+      const count = unnotified.length
+      const body = `Your agent ${agentName} applied to ${count} new offer${count === 1 ? '' : 's'}.`
+
+      await sendPushToClient(user.id, 'Homo Digital', body)
+
+      await prisma.userOfferStatus.updateMany({
+        where: { id: { in: unnotified.map(r => r.id) } },
+        data: { client_notified: true },
+      })
+
+      console.log(`[scheduler] Notified user ${user.id}: ${count} offer(s)`)
+    }
+  } catch (err) {
+    console.error('[scheduler] Hourly notifications failed:', err)
+  }
+}
+
 // Builds two cron expressions from work_start_utc, work_end_utc, work_days settings:
 //   '45 {start} * * {days}'          — full scrape 15min into the first working hour
 //   '0 {start+1}-{end} * * {days}'   — incremental scrape every hour during working hours
@@ -98,6 +147,9 @@ export async function startScheduler(): Promise<void> {
   }
 
   console.log(`[scheduler] Scheduled ${scheduled} expression(s)`)
+
+  cron.schedule('0 * * * *', runHourlyNotifications)
+  console.log('[scheduler] Hourly notification job registered (0 * * * *)')
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...')
   const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })

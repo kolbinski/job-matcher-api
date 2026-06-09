@@ -1,7 +1,7 @@
 # Current Task
 
 **Status:** 🟢 V1 Build — production, ongoing optimisations
-**Last Updated:** 2026-06-06 (session 2)
+**Last Updated:** 2026-06-09 (session 6)
 
 ---
 
@@ -91,6 +91,18 @@ Ship a working `POST /v1/match` endpoint that:
 - **Unified auth** — `POST /v1/auth/login` added in `src/routes/auth.ts`; tries agent (uses `password_hash`) then user (uses `password`); JWT payload includes `role: 'agent'|'client'`; old `POST /v1/auth/agent/login` kept for R backward compat.
 - **users.password** — `password String?` added to User model; migration `20260608000004_add_user_password` applied.
 - **set-passwords.ts** — script hashes and stores `agent123` for `krzysztof.olbinski@homodigital.io` and `client123` for Marek (id `7ca43c93-...`).
+
+## Recent Changes (2026-06-09 session 6)
+
+- **`users.utc_offset`** — `Int @default(1)` added to User model; migration `20260609000002_add_utc_offset` applied; existing rows defaulted to 1 (CET winter).
+- **UTC-aware notification matching** — `runHourlyNotifications()` now uses `getUTCHours()` + `$queryRaw` with `WHERE send_notifications_hour = (utc_offset + $hour) % 24`. Two-step pattern: raw query returns IDs, `findMany` fetches full user rows (avoids raw-type complexity, keeps type safety).
+- **Marek's record** — `utc_offset=2` (Poland CEST, UTC+2), `send_notifications_hour=17`; fires at UTC 15:00 → `(2+15)%24=17` ✓.
+
+## Recent Changes (2026-06-09 session 5)
+
+- **`users.send_notifications_hour`** — `Int @default(17)` added to User model; migration `20260609000001_add_send_notifications_hour` applied; all existing rows (including Marek) defaulted to 17.
+- **Hourly notification cronjob** — `runHourlyNotifications()` added to `scheduler.ts`; registered with `'0 * * * *'`; finds users whose `send_notifications_hour` matches current local hour, queries `user_offer_statuses` for unnotified `applied` rows, sends push via `sendPushToClient()`, marks rows `client_notified = true`.
+- **`POST /v1/notifications/send`** — kept unchanged for manual trigger from R.
 
 ## Next Action
 
