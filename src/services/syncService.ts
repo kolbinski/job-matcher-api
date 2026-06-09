@@ -26,11 +26,17 @@ async function sendPushToClient(userId: string, title: string, body: string): Pr
     data: { type: 'sync_complete' },
   }))
 
-  await fetch('https://exp.host/--/api/v2/push/send', {
+  for (const msg of messages) {
+    console.log('[push] Sending to token:', msg.to)
+  }
+
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(messages),
   })
+  const responseBody = await response.json()
+  console.log('[push] Response:', JSON.stringify(responseBody))
 }
 
 interface SyncClientResult {
