@@ -30,6 +30,17 @@ userSyncsRouter.get('/', validateJwt, async (req, res) => {
   return res.json({ syncs })
 })
 
+interface ReportOffer {
+  url?: string | null
+  [key: string]: unknown
+}
+
+interface SyncReportShape {
+  worth_applying?: ReportOffer[]
+  level_up?: ReportOffer[]
+  [key: string]: unknown
+}
+
 userSyncsRouter.get('/:id', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!
   if (role !== 'client') {
@@ -51,5 +62,29 @@ userSyncsRouter.get('/:id', validateJwt, async (req, res) => {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Sync report does not belong to this client' })
   }
 
-  return res.json({ id: sync.id, created_at: sync.created_at, report: sync.report })
+  const report = sync.report as SyncReportShape
+
+  const urls = [
+    ...(report.worth_applying ?? []),
+    ...(report.level_up ?? []),
+  ].map(o => o.url).filter((u): u is string => typeof u === 'string' && u.length > 0)
+
+  const urlStatusMap = new Map<string, string>()
+  if (urls.length > 0) {
+    const userOffers = await prisma.userOffer.findMany({
+      where: { user_id: user_id!, offer: { url: { in: urls } } },
+      select: { status: true, offer: { select: { url: true } } },
+    })
+    for (const uo of userOffers) {
+      if (uo.offer.url) urlStatusMap.set(uo.offer.url, uo.status)
+    }
+  }
+
+  const enriched: SyncReportShape = {
+    ...report,
+    worth_applying: (report.worth_applying ?? []).map(o => ({ ...o, status: urlStatusMap.get(o.url ?? '') ?? null })),
+    level_up: (report.level_up ?? []).map(o => ({ ...o, status: urlStatusMap.get(o.url ?? '') ?? null })),
+  }
+
+  return res.json({ id: sync.id, created_at: sync.created_at, report: enriched })
 })

@@ -11,7 +11,6 @@ export const pipelineRouter = Router()
 const PIPELINE_STATUSES = [
   'pending_apply',
   'applied',
-  'pending_reply_from_recruiter',
   'recruiter_rejected',
   'offer_received',
   'accepted',
