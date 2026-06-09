@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
+import { sendPushToClient } from '../services/syncService'
 
 export const notificationsRouter = Router()
 
@@ -37,26 +38,8 @@ notificationsRouter.post('/send', validateJwt, async (req, res) => {
 
     if (unnotified.length === 0) continue
 
-    const pushTokens = await prisma.pushToken.findMany({
-      where: { user_id },
-      select: { token: true },
-    })
-
-    if (pushTokens.length > 0) {
-      const body = `Your agent ${agent.first_name} applied to ${unnotified.length} new offer${unnotified.length === 1 ? '' : 's'}.`
-      const messages = pushTokens.map(pt => ({
-        to: pt.token,
-        title: 'Homo Digital',
-        body,
-        data: {},
-      }))
-
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(messages),
-      })
-    }
+    const body = `Your agent ${agent.first_name} applied to ${unnotified.length} new offer${unnotified.length === 1 ? '' : 's'}.`
+    await sendPushToClient(user_id, 'Homo Digital', body)
 
     await prisma.userOfferStatus.updateMany({
       where: { id: { in: unnotified.map(r => r.id) } },

@@ -12,32 +12,36 @@ const isTestUser = (email: string): boolean =>
   email.includes('@jobmatcl') ||
   email.endsWith('.test');
 
-async function sendPushToClient(userId: string, title: string, body: string): Promise<void> {
+export async function sendPushToClient(
+  userId: string,
+  title: string,
+  body: string,
+): Promise<void> {
   const tokens = await prisma.pushToken.findMany({
     where: { user_id: userId },
     select: { token: true },
-  })
-  if (tokens.length === 0) return
+  });
+  if (tokens.length === 0) return;
 
   const messages = tokens.map(pt => ({
     to: pt.token,
     title,
     body,
     data: { type: 'sync_complete' },
-  }))
+  }));
 
-  console.log('[push] Sending to tokens:', tokens.length)
+  console.log('[push] Sending to tokens:', tokens.length);
   for (const pt of tokens) {
-    console.log('[push] Token:', pt.token.substring(0, 30) + '...')
+    console.log('[push] Token:', pt.token.substring(0, 30) + '...');
   }
 
   const response = await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(messages),
-  })
-  const result = await response.json()
-  console.log('[push] Expo response:', JSON.stringify(result))
+  });
+  const result = await response.json();
+  console.log('[push] Body', body, '; Expo response:', JSON.stringify(result));
 }
 
 interface SyncClientResult {
@@ -123,17 +127,22 @@ async function runJob(
   const agent = await prisma.agent.findUnique({
     where: { id: agentId },
     select: { first_name: true },
-  })
+  });
 
   job.total_clients = users.length;
   console.log(`[sync] Starting job for ${users.length} users`);
 
   // Exchange rates are constant for the entire job run — load once
-  let exchangeRates: Record<string, number> = {}
+  let exchangeRates: Record<string, number> = {};
   try {
-    const ratesSetting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
-    if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
-  } catch { /* rates stay empty — delta_normalized will equal delta */ }
+    const ratesSetting = await prisma.settings.findUnique({
+      where: { key: 'exchange_rates' },
+    });
+    if (ratesSetting)
+      exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>;
+  } catch {
+    /* rates stay empty — delta_normalized will equal delta */
+  }
 
   for (const user of users) {
     const milestone = ((job.processed_clients + 1) / job.total_clients) * 100;
@@ -150,31 +159,49 @@ async function runJob(
       const stretchCount = result.stretch_offers.length;
       const email_report = buildEmailReport(result, user);
 
-      const rawProfile = (user.profile as unknown) as {
-        preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
-      }
-      const salaryPrefs: SalaryPref[] = (rawProfile?.preferences?.salary ?? [])
-        .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null)
+      const rawProfile = user.profile as unknown as {
+        preferences?: {
+          salary?: Array<{ type?: string; currency?: string; min?: number }>;
+        };
+      };
+      const salaryPrefs: SalaryPref[] = (
+        rawProfile?.preferences?.salary ?? []
+      ).filter(
+        (p): p is SalaryPref =>
+          p.type != null && p.currency != null && p.min != null,
+      );
 
       const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates);
       await prisma.userSync.create({
-        data: { user_id: user.id, report: syncReport as unknown as Prisma.InputJsonValue },
+        data: {
+          user_id: user.id,
+          report: syncReport as unknown as Prisma.InputJsonValue,
+        },
       });
 
       if (user.email) {
         if (isTestUser(user.email)) {
           console.log(`[sync] Skipping email for test user: ${user.email}`);
         } else {
-          await sendMatchReport(agentEmail, agentName, user.email, email_report);
+          await sendMatchReport(
+            agentEmail,
+            agentName,
+            user.email,
+            email_report,
+          );
           console.log(`[sync] Email sent to ${user.email}`);
         }
       }
 
-      if (newOffersCount > 0 || stretchCount > 0) {
-        const agentFirstName = agent?.first_name ?? agentName
-        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`
-        await sendPushToClient(user.id, 'Homo Digital', pushBody)
-      }
+      console.log(
+        '[push] newly_inserted:',
+        newOffersCount,
+        'stretch:',
+        stretchCount,
+      );
+      const agentFirstName = agent?.first_name ?? agentName;
+      const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${newOffersCount} are worth applying and ${stretchCount} look promising for level up.`;
+      await sendPushToClient(user.id, 'Homo Digital', pushBody);
 
       job.clients.push({
         client_id: user.id,
