@@ -5,16 +5,15 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // directUrl bypasses PgBouncer for Prisma CLI (migrate, introspect)
   directUrl = env("DIRECT_URL")
 }
 
 model SkillCategory {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  market     String   @default("IT")
-  sort_order Int      @default(999)
-  created_at DateTime @default(now())
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @unique
+  market     String    @default("IT")
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  sort_order Int       @default(999)
   skills     Skill[]
 
   @@map("skill_categories")
@@ -24,8 +23,8 @@ model Skill {
   id          String         @id @default(uuid())
   name        String         @unique
   created_at  DateTime       @default(now())
-  category_id String?
-  category    SkillCategory? @relation(fields: [category_id], references: [id])
+  category_id String?        @db.Uuid
+  category    SkillCategory? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("skills")
 }
@@ -40,33 +39,29 @@ model Settings {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  email              String   @unique
-  jobmatcher_api_key String   @unique
-  first_name         String?
-  last_name          String?
-  password           String?
-  send_job_applied_notifications_hour  Int @default(17)
-  send_sync_report_notifications_hour  Int @default(9)
-  utc_offset                           Int @default(1)
-  profile            Json?
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
-
-  api_calls     ApiCall[]
-  user_offers   UserOffer[]
-  agent_clients AgentClient[]
-  user_syncs    UserSync[]
-  push_tokens   PushToken[]
+  id                                  String        @id @default(uuid())
+  email                               String        @unique
+  jobmatcher_api_key                  String        @unique
+  created_at                          DateTime      @default(now())
+  updated_at                          DateTime      @updatedAt
+  first_name                          String?
+  last_name                           String?
+  profile                             Json?
+  password                            String?
+  send_job_applied_notifications_hour Int           @default(17)
+  utc_offset                          Int           @default(1)
+  send_sync_report_notifications_hour Int           @default(9)
+  agent_clients                       AgentClient[]
+  api_calls                           ApiCall[]
+  push_tokens                         PushToken[]
+  user_offers                         UserOffer[]
+  user_syncs                          UserSync[]
 
   @@map("users")
 }
 
-// required_skills and nice_to_have_skills are TEXT[] from JustJoin.
-// employment_types and multilocation are JSONB to preserve the nested structure.
 model Offer {
-  id                      String    @id @default(uuid())
-  slug                    String    @unique
+  slug                    String      @unique
   source                  String
   title                   String
   company_name            String
@@ -77,63 +72,58 @@ model Offer {
   remote_interview        Boolean?
   required_skills         String[]
   nice_to_have_skills     String[]
-  employment_types        Json      @db.JsonB
-  multilocation           Json?     @db.JsonB
+  employment_types        Json
+  multilocation           Json?
   city                    String?
   street                  String?
-  latitude                Decimal?  @db.Decimal(11, 7)
-  longitude               Decimal?  @db.Decimal(11, 7)
+  latitude                Decimal?    @db.Decimal(11, 7)
+  longitude               Decimal?    @db.Decimal(11, 7)
   category_id             Int?
   open_to_hire_ukrainians Boolean?
   languages               String[]
   url                     String?
   published_at            DateTime?
   fetched_at              DateTime?
-  is_active               Boolean   @default(true)
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @updatedAt
-
-  user_offers UserOffer[]
+  created_at              DateTime    @default(now())
+  updated_at              DateTime    @updatedAt
+  id                      String      @id @default(uuid())
+  is_active               Boolean     @default(true)
+  user_offers             UserOffer[]
 
   @@map("offers")
 }
 
-// status values: pre_filter_rejected | ai_rejected | pending_apply | applied |
-//   pending_reply_from_recruiter | recruiter_rejected | offer_received | accepted |
-//   client_withdrawn | offer_expired | agent_withdrawn
 model UserOffer {
-  id                       String   @id @default(uuid())
+  id                       String            @id @default(uuid())
   user_id                  String
   offer_id                 String
   status                   String
   rejection_reason         String?
-  agent_withdraw_reason    String?
   claude_score             Int?
   claude_role_fit          String?
   claude_matched_reasons   String[]
   claude_missing_skills    String[]
   claude_salary_comparison String?
   claude_recommended       Boolean?
+  matched_at               DateTime          @default(now())
+  updated_at               DateTime          @updatedAt
+  agent_withdraw_reason    String?
   cv_language              String?
-  matched_at               DateTime @default(now())
-  updated_at               DateTime @updatedAt
-
-  user           User              @relation(fields: [user_id], references: [id])
-  offer          Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
-  status_history UserOfferStatus[]
+  status_history           UserOfferStatus[]
+  offer                    Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
+  user                     User              @relation(fields: [user_id], references: [id])
 
   @@unique([user_id, offer_id])
   @@map("user_offers")
 }
 
 model UserOfferStatus {
-  id               String   @id @default(uuid())
-  user_offer_id    String
-  status           String
-  client_notified  Boolean  @default(false)
-  created_at       DateTime @default(now())
-
-  user_offer UserOffer @relation(fields: [user_offer_id], references: [id], onDelete: Cascade)
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_offer_id   String
+  status          String
+  created_at      DateTime  @default(now())
+  client_notified Boolean   @default(false)
+  user_offer      UserOffer @relation(fields: [user_offer_id], references: [id], onDelete: Cascade)
 
   @@map("user_offer_statuses")
 }
@@ -142,11 +132,11 @@ model Agent {
   id            String        @id @default(uuid())
   email         String        @unique
   password_hash String
+  created_at    DateTime      @default(now())
   first_name    String        @default("")
   last_name     String        @default("")
   phone         String?
   photo_url     String?
-  created_at    DateTime      @default(now())
   clients       AgentClient[]
 
   @@map("agents")
@@ -156,9 +146,8 @@ model AgentClient {
   id       String @id @default(uuid())
   agent_id String
   user_id  String
-
-  agent Agent @relation(fields: [agent_id], references: [id])
-  user  User  @relation(fields: [user_id], references: [id])
+  agent    Agent  @relation(fields: [agent_id], references: [id])
+  user     User   @relation(fields: [user_id], references: [id])
 
   @@unique([agent_id, user_id])
   @@map("agent_clients")
@@ -173,17 +162,16 @@ model ApiCall {
   response_ms    Int?
   status         String
   error_message  String?
-
-  user User @relation(fields: [user_id], references: [id])
+  user           User     @relation(fields: [user_id], references: [id])
 
   @@map("api_calls")
 }
 
 model OfferFetch {
-  id                 String   @id @default(uuid())
-  source             String
-  new_upserts_count  Int
-  fetched_at         DateTime
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source            String
+  new_upserts_count Int
+  fetched_at        DateTime
 
   @@map("offer_fetches")
 }
@@ -193,8 +181,7 @@ model UserSync {
   user_id    String
   report     Json
   created_at DateTime @default(now())
-
-  user User @relation(fields: [user_id], references: [id])
+  user       User     @relation(fields: [user_id], references: [id])
 
   @@map("user_syncs")
 }
@@ -217,8 +204,7 @@ model PushToken {
   platform   String
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
-
-  user User @relation(fields: [user_id], references: [id])
+  user       User     @relation(fields: [user_id], references: [id])
 
   @@map("push_tokens")
 }
