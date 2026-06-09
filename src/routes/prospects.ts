@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { validateAgentJwt } from '../middleware/validateAgentJwt';
+import { sendProspectNotification } from '../services/emailService';
 
 export const prospectsRouter = Router();
 
@@ -32,6 +33,7 @@ prospectsRouter.post('/', async (req, res) => {
   const prospect = await prisma.prospect.create({
     data: { email, role, notes },
   });
+  await sendProspectNotification(email, role, notes);
   return res.status(201).json(prospect);
 });
 

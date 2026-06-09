@@ -3,6 +3,22 @@ import { env } from '../lib/env';
 
 const resend = new Resend(env.RESEND_API_KEY);
 
+export async function sendProspectNotification(
+  email: string,
+  role: string,
+  notes: string | undefined,
+): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10)
+  const lines = [`From: ${email}`, `Role: ${role}`, `Date: ${date}`]
+  if (notes) lines.push(notes)
+  await resend.emails.send({
+    from: 'noreply@homodigital.io',
+    to: 'contact@homodigital.io',
+    subject: `[Prospect] ${email}`,
+    text: lines.join('\n'),
+  })
+}
+
 export async function sendFeedbackNotification(
   senderEmail: string,
   source: string,
