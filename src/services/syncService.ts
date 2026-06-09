@@ -26,8 +26,9 @@ async function sendPushToClient(userId: string, title: string, body: string): Pr
     data: { type: 'sync_complete' },
   }))
 
-  for (const msg of messages) {
-    console.log('[push] Sending to token:', msg.to)
+  console.log('[push] Sending to tokens:', tokens.length)
+  for (const pt of tokens) {
+    console.log('[push] Token:', pt.token.substring(0, 30) + '...')
   }
 
   const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -35,8 +36,8 @@ async function sendPushToClient(userId: string, title: string, body: string): Pr
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(messages),
   })
-  const responseBody = await response.json()
-  console.log('[push] Response:', JSON.stringify(responseBody))
+  const result = await response.json()
+  console.log('[push] Expo response:', JSON.stringify(result))
 }
 
 interface SyncClientResult {
