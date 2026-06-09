@@ -46,8 +46,9 @@ model User {
   first_name         String?
   last_name          String?
   password           String?
-  send_notifications_hour Int @default(17)
-  utc_offset              Int @default(1)
+  send_job_applied_notifications_hour  Int @default(17)
+  send_sync_report_notifications_hour  Int @default(9)
+  utc_offset                           Int @default(1)
   profile            Json?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt

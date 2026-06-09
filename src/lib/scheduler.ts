@@ -1,7 +1,7 @@
 import cron from 'node-cron'
 import { prisma } from './prisma'
 import { syncOffers } from '../jobs/offerSync'
-import { sendPushToClient } from '../services/syncService'
+import { sendPushToClient, syncUserById } from '../services/syncService'
 
 const STARTUP_GRACE_MS = 5 * 60 * 1000
 const startupTime = Date.now()
@@ -65,11 +65,11 @@ async function runSync(): Promise<void> {
 async function runHourlyNotifications(): Promise<void> {
   try {
     const currentUtcHour = new Date().getUTCHours()
-    // Match users whose local hour (UTC + utc_offset) equals send_notifications_hour.
+    // Match users whose local hour (UTC + utc_offset) equals send_job_applied_notifications_hour.
     // Modulo 24 handles wrap-around (e.g. UTC 23 + offset 2 = 1am local).
     const matchedRows = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM users
-      WHERE send_notifications_hour = (utc_offset + ${currentUtcHour}) % 24
+      WHERE send_job_applied_notifications_hour = (utc_offset + ${currentUtcHour}) % 24
     `
     const usersToNotify = await prisma.user.findMany({
       where: { id: { in: matchedRows.map(r => r.id) } },
@@ -107,6 +107,37 @@ async function runHourlyNotifications(): Promise<void> {
     }
   } catch (err) {
     console.error('[scheduler] Hourly notifications failed:', err)
+  }
+}
+
+async function runHourlySyncReports(): Promise<void> {
+  try {
+    const currentUtcHour = new Date().getUTCHours()
+    const matchedRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM users
+      WHERE profile IS NOT NULL
+      AND send_sync_report_notifications_hour = (utc_offset + ${currentUtcHour}) % 24
+    `
+
+    const startOfToday = new Date()
+    startOfToday.setUTCHours(0, 0, 0, 0)
+
+    for (const row of matchedRows) {
+      const todaySync = await prisma.userSync.findFirst({
+        where: { user_id: row.id, created_at: { gte: startOfToday } },
+      })
+      if (todaySync) {
+        console.log('[sync-cron] Already synced today for user:', row.id)
+        continue
+      }
+      try {
+        await syncUserById(row.id)
+      } catch (err) {
+        console.error(`[sync-cron] Sync failed for user ${row.id}:`, err)
+      }
+    }
+  } catch (err) {
+    console.error('[scheduler] Hourly sync reports failed:', err)
   }
 }
 
@@ -150,6 +181,9 @@ export async function startScheduler(): Promise<void> {
 
   cron.schedule('0 * * * *', runHourlyNotifications)
   console.log('[scheduler] Hourly notification job registered (0 * * * *)')
+
+  cron.schedule('0 * * * *', runHourlySyncReports)
+  console.log('[scheduler] Hourly sync report job registered (0 * * * *)')
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...')
   const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })

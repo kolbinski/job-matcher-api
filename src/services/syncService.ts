@@ -245,3 +245,54 @@ async function runJob(
   job.finished_at = new Date().toISOString();
   console.log(`[sync] Job done. total_new_offers=${job.total_new_offers}`);
 }
+
+export async function syncUserById(userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, first_name: true, profile: true },
+  });
+  if (!user) throw new Error(`syncUserById: user ${userId} not found`);
+
+  const agentClient = await prisma.agentClient.findFirst({
+    where: { user_id: userId },
+    include: { agent: { select: { first_name: true } } },
+  });
+  const agentName = agentClient?.agent.first_name ?? 'Your agent';
+
+  let exchangeRates: Record<string, number> = {};
+  try {
+    const ratesSetting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } });
+    if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>;
+  } catch { /* rates stay empty — delta_normalized will equal delta */ }
+
+  const maxLevelUpSetting = await prisma.settings.findUnique({ where: { key: 'max_level_up' } });
+  const maxLevelUp = parseInt(maxLevelUpSetting?.value ?? '40', 10);
+
+  const result = await runMatchForUser(userId, { ai_scoring: true });
+
+  const rawProfile = user.profile as unknown as {
+    preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> };
+  };
+  const salaryPrefs: SalaryPref[] = (rawProfile?.preferences?.salary ?? []).filter(
+    (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
+  );
+
+  const syncReport = buildSyncReport(result, salaryPrefs, exchangeRates, maxLevelUp);
+  const userSync = await prisma.userSync.create({
+    data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
+  });
+
+  const newOffersCount = result.meta.newly_inserted;
+  const stretchCount = result.stretch_offers.length;
+
+  if (newOffersCount > 0 || stretchCount > 0) {
+    const worthApplyingCount = result.matched.filter(o => o.recommended === true).length;
+    const pushBody = `Your agent ${agentName} scanned ${result.meta.total_offers_scanned} new offers. ${worthApplyingCount} are worth applying and ${Math.min(stretchCount, maxLevelUp)} look promising for level up.`;
+    await sendPushToClient(userId, 'Homo Digital', pushBody, {
+      type: 'sync_complete',
+      user_sync_id: userSync.id,
+    });
+  }
+
+  console.log(`[sync] User ${userId}: ${newOffersCount} new, ${stretchCount} stretch, ${result.meta.total_offers_scanned} scanned`);
+}

@@ -189,7 +189,13 @@ Both pre_filter_rejected and claude batch insertions in `matchService.ts` now do
 `OfferEntry` = `{score, title, company, work_model: 'remote'|'hybrid'|'office'|null, city, salary: SalaryEntry[], role_fit, url}`
 `SalaryEntry` = `{min, max, currency, type, delta, delta_normalized}` — delta/delta_normalized computed the same way as `buildSalaryEntries` in `userOffers.ts`. Exchange rates loaded once per job from `settings.exchange_rates`; falls back to rate=1 (delta_normalized=delta) if key missing.
 
-**[2026-06-09] Per-user notification hour with UTC offset**
+**[2026-06-09] Two separate per-user notification hours**
+`send_job_applied_notifications_hour` (default 17) — fires `runHourlyNotifications`: finds unnotified `applied` user_offer_statuses, sends push, marks `client_notified=true`.
+`send_sync_report_notifications_hour` (default 9) — fires `runHourlySyncReports`: once-per-UTC-day guard via `userSync.findFirst({ gte: startOfToday })`, then calls `syncUserById(userId)` from `syncService.ts`.
+`syncUserById` mirrors `runJob`'s per-user block: loads settings, calls `runMatchForUser`, builds + saves `UserSync`, sends push if new offers found. Both jobs share the `(utc_offset + utcHour) % 24` modulo pattern.
+`send_notifications_hour` (old name) no longer exists — was renamed in migration `20260609000003_add_notification_hours`.
+
+**[2026-06-09] Per-user notification hour with UTC offset** [SUPERSEDED — see entry above]
 `users.send_notifications_hour` (INT NOT NULL DEFAULT 17) + `users.utc_offset` (INT NOT NULL DEFAULT 1, CET winter) control per-user push notification timing. The hourly cron job `'0 * * * *'` uses `getUTCHours()` and a `$queryRaw` with `WHERE send_notifications_hour = (utc_offset + $hour) % 24` to match users by their local time regardless of server timezone. Two-step pattern: raw query returns `id[]`, `findMany` fetches full objects. Modulo 24 handles midnight wrap-around. Default utc_offset=1 suits CET; Poland in summer (CEST) needs utc_offset=2 — set manually per user.
 The manual trigger `POST /v1/notifications/send` (agent JWT) is kept for R's use and runs identical logic scoped to the calling agent's clients.
 

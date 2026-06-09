@@ -1,7 +1,7 @@
 # Current Task
 
 **Status:** 🟢 V1 Build — production, ongoing optimisations
-**Last Updated:** 2026-06-09 (session 6)
+**Last Updated:** 2026-06-09 (session 7)
 
 ---
 
@@ -91,6 +91,13 @@ Ship a working `POST /v1/match` endpoint that:
 - **Unified auth** — `POST /v1/auth/login` added in `src/routes/auth.ts`; tries agent (uses `password_hash`) then user (uses `password`); JWT payload includes `role: 'agent'|'client'`; old `POST /v1/auth/agent/login` kept for R backward compat.
 - **users.password** — `password String?` added to User model; migration `20260608000004_add_user_password` applied.
 - **set-passwords.ts** — script hashes and stores `agent123` for `krzysztof.olbinski@homodigital.io` and `client123` for Marek (id `7ca43c93-...`).
+
+## Recent Changes (2026-06-09 session 7)
+
+- **Schema rename + add** — `send_notifications_hour` renamed to `send_job_applied_notifications_hour`; `send_sync_report_notifications_hour Int @default(9)` added; migration `20260609000003_add_notification_hours` applied.
+- **CHANGE 2** — `runHourlyNotifications` raw SQL updated to reference `send_job_applied_notifications_hour`.
+- **CHANGE 3** — `syncUserById(userId)` exported from `syncService.ts`; mirrors per-user block in `runJob` (settings load, `runMatchForUser`, `buildSyncReport`, `userSync.create`, push). `runHourlySyncReports()` in `scheduler.ts` matches users by `send_sync_report_notifications_hour`, guards with `userSync.findFirst({ gte: startOfToday })`, calls `syncUserById` per user. Registered on `'0 * * * *'`.
+- **Marek** — `send_job_applied_notifications_hour=17`, `send_sync_report_notifications_hour=9`, `utc_offset=2` confirmed.
 
 ## Recent Changes (2026-06-09 session 6)
 
