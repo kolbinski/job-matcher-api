@@ -75,6 +75,16 @@ Sum = 1.00. Any change to weights is a breaking change tracked in `memory.md`.
 
 ---
 
+## Wrong Project Guard
+
+This repo is **`job-matcher-api`** — a Node.js REST API. If a request clearly targets a different project (Chrome extension UI, mobile app, React components, `npm run build` for a frontend, Vite config, Tailwind, etc.), **stop immediately** and respond:
+
+> "This looks like it's meant for a different project (extension / app). Please paste it in the correct VS Code window."
+
+Do not read files, run commands, or make any changes. Wait for the user to confirm or redirect.
+
+---
+
 ## Git Workflow
 
 When the user says **"commit"**: run `npm run check` first. If it fails, fix all errors before proceeding. Once check passes:
