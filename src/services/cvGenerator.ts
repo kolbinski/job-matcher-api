@@ -489,11 +489,11 @@ Rules:
     if (agentClient) {
       const { agent } = agentClient;
       const agentPhone = agent.phone ? ` · ${esc(agent.phone)}` : '';
-      const represented =
-        user.gender === 'F' ? 'Jestem reprezentowana' : 'Jestem reprezentowany';
+      const agentFirstName = (isPl && agent.first_name_genitive) ? agent.first_name_genitive : agent.first_name;
+      const agentLastName = (isPl && agent.last_name_genitive) ? agent.last_name_genitive : agent.last_name;
       const agentLine = isPl
-        ? `${represented} przez ${esc(agent.first_name)} ${esc(agent.last_name)} z Homo Digital — ${esc(agent.email)}${agentPhone}`
-        : `I am represented by ${esc(agent.first_name)} ${esc(agent.last_name)} from Homo Digital — ${esc(agent.email)}${agentPhone}`;
+        ? `Reprezentuje mnie ${esc(agentFirstName)} ${esc(agentLastName)} z Homo Digital — ${esc(agent.email)}${agentPhone}`
+        : `I am represented by ${esc(agentFirstName)} ${esc(agentLastName)} from Homo Digital — ${esc(agent.email)}${agentPhone}`;
       footerParts.push(
         `<div class="cert-item" style="margin-bottom: 16px;">${agentLine}</div>`,
       );

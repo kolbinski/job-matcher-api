@@ -136,16 +136,18 @@ model UserOfferStatus {
 }
 
 model Agent {
-  id            String        @id @default(uuid())
-  email         String        @unique
-  password_hash String
-  created_at    DateTime      @default(now())
-  first_name    String        @default("")
-  last_name     String        @default("")
-  phone         String?
-  photo_url     String?
-  clients       AgentClient[]
-  feedbacks     Feedback[]
+  id                  String        @id @default(uuid())
+  email               String        @unique
+  password_hash       String
+  created_at          DateTime      @default(now())
+  first_name          String        @default("")
+  last_name           String        @default("")
+  first_name_genitive String?
+  last_name_genitive  String?
+  phone               String?
+  photo_url           String?
+  clients             AgentClient[]
+  feedbacks           Feedback[]
 
   @@map("agents")
 }
