@@ -10,6 +10,7 @@ import { authRouter } from './routes/auth'
 import { agentAuthRouter } from './routes/agentAuth'
 import { clientsRouter } from './routes/clients'
 import { cvGenerateRouter } from './routes/cvGenerate'
+import { clGenerateRouter } from './routes/clGenerate'
 import { offerMatchesRouter } from './routes/offerMatches'
 import { userOffersRouter } from './routes/userOffers'
 import { syncRouter } from './routes/sync'
@@ -37,9 +38,11 @@ app.use('/v1/user-offers', userOffersRouter)
 // 300s timeout for sync (runs match pipeline per client)
 app.use('/v1/sync', (req, _res, next) => { req.setTimeout(300_000); next() })
 app.use('/v1/sync', syncRouter)
-// 120s timeout for CV generation (Claude)
+// 120s timeout for CV/CL generation (Claude + Gotenberg)
 app.use('/v1/cv', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/cv', cvGenerateRouter)
+app.use('/v1/cl', (req, _res, next) => { req.setTimeout(120_000); next() })
+app.use('/v1/cl', clGenerateRouter)
 app.use('/v1/prospects', prospectsRouter)
 app.use('/v1/push-tokens', pushTokensRouter)
 app.use('/v1/notifications', notificationsRouter)
