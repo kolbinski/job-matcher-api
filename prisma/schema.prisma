@@ -112,6 +112,8 @@ model UserOffer {
   updated_at               DateTime          @updatedAt
   agent_withdraw_reason    String?
   cv_language              String?
+  cv_status                String?
+  cv_url                   String?
   status_history           UserOfferStatus[]
   offer                    Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
   user                     User              @relation(fields: [user_id], references: [id])

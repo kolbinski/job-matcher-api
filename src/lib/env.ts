@@ -4,12 +4,15 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().default(''),
   RESEND_API_KEY: z.string().default(''),
+  GOTENBERG_URL: z.string().default(''),
+  SUPABASE_URL: z.string().default(''),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
   JWT_SECRET: z.string().min(1).default('dev-jwt-secret-change-in-production'),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 })
 
-const requireInProduction = ['ANTHROPIC_API_KEY', 'RESEND_API_KEY', 'JWT_SECRET'] as const
+const requireInProduction = ['ANTHROPIC_API_KEY', 'RESEND_API_KEY', 'GOTENBERG_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET'] as const
 
 const parsed = EnvSchema.safeParse(process.env)
 

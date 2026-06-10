@@ -257,6 +257,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     city: uo.offer.city ?? null,
     work_model: uo.offer.workplace_type ?? null,
     cv_language: uo.cv_language,
+    cv_status: uo.cv_status ?? null,
+    cv_url: uo.cv_url ?? null,
   }))
 
   let filtered = mapped
