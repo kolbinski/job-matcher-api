@@ -24,6 +24,13 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+function formatPhone(phone: string): string {
+  const match = phone.match(/^(\+\d{1,3})(\d{9})$/)
+  if (!match) return phone
+  const [, prefix, digits] = match
+  return `${prefix} ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`
+}
+
 export async function generateCoverLetter(
   profile: CandidateProfile,
   offerText: string,
@@ -133,7 +140,7 @@ Rules:
     })
     if (agentClient) {
       const { agent } = agentClient
-      const agentPhone = agent.phone ? ` · ${esc(agent.phone)}` : ''
+      const agentPhone = agent.phone ? ` · ${esc(formatPhone(agent.phone))}` : ''
       const agentFirstName = (isPl && agent.first_name_genitive) ? agent.first_name_genitive : agent.first_name
       const agentLastName = (isPl && agent.last_name_genitive) ? agent.last_name_genitive : agent.last_name
       const agentLine = isPl
