@@ -20,11 +20,8 @@ const GenerateCVSchema = z.object({
 })
 
 cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
-  console.log('[cvGenerate] body:', JSON.stringify(req.body))
-
   const parsed = GenerateCVSchema.safeParse(req.body)
   if (!parsed.success) {
-    console.log('[cvGenerate] schema validation failed:', JSON.stringify(parsed.error.issues))
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
 
@@ -38,21 +35,17 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   })
 
   if (!link) {
-    console.log('[cvGenerate] agent-client link not found: agentId=%s clientId=%s', agentId, client_id)
     throw new AppError(403, 'FORBIDDEN', 'Client not found or not linked to this agent')
   }
 
   const { user } = link
-  console.log('[cvGenerate] user found: id=%s profile_set=%s', user.id, user.profile != null)
 
   if (!user.profile) {
-    console.log('[cvGenerate] no profile on user')
     throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this client')
   }
 
   const profileParsed = CandidateProfileSchema.safeParse(user.profile)
   if (!profileParsed.success) {
-    console.log('[cvGenerate] profile schema invalid:', JSON.stringify(profileParsed.error.issues))
     throw new AppError(422, 'INVALID_PROFILE', 'Profile file is invalid')
   }
 
@@ -84,8 +77,6 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     // Upload PDF to Supabase Storage
     const emailFolder = (user.email ?? '').replace(/@/g, '_at_').replace(/\./g, '_').replace(/\+/g, '_')
     const storagePath = `cvs/${emailFolder}/${filename}`
-    console.log('[cvGenerate] storagePath:', storagePath)
-    console.log('[cvGenerate] pdfBuffer type:', typeof pdfBuffer, 'length:', pdfBuffer?.length ?? 'undefined')
     const supabase = getSupabase()
     const { error: uploadError } = await supabase.storage
       .from('homo-digital')
@@ -99,7 +90,6 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
       data: { cv_status: 'done', cv_url: publicUrl, cv_language },
     })
 
-    console.log('[cvGenerate] done: %s', publicUrl)
     return res.json({ cv_url: publicUrl, cv_status: 'done' })
   } catch (err) {
     await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cv_status: 'error' } }).catch(() => {})
