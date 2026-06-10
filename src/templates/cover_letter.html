@@ -61,6 +61,7 @@
         color: #4a4a4a;
         text-align: right;
         margin-bottom: 24px;
+        white-space: nowrap;
       }
       .re-line {
         font-size: 13px;
@@ -108,22 +109,30 @@
   </head>
   <body>
     <div class="cl">
-      <header style="display: flex; align-items: flex-start; justify-content: space-between;">
+      <header
+        style="
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+        "
+      >
         <div>
           <h1>{{FULL_NAME}}</h1>
           <div class="target-role">{{TARGET_ROLE}}</div>
           <div class="contacts">{{CONTACTS}}</div>
         </div>
-        <div class="date-location" style="margin-top: 4px;">{{CITY}}, {{DATE}}</div>
+        <div class="date-location" style="margin-top: 4px">
+          {{CITY}}, {{DATE}}
+        </div>
       </header>
 
       <div class="meta">
-        <div class="re-line">Re: {{JOB_TITLE}} position at {{COMPANY_NAME}}</div>
+        <div class="re-line">
+          Re: {{JOB_TITLE}} position at {{COMPANY_NAME}}
+        </div>
       </div>
 
-      <div class="body-text">
-        {{BODY}}
-      </div>
+      <div class="body-text">{{BODY}}</div>
 
       <div class="signature">
         <div class="sign-label">{{LABEL_REGARDS}}</div>
