@@ -506,6 +506,7 @@ Rules:
   footerParts.push(`<div class="cert-item"  >${gdprText}</div>`);
 
   html = html.replace('{{FOOTER_NOTES}}', footerParts.join('\n'));
+  html = html.replace(/—/g, '-');
 
   return { html, filename };
 }
