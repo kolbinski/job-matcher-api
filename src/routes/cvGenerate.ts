@@ -82,7 +82,8 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     const pdfBuffer = Buffer.from(await gotenbergRes.arrayBuffer())
 
     // Upload PDF to Supabase Storage
-    const storagePath = `cvs/${user.email}/${filename}`
+    const emailFolder = (user.email ?? '').replace(/@/g, '_at_').replace(/\./g, '_')
+    const storagePath = `cvs/${emailFolder}/${filename}`
     const supabase = getSupabase()
     const { error: uploadError } = await supabase.storage
       .from('homo-digital')
