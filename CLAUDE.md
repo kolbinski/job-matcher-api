@@ -87,10 +87,13 @@ Do not read files, run commands, or make any changes. Wait for the user to confi
 
 ## Git Workflow
 
-When the user says **"commit"**: run `npm run check` first. If it fails, fix all errors before proceeding. Once check passes:
-1. Run `git status` to see ALL modified and untracked files
-2. Stage everything: `git add -A` — never cherry-pick specific files; the user expects all changes committed
-3. Commit and push: `git commit -m "..." && git push origin main`
+When the user says **"commit"**: ALWAYS run `git status` first — never assume the tree is clean based on memory. The user may have edited files directly in the editor between sessions or between commits.
+
+If `git status` shows changes: run `npm run check` (unless console.log-only or .md-only — see exceptions below), then:
+1. Stage everything: `git add -A` — never cherry-pick specific files; the user expects all changes committed
+2. Commit and push: `git commit -m "..." && git push origin main`
+
+If `git status` is truly clean: respond "Working tree is clean — nothing to commit."
 
 **Skip `npm run check` when all changes are:**
 - Only `console.log` additions/removals (no logic changes), or
