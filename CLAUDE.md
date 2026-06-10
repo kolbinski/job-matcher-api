@@ -82,6 +82,12 @@ When the user says **"commit"**: run `npm run check` first. If it fails, fix all
 2. Stage everything: `git add -A` — never cherry-pick specific files; the user expects all changes committed
 3. Commit and push: `git commit -m "..." && git push origin main`
 
+**Skip `npm run check` when all changes are:**
+- Only `console.log` additions/removals (no logic changes), or
+- Only `.md` file edits
+
+In those cases go straight to `git add -A && git commit && git push`.
+
 Always push to `main` — never to `master` or any other branch.
 
 **Never commit or push automatically after making code changes.** Wait for the user to explicitly say "commit". Code changes and commits are two separate steps — do not combine them.
