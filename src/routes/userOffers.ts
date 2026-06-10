@@ -205,7 +205,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { matched_at: 'desc' },
+    orderBy: { updated_at: 'desc' },
   })
 
   const [{ learningGoals, salaryPrefs }, rates] = await Promise.all([
@@ -273,14 +273,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) <= to)
   }
 
-  filtered.sort((a, b) => {
-    const aMax = a.salary.length > 0 ? Math.max(...a.salary.map(s => s.delta_normalized)) : null
-    const bMax = b.salary.length > 0 ? Math.max(...b.salary.map(s => s.delta_normalized)) : null
-    if (aMax === null && bMax === null) return 0
-    if (aMax === null) return 1
-    if (bMax === null) return -1
-    return bMax - aMax
-  })
+  result.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime())
 
   res.json({
     client_id: clientId,
