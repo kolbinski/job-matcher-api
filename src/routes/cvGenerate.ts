@@ -85,6 +85,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     const emailFolder = (user.email ?? '').replace(/@/g, '_at_').replace(/\./g, '_').replace(/\+/g, '_')
     const storagePath = `cvs/${emailFolder}/${filename}`
     console.log('[cvGenerate] storagePath:', storagePath)
+    console.log('[cvGenerate] pdfBuffer type:', typeof pdfBuffer, 'length:', pdfBuffer?.length ?? 'undefined')
     const supabase = getSupabase()
     const { error: uploadError } = await supabase.storage
       .from('homo-digital')
