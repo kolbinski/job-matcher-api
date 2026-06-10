@@ -14,7 +14,7 @@ const GenerateCLSchema = z.object({
   client_id: z.string().uuid(),
   user_offer_id: z.string().uuid(),
   offer_text: z.string().min(1),
-  cv_language: z.string().min(2),
+  cl_language: z.string().min(2),
   company_name: z.string().optional(),
   job_title: z.string().optional(),
 })
@@ -25,7 +25,7 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
 
-  const { client_id, user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
+  const { client_id, user_offer_id, offer_text, cl_language, company_name, job_title } = parsed.data
   const agentId = req.agent!.id
 
   const link = await prisma.agentClient.findUnique({
@@ -56,7 +56,7 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cl_status: 'generating' } })
 
   try {
-    const { html, filename } = await generateCoverLetter(profileParsed.data, offer_text, cv_language, job_title, company_name, user)
+    const { html, filename } = await generateCoverLetter(profileParsed.data, offer_text, cl_language, job_title, company_name, user)
 
     const formData = new FormData()
     formData.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
