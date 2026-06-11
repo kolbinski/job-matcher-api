@@ -67,15 +67,32 @@ skillsRouter.get('/', async (req, res) => {
     throw new AppError(422, 'INVALID_REQUEST', `Unknown category: ${category}`)
   }
 
-  const skills = await prisma.skill.findMany({
-    where: {
-      category_id: skillCategory.id,
-      ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
-    },
-    orderBy: { name: 'asc' },
-    take: 20,
-    select: { name: true },
-  })
+  if (!q) {
+    res.json({ skills: [] })
+    return
+  }
 
-  res.json({ skills: skills.map(s => s.name) })
+  const base = { category_id: skillCategory.id, category: { market: 'IT' } }
+  const order = { name: 'asc' } as const
+
+  const [startsWith, contains] = await Promise.all([
+    prisma.skill.findMany({
+      where: { ...base, name: { startsWith: q, mode: 'insensitive' } },
+      orderBy: order,
+      take: 20,
+      select: { name: true },
+    }),
+    prisma.skill.findMany({
+      where: {
+        ...base,
+        name: { contains: q, mode: 'insensitive' },
+        NOT: { name: { startsWith: q, mode: 'insensitive' } },
+      },
+      orderBy: order,
+      take: 20,
+      select: { name: true },
+    }),
+  ])
+
+  res.json({ skills: [...startsWith, ...contains].slice(0, 20).map(s => s.name) })
 })
