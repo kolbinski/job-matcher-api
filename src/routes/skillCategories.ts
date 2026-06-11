@@ -5,6 +5,7 @@ export const skillCategoriesRouter = Router()
 
 skillCategoriesRouter.get('/', async (_req, res) => {
   const categories = await prisma.skillCategory.findMany({
+    where: { market: 'IT' },
     orderBy: { sort_order: 'asc' },
     select: { name: true },
   })
