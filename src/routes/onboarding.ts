@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import multer from 'multer'
-import pdfParse from 'pdf-parse'
+import { PDFParse } from 'pdf-parse'
 import { validateSupabaseJwt } from '../middleware/validateSupabaseJwt'
 import { env } from '../lib/env'
 import { AppError } from '../lib/errors'
@@ -109,7 +109,8 @@ onboardingRouter.post('/prepare-profile', validateSupabaseJwt, upload.single('cv
 
   let cvText: string
   try {
-    const parsed = await pdfParse(req.file.buffer)
+    const parser = new PDFParse({ data: new Uint8Array(req.file.buffer) })
+    const parsed = await parser.getText()
     cvText = parsed.text.trim()
     console.log(`[prepare-profile] PDF text extracted successfully, length: ${cvText.length} chars`)
   } catch (err) {
