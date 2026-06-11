@@ -40,12 +40,11 @@ export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
 
   const rejectedTechs = new Set(
     profile.red_flags
-      .filter(f => ['technology', 'tech', 'stack', 'technologies'].includes(f.category.toLowerCase()))
+      .filter(f => ['technology', 'tech', 'stack', 'technologies', 'skills'].includes(f.category.toLowerCase()))
       .flatMap(f =>
-        f.description
-          .split(/[,;]/)
-          .map(t => t.trim().toLowerCase())
-          .filter(Boolean)
+        Array.isArray(f.description)
+          ? f.description.map(t => t.trim().toLowerCase()).filter(Boolean)
+          : f.description.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
       )
   )
 

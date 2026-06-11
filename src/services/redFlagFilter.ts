@@ -144,10 +144,9 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   // ── 6. Technology red flags ────────────────────────────────────────────────
   for (const flag of profile.red_flags) {
     const category = flag.category.toLowerCase()
-    const desc = flag.description.toLowerCase()
 
-    if (['technology', 'tech', 'stack', 'technologies'].includes(category)) {
-      const forbidden = desc.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+    if (TECH_CATEGORIES.includes(category)) {
+      const forbidden = parseForbiddenTechs(flag.description)
       const offerTechs = offer.required_skills.map(s => s.toLowerCase())
       for (const tech of forbidden) {
         const pattern = new RegExp(
@@ -193,15 +192,21 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   }
 }
 
+function parseForbiddenTechs(description: string | string[]): string[] {
+  if (Array.isArray(description)) return description.map(t => t.trim().toLowerCase()).filter(Boolean)
+  return description.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+}
+
+const TECH_CATEGORIES = ['technology', 'tech', 'stack', 'technologies', 'skills']
+
 // Kept for backward compatibility with existing tests.
 export function filterRedFlags(profile: CandidateProfile, offer: Offer): string[] {
   // Only returns tech red flag reasons — structured filters are now in applyPreFilters.
   const reasons: string[] = []
   for (const flag of profile.red_flags) {
     const category = flag.category.toLowerCase()
-    const desc = flag.description.toLowerCase()
-    if (['technology', 'tech', 'stack', 'technologies'].includes(category)) {
-      const forbidden = desc.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+    if (TECH_CATEGORIES.includes(category)) {
+      const forbidden = parseForbiddenTechs(flag.description)
       const offerTechs = offer.required_skills.map(s => s.toLowerCase())
       for (const tech of forbidden) {
         const pattern = new RegExp(

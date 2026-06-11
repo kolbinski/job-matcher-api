@@ -123,7 +123,7 @@ const PreferencesSchema = z.object({
 
 const RedFlagSchema = z.object({
   category: z.string(),
-  description: z.string(),
+  description: z.union([z.string(), z.array(z.string())]),
 })
 
 export const CandidateProfileSchema = z.object({

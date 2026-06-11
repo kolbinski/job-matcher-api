@@ -161,7 +161,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     : 'not specified';
   const workModel = (profile.preferences?.work_model ?? []).join(', ');
   const targetRoles = (profile.preferences?.target_role ?? []).join(', ');
-  const redFlagsText = profile.red_flags.map(f => `[${f.category}] ${f.description}`).join('; ');
+  const redFlagsText = profile.red_flags.map(f => `[${f.category}] ${Array.isArray(f.description) ? f.description.join(', ') : f.description}`).join('; ');
 
   const lines: string[] = [
     '## Candidate Profile',
