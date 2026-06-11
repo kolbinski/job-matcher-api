@@ -293,7 +293,7 @@ async function main(): Promise<void> {
   }
 
   // ── Email report mode ─────────────────────────────────────────────────────────
-  const firstName = user.first_name ?? user.email.split('@')[0];
+  const firstName = (user.profile as { basic_info?: { first_name?: string } } | null)?.basic_info?.first_name ?? user.email.split('@')[0];
   const newOffersCount = recommended.length + stretch.length; // counts before dedup (dedup happens per section below)
 
   console.log(`Hi ${firstName}! Here are your job matches for ${todayDDMMYYYY()}`);

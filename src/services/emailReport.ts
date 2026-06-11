@@ -8,7 +8,7 @@ interface SalaryPref {
 
 export function buildEmailReport(
   result: MatchResponse,
-  user: { first_name: string | null; profile: unknown },
+  user: { profile: unknown },
 ): string {
   const { matched, stretch_offers: stretch } = result
   const newlyProcessed = result.meta.total_offers_scanned
@@ -36,7 +36,7 @@ export function buildEmailReport(
   const recommended = matched.filter(o => o.recommended === true)
   const considerApplying = matched.filter(o => o.recommended !== true && o.score >= 30)
 
-  const firstName = user.first_name ?? 'there'
+  const firstName = (user.profile as { basic_info?: { first_name?: string } } | null)?.basic_info?.first_name ?? 'there'
 
   const lines: string[] = []
 

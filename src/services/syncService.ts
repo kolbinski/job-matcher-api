@@ -120,8 +120,6 @@ async function runJob(
     select: {
       id: true,
       email: true,
-      first_name: true,
-      last_name: true,
       profile: true,
     },
   });
@@ -205,10 +203,11 @@ async function runJob(
         });
       }
 
+      const up = user.profile as { basic_info?: { first_name?: string; last_name?: string } } | null
       job.clients.push({
         client_id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        first_name: up?.basic_info?.first_name ?? null,
+        last_name: up?.basic_info?.last_name ?? null,
         new_offers_count: newOffersCount,
         stretch_offers_count: stretchCount,
         email_report,
@@ -223,10 +222,11 @@ async function runJob(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[sync] ${user.email}: failed — ${message}`);
+      const upErr = user.profile as { basic_info?: { first_name?: string; last_name?: string } } | null
       job.clients.push({
         client_id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        first_name: upErr?.basic_info?.first_name ?? null,
+        last_name: upErr?.basic_info?.last_name ?? null,
         new_offers_count: 0,
         stretch_offers_count: 0,
         email_report: `[SYNC ERROR] ${message}`,
@@ -250,7 +250,7 @@ async function runJob(
 export async function syncUserById(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, first_name: true, profile: true },
+    select: { id: true, email: true, profile: true },
   });
   if (!user) throw new Error(`syncUserById: user ${userId} not found`);
 

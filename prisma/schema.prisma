@@ -44,15 +44,12 @@ model User {
   jobmatcher_api_key                  String        @unique
   created_at                          DateTime      @default(now())
   updated_at                          DateTime      @updatedAt
-  first_name                          String?
-  last_name                           String?
   profile                             Json?
   password                            String?
   send_job_applied_notifications_hour Int           @default(17)
   utc_offset                          Int           @default(1)
   send_sync_report_notifications_hour Int           @default(9)
   show_agent_info_in_cv               Boolean       @default(true)
-  gender                              String?
   photo_url                           String?
   subscribed_to                       DateTime?
   agent_clients                       AgentClient[]

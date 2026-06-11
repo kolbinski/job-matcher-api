@@ -102,7 +102,7 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
       claude_score: { not: null },
     },
     include: {
-      user: { select: { id: true, first_name: true, last_name: true, profile: true } },
+      user: { select: { id: true, profile: true } },
     },
   })
 
@@ -110,8 +110,8 @@ offerMatchesRouter.get('/', validateAgentJwt, async (req, res) => {
     matches: userOffers.map(uo => ({
       user_offer_id: uo.id,
       client_id: uo.user.id,
-      first_name: uo.user.first_name,
-      last_name: uo.user.last_name,
+      first_name: (uo.user.profile as { basic_info?: { first_name?: string } } | null)?.basic_info?.first_name ?? null,
+      last_name: (uo.user.profile as { basic_info?: { last_name?: string } } | null)?.basic_info?.last_name ?? null,
       claude_score: uo.claude_score,
       claude_role_fit: uo.claude_role_fit,
       claude_matched_reasons: uo.claude_matched_reasons,

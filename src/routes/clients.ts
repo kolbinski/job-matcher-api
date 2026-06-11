@@ -10,9 +10,16 @@ clientsRouter.get('/', validateAgentJwt, async (req, res) => {
   const links = await prisma.agentClient.findMany({
     where: { agent_id: agentId },
     include: {
-      user: { select: { id: true, first_name: true, last_name: true, email: true, profile: true } },
+      user: { select: { id: true, email: true, profile: true } },
     },
   })
 
-  res.json(links.map(l => l.user))
+  res.json(links.map(l => {
+    const p = l.user.profile as { basic_info?: { first_name?: string; last_name?: string } } | null
+    return {
+      ...l.user,
+      first_name: p?.basic_info?.first_name ?? null,
+      last_name: p?.basic_info?.last_name ?? null,
+    }
+  }))
 })

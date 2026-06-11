@@ -345,7 +345,7 @@ export async function generateCV(
   cvLanguage: string,
   jobTitle?: string,
   companyName?: string,
-  user?: { id: string; show_agent_info_in_cv: boolean; gender: string | null },
+  user?: { id: string; show_agent_info_in_cv: boolean },
 ): Promise<{ html: string; filename: string }> {
   const profileForClaude = {
     basic_info: {
