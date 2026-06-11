@@ -18,20 +18,33 @@ skillsRouter.get('/search', async (req, res) => {
     return
   }
 
-  const skills = await prisma.skill.findMany({
-    where: {
-      category: { market: 'IT' },
-      ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
-    },
-    orderBy: { name: 'asc' },
-    take: 20,
-    select: {
-      name: true,
-      category: { select: { name: true } },
-    },
-  })
+  const base = { category: { market: 'IT' } }
+  const select = { name: true, category: { select: { name: true } } } as const
+  const order = { name: 'asc' } as const
+
+  const [startsWith, contains] = await Promise.all([
+    prisma.skill.findMany({
+      where: { ...base, name: { startsWith: q, mode: 'insensitive' } },
+      orderBy: order,
+      take: 20,
+      select,
+    }),
+    prisma.skill.findMany({
+      where: {
+        ...base,
+        name: { contains: q, mode: 'insensitive' },
+        NOT: { name: { startsWith: q, mode: 'insensitive' } },
+      },
+      orderBy: order,
+      take: 20,
+      select,
+    }),
+  ])
+
+  const merged = [...startsWith, ...contains].slice(0, 20)
+
   res.json({
-    skills: skills
+    skills: merged
       .filter(s => s.category)
       .map(s => ({ name: s.name, category: s.category!.name })),
   })
