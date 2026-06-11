@@ -10,6 +10,33 @@ const QuerySchema = z.object({
   q: z.string().optional(),
 })
 
+skillsRouter.get('/search', async (req, res) => {
+  const q = (req.query.q as string | undefined)?.trim()
+
+  if (!q) {
+    res.json({ skills: [] })
+    return
+  }
+
+  const skills = await prisma.skill.findMany({
+    where: {
+      category: { market: 'IT' },
+      ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
+    },
+    orderBy: { name: 'asc' },
+    take: 20,
+    select: {
+      name: true,
+      category: { select: { name: true } },
+    },
+  })
+  res.json({
+    skills: skills
+      .filter(s => s.category)
+      .map(s => ({ name: s.name, category: s.category!.name })),
+  })
+})
+
 skillsRouter.get('/', async (req, res) => {
   const parsed = QuerySchema.safeParse(req.query)
   if (!parsed.success) {
