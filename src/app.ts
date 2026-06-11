@@ -22,6 +22,7 @@ import { userSyncsRouter } from './routes/userSyncs'
 import { settingsRouter } from './routes/settings'
 import { feedbackRouter } from './routes/feedback'
 import { subscriptionRouter } from './routes/subscription'
+import { onboardingRouter } from './routes/onboarding'
 
 export const app = express()
 
@@ -52,6 +53,9 @@ app.use('/v1/user-syncs', userSyncsRouter)
 app.use('/v1/settings', settingsRouter)
 app.use('/v1/feedback', feedbackRouter)
 app.use('/v1/subscription', subscriptionRouter)
+// 120s timeout for onboarding PDF parse + Claude
+app.use('/v1/onboarding', (req, _res, next) => { req.setTimeout(120_000); next() })
+app.use('/v1/onboarding', onboardingRouter)
 
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {
