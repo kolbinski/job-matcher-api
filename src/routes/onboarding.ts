@@ -105,11 +105,15 @@ onboardingRouter.post('/prepare-profile', validateSupabaseJwt, upload.single('cv
     throw new AppError(422, 'INVALID_REQUEST', 'Missing required file: cv (PDF)')
   }
 
+  console.log(`[prepare-profile] PDF buffer size: ${req.file.buffer.length} bytes`)
+
   let cvText: string
   try {
     const parsed = await pdfParse(req.file.buffer)
     cvText = parsed.text.trim()
-  } catch {
+    console.log(`[prepare-profile] PDF text extracted successfully, length: ${cvText.length} chars`)
+  } catch (err) {
+    console.error('[prepare-profile] pdf-parse error:', err)
     throw new AppError(422, 'INVALID_REQUEST', 'Could not extract text from PDF')
   }
 
