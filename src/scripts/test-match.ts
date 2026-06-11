@@ -111,7 +111,7 @@ function resolveMin(salary: OfferSalary | null, prefs: SalaryPref[]): number | n
   return match?.min ?? null;
 }
 
-// "24 000 – 27 000 PLN (b2b) — max 27 000 PLN, that's +5 000 PLN above your minimum"
+// "24 000 – 27 000 PLN (contract) — max 27 000 PLN, that's +5 000 PLN above your minimum"
 function formatSalaryEmailLine(s: OfferSalary | null, min: number | null): string {
   if (!s || s.to == null) return 'salary not disclosed';
   const range = formatSalaryRange(s) ?? `${formatPLN(s.to)} ${s.currency}`;

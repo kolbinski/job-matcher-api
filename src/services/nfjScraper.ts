@@ -75,7 +75,7 @@ export function normalizeNfjOffer(raw: NfjPosting): NormalizedOffer | null {
     .filter(v => v.length > 0)
 
   const employmentTypes: EmploymentTypeEntry[] = raw.salary
-    ? [{ type: raw.salary.type, from: raw.salary.from, to: raw.salary.to, currency: raw.salary.currency, unit: 'Month' }]
+    ? [{ type: raw.salary.type === 'b2b' ? 'contract' : raw.salary.type, from: raw.salary.from, to: raw.salary.to, currency: raw.salary.currency, unit: 'Month' }]
     : []
 
   const realPlace = loc.places.find(p => p.city && p.country && !p.provinceOnly) ?? null

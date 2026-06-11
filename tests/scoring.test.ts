@@ -145,14 +145,14 @@ describe('scoreOffer — remoteScore', () => {
 
 describe('scoreOffer — salaryScore', () => {
   it('returns 100 when offer salary meets candidate minimum', () => {
-    const profile = makeProfile({ preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 15000 }] } })
-    const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 18000, to: 25000, currency: 'PLN' }] })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 15000 }] } })
+    const offer = makeOffer({ employment_types: [{ type: 'contract', from: 18000, to: 25000, currency: 'PLN' }] })
     expect(score(profile, offer).salaryScore).toBe(100)
   })
 
   it('returns less than 100 when offer salary is below candidate minimum', () => {
-    const profile = makeProfile({ preferences: { salary: [{ type: 'b2b', currency: 'PLN', min: 20000 }] } })
-    const offer = makeOffer({ employment_types: [{ type: 'b2b', from: 10000, to: 15000, currency: 'PLN' }] })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 20000 }] } })
+    const offer = makeOffer({ employment_types: [{ type: 'contract', from: 10000, to: 15000, currency: 'PLN' }] })
     const result = score(profile, offer)
     expect(result.salaryScore).toBeLessThan(100)
     expect(result.salaryScore).toBeGreaterThan(0)

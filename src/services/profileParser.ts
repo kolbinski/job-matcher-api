@@ -2,7 +2,7 @@ import type { CandidateProfile } from '../types/profile'
 
 export interface NormalizedProfile {
   techs: Set<string>
-  salaryMinPln: number | null      // first b2b PLN salary min, used by scoring
+  salaryMinPln: number | null      // first contract PLN salary min, used by scoring
   workModel: string[]              // accepted workplace types, lowercase
   experienceLevel: string | null   // from basic_info.experience_level, c_level → c-level
   maxOfficeDays: number | null
@@ -17,7 +17,7 @@ export function normalizeProfile(profile: CandidateProfile): NormalizedProfile {
 
   const salaryMinPln =
     profile.preferences?.salary?.find(
-      s => s.type === 'b2b' && s.currency.toUpperCase() === 'PLN'
+      s => s.type === 'contract' && s.currency.toUpperCase() === 'PLN'
     )?.min ??
     null
 

@@ -300,8 +300,8 @@ export function extractSalary(offer: Offer): OfferSalary | null {
   const types = parseEmploymentTypes(offer)
   if (types.length === 0) return null
   for (const t of types) {
-    if (t.type === 'b2b' && t.from !== undefined && t.to !== undefined) {
-      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: 'b2b', unit: t.unit }
+    if (t.type === 'contract' && t.from !== undefined && t.to !== undefined) {
+      return { from: t.from, to: t.to, currency: t.currency ?? 'PLN', type: 'contract', unit: t.unit }
     }
   }
   for (const t of types) {

@@ -17,14 +17,14 @@ export function parseEmploymentTypes(offer: Offer): EmploymentTypeEntry[] {
   return Array.isArray(types) ? types : []
 }
 
-// Returns the best salary ceiling (preferring B2B) for score comparisons.
+// Returns the best salary ceiling (preferring contract) for score comparisons.
 // Used by scoring.ts and redFlagFilter.ts.
 export function getBestSalary(offer: Offer): number | null {
   const types = parseEmploymentTypes(offer)
   if (types.length === 0) return null
 
   for (const t of types) {
-    if (t.type === 'b2b' && t.to) return t.to
+    if (t.type === 'contract' && t.to) return t.to
   }
   let best: number | null = null
   for (const t of types) {

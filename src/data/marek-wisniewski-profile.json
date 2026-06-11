@@ -154,12 +154,12 @@
     "salary": [
       {
         "min": 7000,
-        "type": "b2b",
+        "type": "contract",
         "currency": "USD"
       },
       {
         "min": 22000,
-        "type": "b2b",
+        "type": "contract",
         "currency": "PLN"
       },
       {
@@ -193,7 +193,7 @@
       "terraform"
     ],
     "employment_type": [
-      "b2b",
+      "contract",
       "permanent"
     ],
     "company_type_excluded": [

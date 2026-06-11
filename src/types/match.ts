@@ -15,7 +15,7 @@ export const MatchFiltersSchema = z.object({
     .array(z.enum(['junior', 'mid', 'senior', 'c-level', 'expert']))
     .optional(),
   employment_type: z
-    .enum(['b2b', 'uop', 'uz', 'mandate', 'internship'])
+    .enum(['contract', 'uop', 'uz', 'mandate', 'internship'])
     .optional(),
   sources: z.array(z.string()).optional(),
 })

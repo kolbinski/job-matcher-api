@@ -101,7 +101,7 @@ const CertificationSchema = z.object({
 })
 
 const SalaryPreferenceSchema = z.object({
-  type: z.enum(['b2b', 'permanent']),
+  type: z.enum(['contract', 'permanent']),
   currency: z.string(),
   min: z.number().nonnegative(),
 })

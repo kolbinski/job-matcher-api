@@ -82,7 +82,9 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     remote_interview: typeof raw.isRemoteInterview === 'boolean' ? raw.isRemoteInterview : null,
     required_skills: extractSkillNames(raw.requiredSkills),
     nice_to_have_skills: extractSkillNames(raw.niceToHaveSkills),
-    employment_types: Array.isArray(raw.employmentTypes) ? raw.employmentTypes as EmploymentTypeEntry[] : [],
+    employment_types: Array.isArray(raw.employmentTypes)
+      ? (raw.employmentTypes as EmploymentTypeEntry[]).map(e => ({ ...e, type: e.type === 'b2b' ? 'contract' : e.type }))
+      : [],
     multilocation: Array.isArray(raw.locations) ? raw.locations : null,
     city: typeof raw.city === 'string' ? raw.city : null,
     street: typeof raw.street === 'string' ? raw.street : null,
