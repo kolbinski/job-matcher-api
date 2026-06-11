@@ -23,6 +23,8 @@ import { settingsRouter } from './routes/settings'
 import { feedbackRouter } from './routes/feedback'
 import { subscriptionRouter } from './routes/subscription'
 import { onboardingRouter } from './routes/onboarding'
+import { skillsRouter } from './routes/skills'
+import { skillCategoriesRouter } from './routes/skillCategories'
 
 export const app = express()
 
@@ -53,6 +55,8 @@ app.use('/v1/user-syncs', userSyncsRouter)
 app.use('/v1/settings', settingsRouter)
 app.use('/v1/feedback', feedbackRouter)
 app.use('/v1/subscription', subscriptionRouter)
+app.use('/v1/skill-categories', skillCategoriesRouter)
+app.use('/v1/skills', skillsRouter)
 // 120s timeout for onboarding PDF parse + Claude
 app.use('/v1/onboarding', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/onboarding', onboardingRouter)
