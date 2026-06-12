@@ -14,6 +14,19 @@ const BodySchema = z.object({
   message: 'At least one of profile or profile_ready must be provided',
 })
 
+profileRouter.get('/', validateSupabaseJwt, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { email: req.supabase_user!.email },
+    select: { profile: true, profile_ready: true },
+  })
+
+  if (!user) {
+    throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+  }
+
+  res.json(user)
+})
+
 profileRouter.patch('/', validateSupabaseJwt, async (req, res) => {
   const parsed = BodySchema.safeParse(req.body)
   if (!parsed.success) {
