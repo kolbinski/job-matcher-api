@@ -76,7 +76,7 @@ export interface MatchedOffer {
   employment_types: unknown
   salary: OfferSalary | null
   salaries: OfferSalary[]
-  matched_reasons: string[]
+  matched_reasons: { pros: string[]; cons: string[] }
   missing_skills: string[]
   red_flags_found: string[]
   rank: number | null

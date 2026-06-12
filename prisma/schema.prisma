@@ -105,7 +105,7 @@ model UserOffer {
   rejection_reason         String?
   claude_score             Int?
   claude_role_fit          String?
-  claude_matched_reasons   String[]
+  claude_matched_reasons   Json
   claude_missing_skills    String[]
   claude_salary_comparison String?
   claude_recommended       Boolean?

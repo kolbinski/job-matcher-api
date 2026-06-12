@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { Offer } from '@prisma/client'
+import type { Offer, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateApiKey } from '../middleware/validateApiKey'
 import { rateLimiter } from '../middleware/rateLimiter'
@@ -30,7 +30,7 @@ interface PipelineOffer {
   salary: OfferSalary | null
   claude_score: number | null
   claude_role_fit: string | null
-  claude_matched_reasons: string[]
+  claude_matched_reasons: { pros: string[]; cons: string[] }
   claude_missing_skills: string[]
   claude_salary_comparison: string | null
   claude_recommended: boolean | null
@@ -70,7 +70,7 @@ function toPipelineOffer(uo: {
   offer_id: string
   claude_score: number | null
   claude_role_fit: string | null
-  claude_matched_reasons: string[]
+  claude_matched_reasons: Prisma.JsonValue
   claude_missing_skills: string[]
   claude_salary_comparison: string | null
   claude_recommended: boolean | null
@@ -87,7 +87,7 @@ function toPipelineOffer(uo: {
     salary: extractSalary(uo.offer),
     claude_score: uo.claude_score,
     claude_role_fit: uo.claude_role_fit,
-    claude_matched_reasons: uo.claude_matched_reasons,
+    claude_matched_reasons: uo.claude_matched_reasons as { pros: string[]; cons: string[] },
     claude_missing_skills: uo.claude_missing_skills,
     claude_salary_comparison: uo.claude_salary_comparison,
     claude_recommended: uo.claude_recommended,

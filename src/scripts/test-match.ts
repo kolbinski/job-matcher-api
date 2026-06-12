@@ -30,7 +30,7 @@ interface MatchedOffer {
   company: string;
   salary: OfferSalary | null;
   salaries?: OfferSalary[];
-  matched_reasons: string[];
+  matched_reasons: { pros: string[]; cons: string[] };
   missing_skills: string[];
   salary_comparison: string | null;
   role_fit: string | null;
@@ -233,7 +233,8 @@ async function main(): Promise<void> {
       console.log(`   salary:           ${salaryRange ?? 'not disclosed'}`);
       if (salaryVsTarget)           console.log(`   salary_vs_target: ${salaryVsTarget}`);
       if (offer.role_fit)           console.log(`   role_fit:         ${offer.role_fit}`);
-      if (offer.matched_reasons.length > 0) offer.matched_reasons.forEach(r => console.log(`   ✓ ${r}`));
+      if (offer.matched_reasons.pros.length > 0) offer.matched_reasons.pros.forEach(r => console.log(`   ✓ ${r}`));
+      if (offer.matched_reasons.cons.length > 0) offer.matched_reasons.cons.forEach(r => console.log(`   ✗ ${r}`));
       if (offer.missing_skills.length > 0)  console.log(`   missing:          ${offer.missing_skills.join(', ')}`);
       if (offer.url)                console.log(`   url:              ${offer.url}`);
     }

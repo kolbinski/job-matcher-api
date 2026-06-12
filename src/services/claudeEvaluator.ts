@@ -19,7 +19,7 @@ export interface ClaudeEvaluation {
   offer_index: number;
   score: number;
   rank: number;
-  matched_reasons: string[];
+  matched_reasons: { pros: string[]; cons: string[] };
   missing_skills: string[];
   salary_comparison: string;
   role_fit: string;
@@ -179,7 +179,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     '  offer_index (integer): the exact index shown in the offer header, e.g. 0, 1, 2…',
     '  score (integer 0-100): overall match quality',
     `  rank (integer 1-${offers.length}): overall ranking, 1 = best match`,
-    '  matched_reasons (string[]): 1-3 specific reasons this offer fits the candidate',
+    '  matched_reasons ({ pros: string[], cons: string[] }): pros = 1-3 specific reasons this offer fits the candidate; cons = 1-3 gaps or concerns',
     '  missing_skills (string[]): skills in job requirements the candidate likely lacks',
     '  salary_comparison (string): one phrase comparing offered salary to the target',
     '  role_fit (string): one sentence on role alignment',
@@ -237,11 +237,22 @@ function validateEvaluation(
       ? Math.round(rawRank)
       : defaultRank;
 
-  const matched_reasons = Array.isArray(obj['matched_reasons'])
-    ? (obj['matched_reasons'] as unknown[]).filter(
-        (r): r is string => typeof r === 'string',
-      )
-    : [];
+  const rawReasons = obj['matched_reasons'];
+  const matched_reasons =
+    rawReasons && typeof rawReasons === 'object' && !Array.isArray(rawReasons)
+      ? {
+          pros: Array.isArray((rawReasons as Record<string, unknown>)['pros'])
+            ? ((rawReasons as Record<string, unknown>)['pros'] as unknown[]).filter(
+                (r): r is string => typeof r === 'string',
+              )
+            : [],
+          cons: Array.isArray((rawReasons as Record<string, unknown>)['cons'])
+            ? ((rawReasons as Record<string, unknown>)['cons'] as unknown[]).filter(
+                (r): r is string => typeof r === 'string',
+              )
+            : [],
+        }
+      : { pros: [], cons: [] };
 
   const missing_skills = Array.isArray(obj['missing_skills'])
     ? (obj['missing_skills'] as unknown[]).filter(
