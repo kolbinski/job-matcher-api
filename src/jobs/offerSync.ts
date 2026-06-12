@@ -57,34 +57,29 @@ async function upsertPage(
   const toInsert = offers.filter(o => !existingSlugs.has(o.slug));
   const toUpdate = offers.filter(o => existingSlugs.has(o.slug));
 
-  return prisma.$transaction(
-    async tx => {
-      for (const batch of chunk(toInsert, BATCH_SIZE)) {
-        await tx.offer.createMany({
-          data: batch.map(o => toUpsertData(o, fetchedAt)),
-          skipDuplicates: true,
-        });
-      }
+  for (const batch of chunk(toInsert, BATCH_SIZE)) {
+    await prisma.offer.createMany({
+      data: batch.map(o => toUpsertData(o, fetchedAt)),
+      skipDuplicates: true,
+    });
+  }
 
-      for (const batch of chunk(toUpdate, BATCH_SIZE)) {
-        await Promise.all(
-          batch.map(offer =>
-            tx.offer.update({
-              where: { slug: offer.slug },
-              data: toUpsertData(offer, fetchedAt),
-            }),
-          ),
-        );
-      }
+  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+    await Promise.all(
+      batch.map(offer =>
+        prisma.offer.update({
+          where: { slug: offer.slug },
+          data: toUpsertData(offer, fetchedAt),
+        }),
+      ),
+    );
+  }
 
-      return {
-        inserted: toInsert.length,
-        updated: toUpdate.length,
-        insertedSlugs: toInsert.map(o => o.slug),
-      };
-    },
-    { timeout: 60_000 },
-  );
+  return {
+    inserted: toInsert.length,
+    updated: toUpdate.length,
+    insertedSlugs: toInsert.map(o => o.slug),
+  };
 }
 
 function logSkillBreakdown(skillCounts: Map<string, number>): void {

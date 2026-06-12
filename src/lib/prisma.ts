@@ -9,6 +9,9 @@ export const prisma: PrismaClient =
   global.__prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+    transactionOptions: {
+      timeout: 120_000,
+    },
   })
 
 if (process.env.NODE_ENV === 'development') {
