@@ -56,7 +56,7 @@ const PROFILE_SCHEMA = `{
       "currently_working": "boolean — true only for the current/most recent role where date_to is null (present), false for all others",
       "industry": "string | null",
       "location": "string | null",
-      "work_model": "remote | hybrid | onsite | null",
+      "work_model": "remote | hybrid | office | null",
       "company_type": "string | null",
       "projects": [
         {
@@ -159,6 +159,7 @@ RULES:
 - red_flags: always empty array []
 - skills: group all technologies by category (Frontend, Backend, Mobile, Databases, Languages, Cloud & Infra, Tools)
 - work_experience.currently_working: set to true only for the role where date_to is null (i.e. "present"); set to false for all other roles
+- work_experience.work_model: must be exactly one of "remote", "hybrid", "office" or null — never use "onsite", "on-site", or any other value
 - work_experience.projects: model each role or major responsibility as a project entry; list concrete achievements as bullets
 - cv_summary_bullets: exactly 3 concise achievement-focused bullets summarising the candidate
 - soft_skills: extract from explicit mentions or infer from CV descriptions
@@ -219,6 +220,16 @@ ${cvText.slice(0, 12000)}`;
     }
     if (p.basic_info?.linkedin && !p.basic_info.linkedin.startsWith('http')) {
       p.basic_info.linkedin = `https://${p.basic_info.linkedin}`;
+    }
+
+    const ALLOWED_WORK_MODELS = new Set(['remote', 'hybrid', 'office']);
+    const pp = profile as { work_experience?: Array<{ work_model?: string | null }> };
+    for (const job of pp.work_experience ?? []) {
+      if (job.work_model === 'onsite' || job.work_model === 'on-site' || job.work_model === 'on_site') {
+        job.work_model = 'office';
+      } else if (job.work_model && !ALLOWED_WORK_MODELS.has(job.work_model)) {
+        job.work_model = null;
+      }
     }
 
     return res.json({ profile });
