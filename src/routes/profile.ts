@@ -86,18 +86,28 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
       select: { profile: true, profile_ready: true },
     })
 
+    await prisma.userOffer.deleteMany({
+      where: { user_id: client_id, status: { in: ['pending_apply', 'ai_rejected'] } },
+    })
+
     return res.json(updated)
   }
 
   // Client path — internal JWT (role === 'client')
+  const userId = req.jwt!.user_id!
+
   const updated = await prisma.user.update({
-    where: { id: req.jwt!.user_id! },
+    where: { id: userId },
     data: {
       ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
       ...(profile_ready !== undefined ? { profile_ready } : {}),
       profile_synced_at: null,
     },
     select: { profile: true, profile_ready: true },
+  })
+
+  await prisma.userOffer.deleteMany({
+    where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
   })
 
   res.json(updated)
