@@ -16,6 +16,32 @@ const BodySchema = z.object({
 })
 
 profileRouter.get('/', validateJwt, async (req, res) => {
+  if (req.jwt!.role === 'agent') {
+    const clientId = typeof req.query.client_id === 'string' ? req.query.client_id : undefined
+    if (!clientId) {
+      throw new AppError(422, 'INVALID_REQUEST', 'client_id query param is required when using agent JWT')
+    }
+
+    const link = await prisma.agentClient.findUnique({
+      where: { agent_id_user_id: { agent_id: req.jwt!.agent_id!, user_id: clientId } },
+    })
+
+    if (!link) {
+      throw new AppError(403, 'FORBIDDEN', 'Agent does not have access to this client')
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: clientId },
+      select: { profile: true, profile_ready: true },
+    })
+
+    if (!user) {
+      throw new AppError(404, 'NOT_FOUND', 'Client not found')
+    }
+
+    return res.json(user)
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: req.jwt!.user_id! },
     select: { profile: true, profile_ready: true },
