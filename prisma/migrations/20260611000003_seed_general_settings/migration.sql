@@ -23,7 +23,7 @@ VALUES (
   ],
   "languages": ["English","Polish","German","French","Spanish","Italian","Portuguese","Russian","Ukrainian","Dutch","Swedish","Norwegian","Danish","Finnish","Czech","Slovak","Hungarian","Romanian","Turkish","Arabic","Hebrew","Chinese","Japanese","Korean","Hindi"],
   "language_levels": ["native","fluent","professional","conversational","basic","C2","C1","B2","B1","A2","A1"],
-  "skills_suggestions": ["php","jquery","legacy","cobol","wordpress",".net framework"]
+  "experience_levels": ["junior","mid","senior","lead","principal","staff","architect","c_level"]
 }',
   NOW()
 )

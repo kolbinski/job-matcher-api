@@ -35,7 +35,7 @@ const PROFILE_SCHEMA = `{
       "max_distance_km": "number | null"
     },
     "languages": [{ "name": "string", "level": "A1|A2|B1|B2|C1|C2|native" }],
-    "experience_level": "junior | mid | senior | lead",
+    "experience_level": "junior | mid | senior | lead | principal | staff | architect | c_level",
     "experience_since": "4-digit year number | null",
     "job_search_status": "actively_looking",
     "soft_skills": ["string"],
@@ -153,7 +153,7 @@ RULES:
 - Return ONLY valid JSON. Do NOT wrap in markdown code fences or backticks.
 - Use null for fields that cannot be determined from the CV
 - Use empty arrays [] for list fields with no data
-- experience_level: junior = 0-2 yrs, mid = 2-5 yrs, senior = 5-8 yrs, lead = 8+ yrs
+- experience_level: junior = 0-2 yrs, mid = 2-5 yrs, senior = 5-8 yrs, lead = 8-12 yrs, principal/staff/architect = 10+ yrs with broad technical influence, c_level = executive
 - experience_since: infer the year from the candidate's earliest job date_from
 - job_search_status: always "actively_looking"
 - red_flags: always empty array []
