@@ -77,5 +77,11 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     select: { id: true },
   })
 
-  res.json({ user_id: user.id, role: 'client' })
+  const jmToken = jwt.sign(
+    { role: 'client', user_id: user.id, email },
+    env.JWT_SECRET,
+    { expiresIn: '30d' },
+  )
+
+  res.json({ token: jmToken, role: 'client', user_id: user.id })
 })
