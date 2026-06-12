@@ -7,13 +7,49 @@ const anthropic = new Anthropic();
 
 const TIMEOUT_MS = 300_000;
 
-const SYSTEM_PROMPT = `You are a senior tech recruiter evaluating job offers for a candidate. Return ONLY a JSON array, no markdown, no preamble.
+const SYSTEM_PROMPT = `You are a senior tech recruiter evaluating job offers for a candidate.
 
 Scoring rules — apply all four consistently:
 1. SALARY: Compare offer MAX salary to candidate minimum. If offer max >= candidate minimum, salary is acceptable — do not penalize it. Only mark salary as a concern if offer max < candidate minimum. If salary is not disclosed, treat it as neutral and never use it as a reason for recommended=false.
 2. CONTRACT TYPE: The candidate profile lists accepted contract types. Only flag contract type if the offer's type is not in the candidate's accepted list. If the candidate accepts permanent contracts, do not penalize permanent offers.
 3. SENIORITY: Do not penalize offers listed as "mid" level if the candidate's skills clearly match the requirements. Only flag seniority if the role explicitly requires fewer years of experience than the candidate has, or uses the word "junior" in the title.
 4. FOCUS: Prioritise technical skill overlap, salary acceptability, and work model. These three factors should drive the recommended field.`;
+
+const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
+  name: 'evaluate_offers',
+  description: 'Return structured evaluations for each job offer.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      evaluations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            offer_index:       { type: 'integer', description: 'Exact index from the offer header (0-based)' },
+            score:             { type: 'integer', minimum: 0, maximum: 100, description: 'Overall match quality 0-100' },
+            rank:              { type: 'integer', minimum: 1, description: 'Overall ranking, 1 = best match' },
+            matched_reasons: {
+              type: 'object',
+              properties: {
+                pros: { type: 'array', items: { type: 'string' }, description: '1-3 specific reasons this offer fits the candidate' },
+                cons: { type: 'array', items: { type: 'string' }, description: '1-3 gaps or concerns' },
+              },
+              required: ['pros', 'cons'],
+            },
+            missing_skills:    { type: 'array', items: { type: 'string' }, description: 'Skills in job requirements the candidate likely lacks' },
+            salary_comparison: { type: 'string', description: 'One phrase comparing offered salary to the target' },
+            role_fit:          { type: 'string', description: 'One sentence on role alignment' },
+            recommended:       { type: 'boolean', description: 'True if candidate should apply' },
+            offer_language:    { type: 'string', enum: ['pl', 'en'], description: 'Detected language of the offer' },
+          },
+          required: ['offer_index', 'score', 'rank', 'matched_reasons', 'missing_skills', 'salary_comparison', 'role_fit', 'recommended', 'offer_language'],
+        },
+      },
+    },
+    required: ['evaluations'],
+  },
+};
 
 export interface ClaudeEvaluation {
   offer_index: number;
@@ -67,12 +103,9 @@ async function _evaluateOffers(
             cache_control: { type: 'ephemeral' },
           },
         ],
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        tools: [EVALUATE_OFFERS_TOOL],
+        tool_choice: { type: 'tool', name: 'evaluate_offers' },
+        messages: [{ role: 'user', content: prompt }],
       },
       { signal: controller.signal },
     );
@@ -81,36 +114,28 @@ async function _evaluateOffers(
       `[claudeEvaluator] Response received in ${Date.now() - claudeStart}ms`,
     );
 
-    const block = response.content[0];
-    if (block?.type !== 'text') {
-      console.error('[claudeEvaluator] Batch returned null — raw response: (no text block)');
+    const toolUseBlock = response.content.find(b => b.type === 'tool_use') as
+      | Anthropic.ToolUseBlock
+      | undefined;
+
+    if (!toolUseBlock) {
+      console.error('[claudeEvaluator] Batch returned null — no tool_use block in response');
       return null;
     }
 
-    rawResponse = block.text;
+    const toolInput = toolUseBlock.input as { evaluations?: unknown };
+    rawResponse = JSON.stringify(toolInput).substring(0, 500);
 
-    const cleaned = stripCodeFences(rawResponse);
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      console.error(
-        '[claudeEvaluator] JSON parse error. Raw response:',
-        rawResponse,
-      );
-      console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
-      return null;
-    }
+    const parsed = toolInput.evaluations;
 
     console.log(
       '[claudeEvaluator] Parsed evaluations:',
-      Array.isArray(parsed) ? parsed.length : 'parse failed',
+      Array.isArray(parsed) ? parsed.length : 'not an array',
     );
 
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      console.error('[claudeEvaluator] Response is not a non-empty array');
-      console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
+      console.error('[claudeEvaluator] evaluations is not a non-empty array');
+      console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse);
       return null;
     }
 
@@ -129,7 +154,7 @@ async function _evaluateOffers(
       const validated = validateEvaluation(parsed[i], i + 1);
       if (!validated) {
         console.error('[claudeEvaluator] Invalid item at index', i);
-        console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
+        console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse);
         return null;
       }
       results.push(validated);
@@ -193,18 +218,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     `Dealbreakers by category: ${redFlagsText || 'none'}`,
     '',
     `## ${offers.length} Job Offers to Evaluate`,
-    '',
-    'Evaluate each offer and return a JSON array with one object per offer.',
-    'Each object must have:',
-    '  offer_index (integer): the exact index shown in the offer header, e.g. 0, 1, 2…',
-    '  score (integer 0-100): overall match quality',
-    `  rank (integer 1-${offers.length}): overall ranking, 1 = best match`,
-    '  matched_reasons ({ pros: string[], cons: string[] }): pros = 1-3 specific reasons this offer fits the candidate; cons = 1-3 gaps or concerns',
-    '  missing_skills (string[]): skills in job requirements the candidate likely lacks',
-    '  salary_comparison (string): one phrase comparing offered salary to the target',
-    '  role_fit (string): one sentence on role alignment',
-    '  recommended (boolean): true if candidate should apply',
-    '  offer_language ("pl" | "en"): detected language of the offer title and requirements',
+    `Rank must span 1-${offers.length} with 1 = best match.`,
     '',
   ];
 
