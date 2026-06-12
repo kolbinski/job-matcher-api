@@ -61,6 +61,7 @@ const WorkExperienceSchema = z.object({
   title: z.string(),
   date_from: z.string(),
   date_to: z.string().optional(),
+  currently_working: z.boolean().optional(),
   company_type: z.string().optional(),
   company_size: z.string().optional(),
   industry: z.string().optional(),

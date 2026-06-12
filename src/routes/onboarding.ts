@@ -53,6 +53,7 @@ const PROFILE_SCHEMA = `{
       "company": "string",
       "date_from": "YYYY-MM",
       "date_to": "YYYY-MM | null if current",
+      "currently_working": "boolean — true only for the current/most recent role where date_to is null (present), false for all others",
       "industry": "string | null",
       "location": "string | null",
       "work_model": "remote | hybrid | onsite | null",
@@ -137,6 +138,7 @@ RULES:
 - job_search_status: always "actively_looking"
 - red_flags: always empty array []
 - skills: group all technologies by category (Frontend, Backend, Mobile, Databases, Languages, Cloud & Infra, Tools)
+- work_experience.currently_working: set to true only for the role where date_to is null (i.e. "present"); set to false for all other roles
 - work_experience.projects: model each role or major responsibility as a project entry; list concrete achievements as bullets
 - cv_summary_bullets: exactly 3 concise achievement-focused bullets summarising the candidate
 - soft_skills: extract from explicit mentions or infer from CV descriptions

@@ -217,7 +217,7 @@ function buildHtml(
           <span>
             <span class="job-company-name">${esc(job.company)}</span>${metaHtml}
           </span>
-          <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${fmtDate(job.date_to, cvLanguage)}</span>
+          <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${profileJob?.currently_working ? fmtDate(null, cvLanguage) : fmtDate(job.date_to, cvLanguage)}</span>
           <span class="job-title">${esc(job.title)}</span>
         </div>
         ${projHtml}

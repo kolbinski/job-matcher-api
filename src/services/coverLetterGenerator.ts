@@ -59,6 +59,7 @@ export async function generateCoverLetter(
       title: j.title,
       date_from: j.date_from,
       date_to: j.date_to ?? null,
+      currently_working: j.currently_working ?? false,
       projects: (j.projects ?? []).map(p => ({
         name: p.name,
         achievements: p.achievements ?? [],
