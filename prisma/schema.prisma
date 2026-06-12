@@ -41,7 +41,7 @@ model Settings {
 model User {
   id                                  String        @id @default(uuid())
   email                               String        @unique
-  jobmatcher_api_key                  String        @unique
+  jobmatcher_api_key                  String?       @unique
   created_at                          DateTime      @default(now())
   updated_at                          DateTime      @updatedAt
   profile                             Json?

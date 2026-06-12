@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   try {
     res = await fetch(`${BASE_URL}/v1/match`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': user.jobmatcher_api_key },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': user.jobmatcher_api_key ?? '' },
       body: JSON.stringify({ options: { include_unmatched: true, ai_scoring: true } }),
     });
   } catch {
