@@ -96,7 +96,7 @@ const PROFILE_SCHEMA = `{
     "employment_type": ["contract | permanent"],
     "industries": ["string"],
     "markets": ["string"],
-    "learning_goals": ["string"],
+    "learning_skills_goals": ["string"],
     "max_office_days_per_week": "number | null",
     "office_location_cities": ["string"]
   }

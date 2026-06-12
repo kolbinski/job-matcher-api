@@ -6,7 +6,7 @@ import path from 'path'
 import { app } from '../src/app'
 import { prisma } from '../src/lib/prisma'
 
-// Profile on disk has preferences.learning_goals: ['python', 'terraform']
+// Profile on disk has preferences.learning_skills_goals: ['python', 'terraform']
 const TEST_PROFILE_PATH = 'src/data/marek-wisniewski-profile.json'
 const TEST_PROFILE = JSON.parse(fs.readFileSync(path.resolve(TEST_PROFILE_PATH), 'utf-8')) as object
 const TEST_SLUG_PREFIX = 'test-stretch-'
@@ -92,7 +92,7 @@ describe('stretch_offers — DB integration', () => {
           user_id: userId,
           offer_id: pythonOffer.id,
           status: 'ai_rejected',
-          claude_missing_skills: ['python', 'django'],  // overlaps with learning_goals
+          claude_missing_skills: ['python', 'django'],  // overlaps with learning_skills_goals
           claude_role_fit: 'Missing Python experience',
           claude_matched_reasons: [],
           matched_at: new Date(),
@@ -102,7 +102,7 @@ describe('stretch_offers — DB integration', () => {
           user_id: userId,
           offer_id: javaOffer.id,
           status: 'ai_rejected',
-          claude_missing_skills: ['java', 'spring'],    // no overlap with learning_goals
+          claude_missing_skills: ['java', 'spring'],    // no overlap with learning_skills_goals
           claude_role_fit: 'Missing Java experience',
           claude_matched_reasons: [],
           matched_at: new Date(),
@@ -121,7 +121,7 @@ describe('stretch_offers — DB integration', () => {
     await prisma.offer.deleteMany({ where: { slug: { in: [pythonOfferSlug, javaOfferSlug] } } })
   })
 
-  it('includes ai_rejected offer whose claude_missing_skills overlap with learning_goals', async () => {
+  it('includes ai_rejected offer whose claude_missing_skills overlap with learning_skills_goals', async () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
@@ -148,7 +148,7 @@ describe('stretch_offers — DB integration', () => {
     expect(match?.salary?.currency).toBe('PLN')
   })
 
-  it('excludes ai_rejected offer with no learning_goals overlap', async () => {
+  it('excludes ai_rejected offer with no learning_skills_goals overlap', async () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)

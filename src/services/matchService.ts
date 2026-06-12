@@ -248,7 +248,7 @@ export async function runMatchForUser(
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────
-  const learningGoals = (profile.preferences.learning_goals ?? []).map(g => g.toLowerCase())
+  const learningGoals = (profile.preferences.learning_skills_goals ?? []).map(g => g.toLowerCase())
   const stretchOffers = await buildStretchOffers(userId, learningGoals, prisma)
 
   // ── 11. Log api_calls ──────────────────────────────────────────────────────
@@ -326,7 +326,7 @@ export async function buildStretchOffers(
     where: { user_id: userId, status: 'ai_rejected' },
   })
 
-  console.log('[stretch] ai_rejected candidates:', rows.length, 'learning_goals:', learningGoals)
+  console.log('[stretch] ai_rejected candidates:', rows.length, 'learning_skills_goals:', learningGoals)
 
   const filtered = rows
     .filter(row => {

@@ -10,7 +10,7 @@ export const userOffersRouter = Router()
 const QuerySchema = z.object({
   client_id: z.string().min(1).optional(),
   status: z.string().min(1),
-  has_learning_goals: z.enum(['true', 'false']).optional(),
+  has_learning_skills_goals: z.enum(['true', 'false']).optional(),
   count_only: z.enum(['true', 'false']).optional(),
   source: z.string().optional(),
   date_from: z.string().optional(),
@@ -46,12 +46,12 @@ async function loadClientProfile(clientId: string): Promise<ClientProfile> {
   try {
     const raw = user.profile as {
       preferences?: {
-        learning_goals?: string[]
+        learning_skills_goals?: string[]
         salary?: Array<{ type?: string; currency?: string; min?: number }>
       }
     }
     return {
-      learningGoals: (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase()),
+      learningGoals: (raw.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase()),
       salaryPrefs: (raw.preferences?.salary ?? [])
         .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null),
     }
@@ -149,7 +149,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     })
   }
 
-  const { status, has_learning_goals, count_only, source, date_from, date_to } = parsed.data
+  const { status, has_learning_skills_goals, count_only, source, date_from, date_to } = parsed.data
   const { role, agent_id, user_id } = req.jwt!
 
   let clientId: string
@@ -176,14 +176,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     ...(source && source !== 'all' ? { offer: { source } } : {}),
   }
 
-  // count_only=true without has_learning_goals: pure DB count, no data transfer
-  if (count_only === 'true' && has_learning_goals !== 'true') {
+  // count_only=true without has_learning_skills_goals: pure DB count, no data transfer
+  if (count_only === 'true' && has_learning_skills_goals !== 'true') {
     const count = await prisma.userOffer.count({ where })
     return res.json({ count })
   }
 
-  // count_only=true with has_learning_goals=true: lean fetch (no offer join), filter in memory
-  if (count_only === 'true' && has_learning_goals === 'true' && status === 'ai_rejected') {
+  // count_only=true with has_learning_skills_goals=true: lean fetch (no offer join), filter in memory
+  if (count_only === 'true' && has_learning_skills_goals === 'true' && status === 'ai_rejected') {
     const rows = await prisma.userOffer.findMany({
       where,
       select: { claude_missing_skills: true },
@@ -231,7 +231,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   let result = [...seen.values()]
 
-  if (has_learning_goals === 'true' && status === 'ai_rejected') {
+  if (has_learning_skills_goals === 'true' && status === 'ai_rejected') {
     if (learningGoals.length > 0) {
       result = result.filter(uo =>
         uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))

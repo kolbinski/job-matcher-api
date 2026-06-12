@@ -118,7 +118,7 @@ const PreferencesSchema = z.object({
   employment_type: z.array(z.string()).optional(),
   salary: z.array(SalaryPreferenceSchema).optional(),
   markets: z.array(z.string()).optional(),
-  learning_goals: z.array(z.string()).optional(),
+  learning_skills_goals: z.array(z.string()).optional(),
   target_role: z.array(z.string()).optional(),
 })
 

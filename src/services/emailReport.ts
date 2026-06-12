@@ -22,13 +22,13 @@ export function buildEmailReport(
       const raw = user.profile as {
         preferences?: {
           salary?: Array<{ type?: string; currency?: string; min?: number }>
-          learning_goals?: string[]
+          learning_skills_goals?: string[]
           office_location_cities?: string[]
         }
       }
       salaryPrefs = (raw.preferences?.salary ?? [])
         .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null)
-      learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase())
+      learningGoals = (raw.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase())
       officeCities = (raw.preferences?.office_location_cities ?? []).map(c => c.toLowerCase())
     } catch { /* profile unreadable — skip labels */ }
   }

@@ -169,11 +169,11 @@ async function main(): Promise<void> {
   if (user.profile) {
     try {
       const raw = user.profile as {
-        preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }>; learning_goals?: string[] }
+        preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }>; learning_skills_goals?: string[] }
       };
       salaryPrefs = (raw.preferences?.salary ?? [])
         .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null);
-      learningGoals = (raw.preferences?.learning_goals ?? []).map(g => g.toLowerCase());
+      learningGoals = (raw.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase());
     } catch { /* profile unreadable — skip comparison labels */ }
   }
 
@@ -267,7 +267,7 @@ async function main(): Promise<void> {
     console.log(`Stretch offers — learn these skills to unlock better roles (${stretch.length} total):`);
     console.log('─'.repeat(62));
     if (stretch.length === 0) {
-      console.log('  (none — no ai_rejected offers overlap with your learning_goals)');
+      console.log('  (none — no ai_rejected offers overlap with your learning_skills_goals)');
     } else {
       stretch.forEach((offer, i) => {
         const s = offer.salary;
