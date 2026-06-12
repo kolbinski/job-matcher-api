@@ -296,4 +296,9 @@ export async function syncUserById(userId: string): Promise<void> {
   }
 
   console.log(`[sync] User ${userId}: ${newOffersCount} new, ${stretchCount} stretch, ${result.meta.total_offers_scanned} scanned`);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { profile_synced_at: new Date() },
+  });
 }

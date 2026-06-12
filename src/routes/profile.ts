@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
+import { syncUserById } from '../services/syncService'
 import { AppError } from '../lib/errors'
 
 export const profileRouter = Router()
@@ -80,6 +81,7 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
       data: {
         ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
         ...(profile_ready !== undefined ? { profile_ready } : {}),
+        profile_synced_at: null,
       },
       select: { profile: true, profile_ready: true },
     })
@@ -93,9 +95,29 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
     data: {
       ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
       ...(profile_ready !== undefined ? { profile_ready } : {}),
+      profile_synced_at: null,
     },
     select: { profile: true, profile_ready: true },
   })
 
   res.json(updated)
+})
+
+profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
+  if (req.jwt!.role !== 'client') {
+    throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
+  }
+
+  const userId = req.jwt!.user_id!
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { profile_synced_at: null },
+  })
+
+  res.status(202).json({ message: 'Sync queued' })
+
+  syncUserById(userId).catch(err =>
+    console.error(`[trigger-sync] Sync failed for user ${userId}:`, err),
+  )
 })

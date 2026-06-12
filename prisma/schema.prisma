@@ -53,6 +53,7 @@ model User {
   photo_url                           String?
   subscribed_to                       DateTime?
   profile_ready                       Boolean       @default(false)
+  profile_synced_at                   DateTime?
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

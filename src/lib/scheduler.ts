@@ -8,6 +8,7 @@ const STARTUP_GRACE_MS = 5 * 60 * 1000
 const startupTime = Date.now()
 
 let syncInProgress = false
+const syncingUserIds = new Set<string>()
 
 // Reads work_start_utc, work_end_utc, work_days from settings on every call
 // so DB changes take effect immediately without redeploy.
@@ -181,6 +182,29 @@ async function runHourlySyncReports(): Promise<void> {
   }
 }
 
+async function runProfileSyncQueue(): Promise<void> {
+  try {
+    const users = await prisma.user.findMany({
+      where: { profile_ready: true, profile_synced_at: null },
+      select: { id: true },
+    })
+    if (users.length === 0) return
+    console.log(`[profile-sync] ${users.length} user(s) pending sync`)
+    for (const { id } of users) {
+      if (syncingUserIds.has(id)) {
+        console.log(`[profile-sync] User ${id} already syncing — skipping`)
+        continue
+      }
+      syncingUserIds.add(id)
+      syncUserById(id)
+        .catch(err => console.error(`[profile-sync] Sync failed for user ${id}:`, err))
+        .finally(() => syncingUserIds.delete(id))
+    }
+  } catch (err) {
+    console.error('[profile-sync] Queue scan failed:', err)
+  }
+}
+
 // Builds two cron expressions from work_start_utc, work_end_utc, work_days settings:
 //   '45 {start} * * {days}'          — full scrape 15min into the first working hour
 //   '0 {start+1}-{end} * * {days}'   — incremental scrape every hour during working hours
@@ -224,6 +248,9 @@ export async function startScheduler(): Promise<void> {
 
   cron.schedule('0 * * * *', runHourlySyncReports)
   console.log('[scheduler] Hourly sync report job registered (0 * * * *)')
+
+  cron.schedule('*/15 * * * *', runProfileSyncQueue)
+  console.log('[scheduler] Profile sync queue registered (*/15 * * * *)')
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...')
   const fetchRow = await prisma.settings.findUnique({ where: { key: 'fetch_offers_after_build' } })
