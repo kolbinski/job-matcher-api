@@ -52,6 +52,7 @@ model User {
   show_agent_info_in_cv               Boolean       @default(true)
   photo_url                           String?
   subscribed_to                       DateTime?
+  profile_ready                       Boolean       @default(false)
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]
