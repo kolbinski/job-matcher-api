@@ -51,6 +51,7 @@ export async function runMatchForUser(
 
   // ── 4. Load active offers with skill pre-filter ────────────────────────────
   const candidateTechs = [...norm.techs]
+  console.log('[preFilter] candidateTechs:', candidateTechs)
   const skillFilter = candidateTechs.length > 0
     ? { OR: [{ required_skills: { isEmpty: true } }, { required_skills: { hasSome: candidateTechs } }] }
     : { required_skills: { isEmpty: true } }
@@ -108,6 +109,7 @@ export async function runMatchForUser(
   console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`)
   console.log(`[preFilter] city: rejected ${rejectCounts.city}`)
   console.log(`[preFilter] skill_excluded: ${skillExcluded.length}`)
+  console.log('[preFilter] skill_excluded for user:', userId, 'candidateTechs:', candidateTechs)
   console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`)
 
   // ── 6b. Write pre_filter_rejected rows immediately ────────────────────────

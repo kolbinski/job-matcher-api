@@ -277,6 +277,7 @@ async function _syncUserById(userId: string): Promise<void> {
     select: { id: true, email: true, profile: true },
   });
   if (!user) throw new Error(`syncUserById: user ${userId} not found`);
+  console.log('[sync] Running for user:', userId, 'email:', user.email);
 
   const agentClient = await prisma.agentClient.findFirst({
     where: { user_id: userId },
