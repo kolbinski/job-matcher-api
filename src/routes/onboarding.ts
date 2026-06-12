@@ -150,7 +150,7 @@ SCHEMA:
 ${PROFILE_SCHEMA}
 
 RULES:
-- Return ONLY valid JSON — no markdown, no code blocks, no explanation
+- Return ONLY valid JSON. Do NOT wrap in markdown code fences or backticks.
 - Use null for fields that cannot be determined from the CV
 - Use empty arrays [] for list fields with no data
 - experience_level: junior = 0-2 yrs, mid = 2-5 yrs, senior = 5-8 yrs, lead = 8+ yrs
@@ -194,10 +194,11 @@ ${cvText.slice(0, 12000)}`;
     };
     console.log('[prepare-profile] Claude response:', JSON.stringify(data));
     const rawText = data.content[0].text.trim();
+    const clean = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
 
     let profile: unknown;
     try {
-      profile = JSON.parse(rawText);
+      profile = JSON.parse(clean);
       console.log(
         '[prepare-profile] parsed profile keys:',
         Object.keys(profile as object),
