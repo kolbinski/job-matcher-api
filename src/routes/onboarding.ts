@@ -194,6 +194,83 @@ const ReviewBodySchema = z.object({
   profile: z.record(z.string(), z.unknown()),
 })
 
+const ReviewResponseSchema = z.object({
+  verdict: z.enum(['Strong profile', 'Good profile, a few gaps', 'Needs improvement', 'Incomplete profile']),
+  verdict_explanation: z.string(),
+  strengths: z.array(z.string()),
+  improvements: z.array(z.string()),
+  missing: z.array(z.string()),
+  suggested_certifications: z.array(z.object({ name: z.string(), reason: z.string() })),
+  tips: z.array(z.string()),
+})
+
+type ReviewResponse = z.infer<typeof ReviewResponseSchema>
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function bulletSection(title: string, items: string[], headerCss: string, dotCss: string): string {
+  if (!items.length) return ''
+  return `
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 class="text-base font-semibold ${headerCss} mb-3">${title}</h2>
+      <ul class="space-y-2">
+        ${items.map(i => `<li class="flex gap-2 text-gray-700"><span class="${dotCss} mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></span><span>${esc(i)}</span></li>`).join('\n        ')}
+      </ul>
+    </div>`
+}
+
+function buildHtml(r: ReviewResponse): string {
+  const verdictCss: Record<string, string> = {
+    'Strong profile':            'bg-green-100 text-green-800',
+    'Good profile, a few gaps':  'bg-blue-100 text-blue-800',
+    'Needs improvement':         'bg-orange-100 text-orange-800',
+    'Incomplete profile':        'bg-red-100 text-red-800',
+  }
+  const badge = verdictCss[r.verdict] ?? 'bg-gray-100 text-gray-800'
+
+  const certsHtml = r.suggested_certifications.length ? `
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 class="text-base font-semibold text-blue-700 mb-3">Suggested Certifications</h2>
+      <ul class="space-y-3">
+        ${r.suggested_certifications.map(c => `
+        <li class="flex gap-2 text-gray-700">
+          <span class="bg-blue-400 mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></span>
+          <span><span class="font-medium">${esc(c.name)}</span> — ${esc(c.reason)}</span>
+        </li>`).join('')}
+      </ul>
+    </div>` : ''
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Homo Digital - Profile Review</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen py-10 px-4">
+  <div class="max-w-3xl mx-auto space-y-5">
+    <div class="flex items-center gap-3">
+      <h1 class="text-2xl font-bold text-gray-900">Profile Review</h1>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold ${badge} mb-3">${esc(r.verdict)}</span>
+      <p class="text-gray-700">${esc(r.verdict_explanation)}</p>
+    </div>
+
+    ${bulletSection('Strengths', r.strengths, 'text-green-700', 'bg-green-400')}
+    ${bulletSection('Improvements', r.improvements, 'text-orange-700', 'bg-orange-400')}
+    ${bulletSection('Missing Important Info', r.missing, 'text-red-700', 'bg-red-400')}
+    ${certsHtml}
+    ${bulletSection('Profile Tips', r.tips, 'text-gray-600', 'bg-gray-400')}
+  </div>
+</body>
+</html>`
+}
+
 onboardingRouter.post('/review-profile', validateJwt, async (req, res) => {
   const parsed = ReviewBodySchema.safeParse(req.body)
   if (!parsed.success) {
@@ -202,30 +279,26 @@ onboardingRouter.post('/review-profile', validateJwt, async (req, res) => {
 
   const prompt = `You are a professional career coach reviewing a candidate's structured profile JSON for a job-matching platform.
 
-Analyze the profile below and return a self-contained HTML page with a professional review. Follow every instruction exactly.
+Analyze the profile below and return a JSON object matching the exact schema provided.
 
 PROFILE JSON:
 ${JSON.stringify(parsed.data.profile, null, 2)}
 
-HTML REQUIREMENTS:
-- Include <script src="https://cdn.tailwindcss.com"></script> in <head>
-- Light theme, clean and professional design
-- <title>Homo Digital - Profile Review</title>
-- Responsive layout, readable on mobile and desktop
-- Use Tailwind utility classes for all styling
-
-PAGE SECTIONS (in this order):
-1. Overall assessment — one of exactly these verdicts: "Strong profile" / "Good profile, a few gaps" / "Needs improvement" / "Incomplete profile". Follow it with a 2–3 sentence explanation referencing the candidate's actual data.
-2. Strengths (green accent) — bullet list of what is genuinely strong, with specific references to the profile data
-3. Improvements (orange accent) — bullet list of specific, actionable suggestions the candidate can act on immediately
-4. Missing important info (red accent) — gaps in the profile that will hurt job-matching quality
-5. Suggested certifications (blue accent) — certifications worth pursuing based on their skills and experience level
-6. Profile tips (gray accent) — personalised advice for this specific candidate
+SCHEMA:
+{
+  "verdict": "Strong profile" | "Good profile, a few gaps" | "Needs improvement" | "Incomplete profile",
+  "verdict_explanation": "2-3 sentences referencing actual profile data",
+  "strengths": ["string"],
+  "improvements": ["string"],
+  "missing": ["string"],
+  "suggested_certifications": [{ "name": "string", "reason": "string" }],
+  "tips": ["string"]
+}
 
 RULES:
 - Be specific and actionable — reference the candidate's actual job titles, skills, companies, and dates
 - Do not mention any completeness percentage
-- Return ONLY valid HTML — no markdown, no code fences, no explanation outside the HTML`
+- Return ONLY valid JSON — no markdown, no code fences, no explanation`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -236,7 +309,7 @@ RULES:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8096,
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     }),
     signal: AbortSignal.timeout(55_000),
@@ -248,8 +321,19 @@ RULES:
   }
 
   const data = (await response.json()) as { content: Array<{ text: string }> }
-  const html = data.content[0].text.trim()
+  const rawText = data.content[0].text.trim()
+
+  let review: ReviewResponse
+  try {
+    const reviewParsed = ReviewResponseSchema.safeParse(JSON.parse(rawText))
+    if (!reviewParsed.success) {
+      throw new Error(reviewParsed.error.issues[0]?.message)
+    }
+    review = reviewParsed.data
+  } catch {
+    throw new AppError(500, 'INTERNAL_ERROR', 'Profile review parsing failed — Claude returned invalid JSON')
+  }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  res.send(html)
+  res.send(buildHtml(review))
 })
