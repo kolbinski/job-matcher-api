@@ -122,7 +122,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { profile_synced_at: null },
+    data: { profile_synced_at: new Date() },
   })
 
   res.status(202).json({ message: 'Sync queued' })

@@ -36,9 +36,22 @@ export async function evaluateOffers(
 ): Promise<ClaudeEvaluation[] | null> {
   if (offers.length === 0) return [];
 
+  const result = await _evaluateOffers(profile, offers);
+  if (result !== null) return result;
+
+  console.error('[claudeEvaluator] Batch returned null — retrying once after 5s');
+  await new Promise(resolve => setTimeout(resolve, 5_000));
+  return _evaluateOffers(profile, offers);
+}
+
+async function _evaluateOffers(
+  profile: CandidateProfile,
+  offers: Offer[],
+): Promise<ClaudeEvaluation[] | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const claudeStart = Date.now();
+  let rawResponse: string | undefined;
 
   try {
     const prompt = buildPrompt(profile, offers);
@@ -69,9 +82,12 @@ export async function evaluateOffers(
     );
 
     const block = response.content[0];
-    if (block?.type !== 'text') return null;
+    if (block?.type !== 'text') {
+      console.error('[claudeEvaluator] Batch returned null — raw response: (no text block)');
+      return null;
+    }
 
-    const rawResponse = block.text;
+    rawResponse = block.text;
 
     const cleaned = stripCodeFences(rawResponse);
 
@@ -83,6 +99,7 @@ export async function evaluateOffers(
         '[claudeEvaluator] JSON parse error. Raw response:',
         rawResponse,
       );
+      console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
       return null;
     }
 
@@ -93,6 +110,7 @@ export async function evaluateOffers(
 
     if (!Array.isArray(parsed) || parsed.length === 0) {
       console.error('[claudeEvaluator] Response is not a non-empty array');
+      console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
       return null;
     }
 
@@ -111,6 +129,7 @@ export async function evaluateOffers(
       const validated = validateEvaluation(parsed[i], i + 1);
       if (!validated) {
         console.error('[claudeEvaluator] Invalid item at index', i);
+        console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse.substring(0, 500));
         return null;
       }
       results.push(validated);
@@ -136,6 +155,7 @@ export async function evaluateOffers(
         console.error('[claudeEvaluator] API ERROR:', err.message, err.name);
       }
     }
+    console.error('[claudeEvaluator] Batch returned null — raw response:', rawResponse?.substring(0, 500));
     return null;
   } finally {
     clearTimeout(timeoutId);

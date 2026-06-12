@@ -248,6 +248,30 @@ async function runJob(
 }
 
 export async function syncUserById(userId: string): Promise<void> {
+  const lockKey = `sync:${userId}`;
+
+  const existingLock = await prisma.notificationLock.findUnique({ where: { lock_key: lockKey } });
+  if (existingLock) {
+    console.log(`[sync] User ${userId}: sync already in progress, skipping`);
+    return;
+  }
+
+  try {
+    await prisma.notificationLock.create({ data: { lock_key: lockKey } });
+  } catch {
+    // Race condition — another process inserted the lock between our check and create
+    console.log(`[sync] User ${userId}: sync already in progress, skipping`);
+    return;
+  }
+
+  try {
+    await _syncUserById(userId);
+  } finally {
+    await prisma.notificationLock.deleteMany({ where: { lock_key: lockKey } });
+  }
+}
+
+async function _syncUserById(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true, profile: true },
