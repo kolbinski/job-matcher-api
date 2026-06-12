@@ -29,9 +29,12 @@ export async function runMatchForUser(
   const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { profile: true } })
   if (!dbUser?.profile) throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this user')
 
-  const profileParsed = CandidateProfileSchema.safeParse(dbUser.profile)
-  if (!profileParsed.success) throw new AppError(422, 'INVALID_PROFILE', 'Profile is invalid')
-  const profile = profileParsed.data
+  const profileParseResult = CandidateProfileSchema.safeParse(dbUser.profile)
+  if (!profileParseResult.success) {
+    console.error('[matchService] Profile validation failed:', JSON.stringify(profileParseResult.error.issues))
+    throw new AppError(422, 'INVALID_PROFILE', 'Profile is invalid')
+  }
+  const profile = profileParseResult.data
 
   // ── 2. Normalize profile once ──────────────────────────────────────────────
   const norm = normalizeProfile(profile)
