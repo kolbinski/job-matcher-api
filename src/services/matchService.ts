@@ -170,17 +170,20 @@ export async function runMatchForUser(
   if (doAiScoring && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
   } else if (doAiScoring) {
-    const totalBatches = Math.ceil(filteredPairs.length / claudeBatchSize)
-
+    const allBatches: typeof filteredPairs[] = []
     for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
-      const batch = filteredPairs.slice(i, i + claudeBatchSize)
-      const batchNum = Math.floor(i / claudeBatchSize) + 1
+      allBatches.push(filteredPairs.slice(i, i + claudeBatchSize))
+    }
+    const totalBatches = allBatches.length
+    const CONCURRENCY = 3
+
+    const processBatch = async (batch: typeof filteredPairs, batchNum: number): Promise<void> => {
       console.log(`[match] Claude batch ${batchNum}/${totalBatches} (${batch.length} offers)`)
 
       const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
       if (!batchResults) {
         console.warn(`[match] Claude batch ${batchNum}/${totalBatches} returned null — skipping`)
-        continue
+        return
       }
 
       // Apply evaluations to this batch's pairs in-place
@@ -247,6 +250,11 @@ export async function runMatchForUser(
           }
         }
       }
+    }
+
+    for (let i = 0; i < allBatches.length; i += CONCURRENCY) {
+      const group = allBatches.slice(i, i + CONCURRENCY)
+      await Promise.all(group.map((batch, j) => processBatch(batch, i + j + 1)))
     }
 
     // Re-sort by Claude score once all batches are done
