@@ -65,14 +65,12 @@ async function upsertPage(
   }
 
   for (const batch of chunk(toUpdate, BATCH_SIZE)) {
-    await Promise.all(
-      batch.map(offer =>
-        prisma.offer.update({
-          where: { slug: offer.slug },
-          data: toUpsertData(offer, fetchedAt),
-        }),
-      ),
-    );
+    for (const offer of batch) {
+      await prisma.offer.update({
+        where: { slug: offer.slug },
+        data: toUpsertData(offer, fetchedAt),
+      });
+    }
   }
 
   return {

@@ -12,6 +12,11 @@ export const prisma: PrismaClient =
     transactionOptions: {
       timeout: 120_000,
     },
+    datasources: {
+      db: {
+        url: `${process.env.DATABASE_URL ?? ''}?connection_limit=10&pool_timeout=30`,
+      },
+    },
   })
 
 if (process.env.NODE_ENV === 'development') {
