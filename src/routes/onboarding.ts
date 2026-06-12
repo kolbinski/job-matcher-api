@@ -26,8 +26,8 @@ const PROFILE_SCHEMA = `{
     "email": "string | null",
     "phone": "string | null",
     "gender": "M | F | null",
-    "github": "string | null (path only, no https://)",
-    "linkedin": "string | null (path only, no https://)",
+    "github": "string | null",
+    "linkedin": "string | null",
     "location": {
       "city": "string | null",
       "country_code": "ISO 2-letter code | null",
@@ -140,6 +140,8 @@ RULES:
 - cv_summary_bullets: exactly 3 concise achievement-focused bullets summarising the candidate
 - soft_skills: extract from explicit mentions or infer from CV descriptions
 - preferences.salary: extract if salary expectations are mentioned, otherwise []
+- github: always prefix with "https://" if not already present (e.g. "github.com/user" → "https://github.com/user")
+- linkedin: always prefix with "https://" if not already present (e.g. "linkedin.com/in/user" → "https://linkedin.com/in/user")
 
 CV TEXT:
 ${cvText.slice(0, 12000)}`
@@ -174,6 +176,14 @@ ${cvText.slice(0, 12000)}`
     console.log('[prepare-profile] parsed profile keys:', Object.keys(profile as object))
   } catch {
     throw new AppError(500, 'INTERNAL_ERROR', 'Profile parsing failed — Claude returned invalid JSON')
+  }
+
+  const p = profile as { basic_info?: { github?: string | null; linkedin?: string | null } }
+  if (p.basic_info?.github && !p.basic_info.github.startsWith('http')) {
+    p.basic_info.github = `https://${p.basic_info.github}`
+  }
+  if (p.basic_info?.linkedin && !p.basic_info.linkedin.startsWith('http')) {
+    p.basic_info.linkedin = `https://${p.basic_info.linkedin}`
   }
 
   return res.json({ profile })
