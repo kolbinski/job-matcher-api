@@ -203,7 +203,7 @@ function buildHtml(
       );
       const workModelStr = formatWorkModel(
         profileJob?.work_model,
-        profileJob?.location,
+        profileJob?.location ?? undefined,
       );
       const metaParts = [
         job.industry ? esc(job.industry) : null,

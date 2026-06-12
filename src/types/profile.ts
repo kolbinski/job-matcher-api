@@ -2,10 +2,10 @@ import { z } from 'zod'
 
 const LocationSchema = z.object({
   country_code: z.string().optional(),
-  city: z.string().optional(),
+  city: z.string().nullable().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
-  max_distance_km: z.number().optional(),
+  max_distance_km: z.number().nullable().optional(),
 })
 
 const BasicInfoSchema = z.object({
@@ -15,7 +15,7 @@ const BasicInfoSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional(),
   linkedin: z.string().optional(),
-  github: z.string().optional(),
+  github: z.string().nullable().optional(),
   location: LocationSchema.optional(),
   experience_level: z.enum(['junior', 'mid', 'senior', 'lead', 'principal', 'staff', 'architect', 'c_level']).optional(),
   experience_since: z.number().int().optional(),
@@ -42,16 +42,16 @@ const EducationSchema = z.object({
   institution: z.string(),
   degree: z.string().optional(),
   field: z.string().optional(),
-  date_from: z.string().optional(),
-  date_to: z.string().optional(),
-  gpa: z.string().optional(),
-  thesis: z.string().optional(),
+  date_from: z.string().nullable().optional(),
+  date_to: z.string().nullable().optional(),
+  gpa: z.string().nullable().optional(),
+  thesis: z.string().nullable().optional(),
 })
 
 const ProjectSchema = z.object({
   name: z.string(),
   skills: z.array(z.string()).optional(),
-  team_size: z.number().int().positive().optional(),
+  team_size: z.number().int().positive().nullable().optional(),
   role: z.string().optional(),
   achievements: z.array(z.string()).optional(),
 })
@@ -60,13 +60,13 @@ const WorkExperienceSchema = z.object({
   company: z.string(),
   title: z.string(),
   date_from: z.string(),
-  date_to: z.string().optional(),
+  date_to: z.string().nullable().optional(),
   currently_working: z.boolean().optional(),
-  company_type: z.string().optional(),
+  company_type: z.string().nullable().optional(),
   company_size: z.string().optional(),
-  industry: z.string().optional(),
+  industry: z.string().nullable().optional(),
   work_model: z.string().optional(),
-  location: z.string().optional(),
+  location: z.string().nullable().optional(),
   projects: z.array(ProjectSchema).optional(),
   technologies: z.array(z.string()).optional(),
   achievements: z.array(z.string()).optional(),
@@ -111,7 +111,7 @@ const PreferencesSchema = z.object({
   company_type: z.array(z.string()).optional(),
   company_type_excluded: z.array(z.string()).optional(),
   work_model: z.array(z.string()).optional(),
-  max_office_days_per_week: z.number().int().nonnegative().optional(),
+  max_office_days_per_week: z.number().int().nonnegative().nullable().optional(),
   office_location_cities: z.array(z.string()).optional(),
   team_size: SalaryRangeSchema.optional(),
   industries: z.array(z.string()).optional(),
