@@ -193,17 +193,13 @@ ${cvText.slice(0, 12000)}`;
     const data = (await response.json()) as {
       content: Array<{ text: string }>;
     };
-    console.log('[prepare-profile] Claude response:', JSON.stringify(data));
     const rawText = data.content[0].text.trim();
     const clean = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
 
     let profile: unknown;
     try {
       profile = JSON.parse(clean);
-      console.log(
-        '[prepare-profile] parsed profile keys:',
-        Object.keys(profile as object),
-      );
+
     } catch {
       throw new AppError(
         500,

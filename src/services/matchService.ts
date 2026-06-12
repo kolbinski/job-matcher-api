@@ -25,9 +25,13 @@ export async function runMatchForUser(
   const includeUnmatched = opts?.include_unmatched ?? false
   const sortOrder = opts?.sort?.order ?? 'desc'
 
-  // ── 1. Load profile ────────────────────────────────────────────────────────
-  const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { profile: true } })
+  // ── 1. Load profile + settings ────────────────────────────────────────────
+  const [dbUser, claudeBatchSizeSetting] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { profile: true } }),
+    prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
+  ])
   if (!dbUser?.profile) throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this user')
+  const claudeBatchSize = parseInt(claudeBatchSizeSetting?.value ?? '25', 10)
 
   const profileParseResult = CandidateProfileSchema.safeParse(dbUser.profile)
   if (!profileParseResult.success) {
@@ -164,12 +168,11 @@ export async function runMatchForUser(
   if (doAiScoring && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
   } else if (doAiScoring) {
-    const BATCH_SIZE = 100
-    const totalBatches = Math.ceil(filteredPairs.length / BATCH_SIZE)
+    const totalBatches = Math.ceil(filteredPairs.length / claudeBatchSize)
 
-    for (let i = 0; i < filteredPairs.length; i += BATCH_SIZE) {
-      const batch = filteredPairs.slice(i, i + BATCH_SIZE)
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1
+    for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
+      const batch = filteredPairs.slice(i, i + claudeBatchSize)
+      const batchNum = Math.floor(i / claudeBatchSize) + 1
       console.log(`[match] Claude batch ${batchNum}/${totalBatches} (${batch.length} offers)`)
 
       const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
