@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { z } from 'zod'
 import multer from 'multer'
 import { PDFParse } from 'pdf-parse'
 import { validateJwt } from '../middleware/validateJwt'
@@ -189,6 +190,66 @@ ${cvText.slice(0, 12000)}`
   return res.json({ profile })
 })
 
-onboardingRouter.post('/review-profile', validateJwt, async (_req, res) => {
-  res.json({ good: [], improve: [], missing: [] })
+const ReviewBodySchema = z.object({
+  profile: z.record(z.string(), z.unknown()),
+})
+
+onboardingRouter.post('/review-profile', validateJwt, async (req, res) => {
+  const parsed = ReviewBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError(422, 'INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid request body')
+  }
+
+  const prompt = `You are a professional career coach reviewing a candidate's structured profile JSON for a job-matching platform.
+
+Analyze the profile below and return a self-contained HTML page with a professional review. Follow every instruction exactly.
+
+PROFILE JSON:
+${JSON.stringify(parsed.data.profile, null, 2)}
+
+HTML REQUIREMENTS:
+- Include <script src="https://cdn.tailwindcss.com"></script> in <head>
+- Light theme, clean and professional design
+- <title>Homo Digital - Profile Review</title>
+- Responsive layout, readable on mobile and desktop
+- Use Tailwind utility classes for all styling
+
+PAGE SECTIONS (in this order):
+1. Overall assessment — one of exactly these verdicts: "Strong profile" / "Good profile, a few gaps" / "Needs improvement" / "Incomplete profile". Follow it with a 2–3 sentence explanation referencing the candidate's actual data.
+2. Strengths (green accent) — bullet list of what is genuinely strong, with specific references to the profile data
+3. Improvements (orange accent) — bullet list of specific, actionable suggestions the candidate can act on immediately
+4. Missing important info (red accent) — gaps in the profile that will hurt job-matching quality
+5. Suggested certifications (blue accent) — certifications worth pursuing based on their skills and experience level
+6. Profile tips (gray accent) — personalised advice for this specific candidate
+
+RULES:
+- Be specific and actionable — reference the candidate's actual job titles, skills, companies, and dates
+- Do not mention any completeness percentage
+- Return ONLY valid HTML — no markdown, no code fences, no explanation outside the HTML`
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8096,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+    signal: AbortSignal.timeout(55_000),
+  })
+
+  if (!response.ok) {
+    const errBody = await response.text()
+    throw new Error(`Claude API error ${response.status}: ${errBody}`)
+  }
+
+  const data = (await response.json()) as { content: Array<{ text: string }> }
+  const html = data.content[0].text.trim()
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.send(html)
 })
