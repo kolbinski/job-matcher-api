@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { PDFParse } from 'pdf-parse'
-import { validateSupabaseJwt } from '../middleware/validateSupabaseJwt'
+import { validateJwt } from '../middleware/validateJwt'
 import { env } from '../lib/env'
 import { AppError } from '../lib/errors'
 
@@ -100,7 +100,7 @@ const PROFILE_SCHEMA = `{
   }
 }`
 
-onboardingRouter.post('/prepare-profile', validateSupabaseJwt, upload.single('cv'), async (req, res) => {
+onboardingRouter.post('/prepare-profile', validateJwt, upload.single('cv'), async (req, res) => {
   if (!req.file) {
     throw new AppError(422, 'INVALID_REQUEST', 'Missing required file: cv (PDF)')
   }
@@ -187,4 +187,8 @@ ${cvText.slice(0, 12000)}`
   }
 
   return res.json({ profile })
+})
+
+onboardingRouter.post('/review-profile', validateJwt, async (_req, res) => {
+  res.json({ good: [], improve: [], missing: [] })
 })
