@@ -14,7 +14,12 @@ clientsRouter.get('/', validateJwt, async (req, res) => {
       select: { id: true, email: true, profile: true, photo_url: true },
     })
     if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
-    return res.json([user])
+    const p = user.profile as { basic_info?: { first_name?: string; last_name?: string } } | null
+    return res.json([{
+      ...user,
+      first_name: p?.basic_info?.first_name ?? null,
+      last_name: p?.basic_info?.last_name ?? null,
+    }])
   }
 
   const links = await prisma.agentClient.findMany({
