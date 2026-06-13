@@ -142,6 +142,10 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
     data: { profile_synced_at: new Date() },
   })
 
+  await prisma.userOffer.deleteMany({
+    where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
+  })
+
   res.status(202).json({ message: 'Sync queued' })
 
   syncUserById(userId).catch(err =>
