@@ -27,7 +27,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
           type: 'object',
           properties: {
             offer_index:       { type: 'integer', description: 'Exact index from the offer header (0-based)' },
-            score:             { type: 'integer', minimum: 0, maximum: 100, description: 'Overall match quality 0-100. CRITICAL: Score must reflect actual skill overlap. If the primary required skills are not in the candidate\'s profile (e.g. Java, Angular, C++, .NET), the score must be below 60 regardless of other factors.' },
+            score:             { type: 'integer', minimum: 0, maximum: 100, description: 'Overall match quality 0-100. CRITICAL scoring rule — skill overlap ratio determines score ceiling: Calculate matched_skills = count of required_skills present in candidate\'s skills. Calculate overlap_ratio = matched_skills / total required_skills. If overlap_ratio < 0.30 → score MUST be 45 or below. If overlap_ratio < 0.50 → score MUST be 65 or below. If overlap_ratio >= 0.50 → score can be up to 100 based on other factors. This rule overrides all other scoring considerations. Do NOT round up — if ratio is 0.29, cap is 45, not 65.' },
             rank:              { type: 'integer', minimum: 1, description: 'Overall ranking, 1 = best match' },
             matched_reasons: {
               type: 'object',
