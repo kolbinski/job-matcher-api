@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
@@ -21,6 +22,7 @@ export async function runMatchForUser(
   },
 ): Promise<MatchResponse> {
   const startTime = Date.now()
+  const callId = randomUUID()
   const doAiScoring = opts?.ai_scoring ?? true
   const includeUnmatched = opts?.include_unmatched ?? false
   const sortOrder = opts?.sort?.order ?? 'desc'
@@ -166,8 +168,6 @@ export async function runMatchForUser(
   // leaves already-processed batches saved and seenIds grows with each batch.
   let aiScoring = false
   let claudeEvaluationsCount = 0
-  let totalInputTokens = 0
-  let totalOutputTokens = 0
 
   if (doAiScoring && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
@@ -185,11 +185,18 @@ export async function runMatchForUser(
       const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
       if (!batchResults) {
         console.warn(`[match] Claude batch ${batchNum}/${totalBatches} returned null — skipping`)
+        prisma.apiCall.create({
+          data: {
+            user_id: userId,
+            offers_matched: 0,
+            offers_total: batch.length,
+            status: 'error',
+            call_type: 'matching',
+            model: 'claude-sonnet-4-6',
+          },
+        }).catch(err => console.error('[match] Failed to log error api_call:', err))
         return
       }
-
-      totalInputTokens += batchResults.input_tokens
-      totalOutputTokens += batchResults.output_tokens
 
       // Apply evaluations to this batch's pairs in-place
       const cvLanguageByIndex = new Map<number, 'pl' | 'en'>()
@@ -229,6 +236,7 @@ export async function runMatchForUser(
           }
         })
 
+      let batchPendingApplyCount = 0
       if (batchRows.length > 0) {
         const existingClaudeOffers = await prisma.offer.findMany({
           where: { id: { in: batchRows.map(r => r.offer_id) } },
@@ -252,9 +260,24 @@ export async function runMatchForUser(
             await prisma.userOfferStatus.createMany({
               data: inserted.map(r => ({ user_offer_id: r.id, status: r.status })),
             })
+            batchPendingApplyCount = inserted.filter(r => r.status === 'pending_apply').length
           }
         }
       }
+
+      prisma.apiCall.create({
+        data: {
+          user_id: userId,
+          offers_matched: batchPendingApplyCount,
+          offers_total: batch.length,
+          response_ms: batchResults.response_ms,
+          status: 'success',
+          call_type: 'matching',
+          model: batchResults.model,
+          input_tokens: batchResults.input_tokens,
+          output_tokens: batchResults.output_tokens,
+        },
+      }).catch(err => console.error('[match] Failed to log api_call for batch:', err))
     }
 
     for (let i = 0; i < allBatches.length; i += CONCURRENCY) {
@@ -272,22 +295,7 @@ export async function runMatchForUser(
   const learningGoals = (profile.preferences.learning_skills_goals ?? []).map(g => g.toLowerCase())
   const stretchOffers = await buildStretchOffers(userId, learningGoals, prisma)
 
-  // ── 11. Log api_calls ──────────────────────────────────────────────────────
   const responseMs = Date.now() - startTime
-  const call = await prisma.apiCall.create({
-    data: {
-      user_id: userId,
-      offers_matched: filteredPairs.length,
-      offers_total: offers.length + skillExcluded.length,
-      response_ms: responseMs,
-      status: 'success',
-      call_type: 'matching',
-      model: 'claude-sonnet-4-6',
-      input_tokens: totalInputTokens,
-      output_tokens: totalOutputTokens,
-    },
-  })
-
   const limitedMatched = filteredPairs.map(p => p.offer)
   if (limitedMatched.length > 0) {
     const first = limitedMatched[0]
@@ -296,7 +304,7 @@ export async function runMatchForUser(
 
   return {
     meta: {
-      call_id: call.id,
+      call_id: callId,
       generated_at: new Date().toISOString(),
       response_ms: responseMs,
       total_offers_scanned: offers.length + skillExcluded.length,

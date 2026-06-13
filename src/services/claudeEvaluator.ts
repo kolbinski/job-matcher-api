@@ -68,6 +68,8 @@ export interface EvaluateOffersResult {
   evaluations: ClaudeEvaluation[];
   input_tokens: number;
   output_tokens: number;
+  response_ms: number;
+  model: string;
 }
 
 // Evaluates all pre-filtered offers in a single Claude call.
@@ -77,7 +79,7 @@ export async function evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
 ): Promise<EvaluateOffersResult | null> {
-  if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0 };
+  if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0, response_ms: 0, model: 'claude-sonnet-4-6' };
 
   const result = await _evaluateOffers(profile, offers);
   if (result !== null) return result;
@@ -118,8 +120,9 @@ async function _evaluateOffers(
     );
 
     const { input_tokens, output_tokens } = response.usage;
+    const response_ms = Date.now() - claudeStart;
     console.log(
-      `[claudeEvaluator] Response received in ${Date.now() - claudeStart}ms | tokens: ${input_tokens} in / ${output_tokens} out`,
+      `[claudeEvaluator] Response received in ${response_ms}ms | tokens: ${input_tokens} in / ${output_tokens} out`,
     );
 
     const toolUseBlock = response.content.find(b => b.type === 'tool_use') as
@@ -167,7 +170,7 @@ async function _evaluateOffers(
       }
       results.push(validated);
     }
-    return { evaluations: results, input_tokens, output_tokens };
+    return { evaluations: results, input_tokens, output_tokens, response_ms, model: response.model };
   } catch (err) {
     console.error(
       '[claudeEvaluator] Offers sent:',

@@ -23,6 +23,8 @@ vi.mock('../src/services/claudeEvaluator', () => ({
       })),
       input_tokens: 0,
       output_tokens: 0,
+      response_ms: 100,
+      model: 'claude-sonnet-4-6',
     })
   ),
 }))
@@ -142,16 +144,16 @@ describe('POST /v1/match', () => {
     }
   })
 
-  it('writes an api_calls row on success', async () => {
+  it('writes an api_calls row per Claude batch on success', async () => {
     await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)
-      .send({ options: { ai_scoring: false } })
+      .send({ options: { ai_scoring: true } })
 
-    const calls = await prisma.apiCall.findMany({ where: { user_id: userId } })
-    expect(calls).toHaveLength(1)
+    const calls = await prisma.apiCall.findMany({ where: { user_id: userId, call_type: 'matching' } })
+    expect(calls.length).toBeGreaterThanOrEqual(1)
     expect(calls[0].status).toBe('success')
-    expect(calls[0].response_ms).toBeGreaterThan(0)
+    expect(calls[0].call_type).toBe('matching')
   })
 
   it('writes user_offer rows for pre-filtered offers; skips unscored matched offers', async () => {
