@@ -313,9 +313,10 @@ userOffersRouter.get('/subscribe', (req, _res, next) => {
     .channel(channelName)
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'user_offers', filter: `user_id=eq.${userId}` },
+      { event: 'INSERT', schema: 'public', table: 'user_offers' },
       (payload: { new: Record<string, unknown> }) => {
         console.log('[SSE] INSERT received for user:', userId, 'status:', payload.new['status'])
+        if (payload.new['user_id'] !== userId) return
         if (payload.new['status'] === 'pending_apply') {
           console.log('[SSE] sending new_offer event to:', userId)
           res.write(`event: new_offer\ndata: ${JSON.stringify(payload.new)}\n\n`)
