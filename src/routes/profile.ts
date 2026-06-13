@@ -180,7 +180,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   console.log(`[trigger-sync] user_offers cleanup done`)
 
   await prisma.notificationLock.deleteMany({
-    where: { lock_key: { startsWith: `sync:${userId}:` } },
+    where: { lock_key: { startsWith: `sync:${userId}` } },
   })
   console.log('[trigger-sync] cleared sync lock for userId:', userId)
 
