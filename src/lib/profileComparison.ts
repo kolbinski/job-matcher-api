@@ -40,7 +40,11 @@ const MATCHING_FIELDS: string[][] = [
 
 // Returns true if any matching-relevant field differs between the two profiles.
 export function compareMatchingFields(oldProfile: unknown, newProfile: unknown): boolean {
-  return MATCHING_FIELDS.some(
+  console.log('[compareMatchingFields] old salary:', stableStringify(getField(oldProfile, ['preferences', 'salary'])))
+  console.log('[compareMatchingFields] new salary:', stableStringify(getField(newProfile, ['preferences', 'salary'])))
+  const result = MATCHING_FIELDS.some(
     path => stableStringify(getField(oldProfile, path)) !== stableStringify(getField(newProfile, path))
   )
+  console.log('[compareMatchingFields] result:', result)
+  return result
 }

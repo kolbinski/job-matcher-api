@@ -91,6 +91,8 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
       where: { id: userId },
       select: { profile: true },
     })
+    console.log('[profile] saving editing snapshot for userId:', userId)
+    console.log('[profile] snapshot keys:', Object.keys(profile || {}))
     snapshotUpdate = {
       profile_editing_snapshot: current?.profile != null
         ? (current.profile as Prisma.InputJsonValue)
