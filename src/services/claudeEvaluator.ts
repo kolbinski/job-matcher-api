@@ -78,20 +78,22 @@ export interface EvaluateOffersResult {
 export async function evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
+  model: string,
 ): Promise<EvaluateOffersResult | null> {
-  if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0, response_ms: 0, model: 'claude-sonnet-4-6' };
+  if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0, response_ms: 0, model };
 
-  const result = await _evaluateOffers(profile, offers);
+  const result = await _evaluateOffers(profile, offers, model);
   if (result !== null) return result;
 
   console.error('[claudeEvaluator] Batch returned null — retrying once after 5s');
   await new Promise(resolve => setTimeout(resolve, 5_000));
-  return _evaluateOffers(profile, offers);
+  return _evaluateOffers(profile, offers, model);
 }
 
 async function _evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
+  model: string,
 ): Promise<EvaluateOffersResult | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -103,7 +105,7 @@ async function _evaluateOffers(
 
     const response = await anthropic.messages.create(
       {
-        model: 'claude-sonnet-4-6',
+        model,
         max_tokens: 16000,
         system: [
           {

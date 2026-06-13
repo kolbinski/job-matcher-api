@@ -7,6 +7,7 @@ import { generateCV } from '../services/cvGenerator'
 import { CandidateProfileSchema } from '../types/profile'
 import { AppError } from '../lib/errors'
 import { env } from '../lib/env'
+import { getClaudeModel } from '../lib/claudeModels'
 
 export const cvGenerateRouter = Router()
 
@@ -57,8 +58,10 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
 
   await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cv_status: 'generating' } })
 
+  const cvModel = await getClaudeModel('cv_cl_generation')
+
   try {
-    const { html, filename, usage } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name, user)
+    const { html, filename, usage } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name, user, cvModel)
 
     // Convert HTML to PDF via Gotenberg
     const formData = new FormData()
@@ -95,7 +98,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
         user_id: client_id,
         status: 'success',
         call_type: 'cv',
-        model: 'claude-sonnet-4-6',
+        model: cvModel,
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
       },

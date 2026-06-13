@@ -7,6 +7,7 @@ import { generateCoverLetter } from '../services/coverLetterGenerator'
 import { CandidateProfileSchema } from '../types/profile'
 import { AppError } from '../lib/errors'
 import { env } from '../lib/env'
+import { getClaudeModel } from '../lib/claudeModels'
 
 export const clGenerateRouter = Router()
 
@@ -55,8 +56,10 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
 
   await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cl_status: 'generating' } })
 
+  const clModel = await getClaudeModel('cv_cl_generation')
+
   try {
-    const { html, filename, usage } = await generateCoverLetter(profileParsed.data, offer_text, cl_language, job_title, company_name, user)
+    const { html, filename, usage } = await generateCoverLetter(profileParsed.data, offer_text, cl_language, job_title, company_name, user, clModel)
 
     const formData = new FormData()
     formData.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
@@ -91,7 +94,7 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
         user_id: client_id,
         status: 'success',
         call_type: 'cl',
-        model: 'claude-sonnet-4-6',
+        model: clModel,
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
       },

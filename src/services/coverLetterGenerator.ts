@@ -38,6 +38,7 @@ export async function generateCoverLetter(
   jobTitle?: string,
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
+  model = 'claude-sonnet-4-6',
 ): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
   const { basic_info } = profile
   const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
@@ -95,7 +96,7 @@ Rules:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model,
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     }),

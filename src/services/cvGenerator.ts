@@ -346,6 +346,7 @@ export async function generateCV(
   jobTitle?: string,
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
+  model = 'claude-sonnet-4-6',
 ): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
   const profileForClaude = {
     basic_info: {
@@ -427,7 +428,7 @@ Rules:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model,
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     }),

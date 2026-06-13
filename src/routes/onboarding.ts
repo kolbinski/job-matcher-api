@@ -6,6 +6,7 @@ import { validateJwt } from '../middleware/validateJwt';
 import { env } from '../lib/env';
 import { AppError } from '../lib/errors';
 import { prisma } from '../lib/prisma';
+import { getClaudeModel } from '../lib/claudeModels';
 
 export const onboardingRouter = Router();
 
@@ -116,6 +117,8 @@ onboardingRouter.post(
       );
     }
 
+    const prepareProfileModel = await getClaudeModel('prepare_profile');
+
     console.log(
       `[prepare-profile] PDF buffer size: ${req.file.buffer.length} bytes`,
     );
@@ -179,7 +182,7 @@ ${cvText.slice(0, 12000)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: prepareProfileModel,
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -237,7 +240,7 @@ ${cvText.slice(0, 12000)}`;
           user_id: userId,
           status: 'success',
           call_type: 'prepare_profile',
-          model: 'claude-sonnet-4-6',
+          model: prepareProfileModel,
           input_tokens: data.usage?.input_tokens ?? 0,
           output_tokens: data.usage?.output_tokens ?? 0,
         },
@@ -352,6 +355,8 @@ function buildHtml(r: ReviewResponse): string {
 }
 
 onboardingRouter.post('/review-profile', validateJwt, async (req, res) => {
+  const reviewProfileModel = await getClaudeModel('review_profile');
+
   const parsed = ReviewBodySchema.safeParse(req.body);
   if (!parsed.success) {
     throw new AppError(
@@ -392,7 +397,7 @@ RULES:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model: reviewProfileModel,
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -432,7 +437,7 @@ RULES:
         user_id: reviewUserId,
         status: 'success',
         call_type: 'review_profile',
-        model: 'claude-sonnet-4-6',
+        model: reviewProfileModel,
         input_tokens: data.usage?.input_tokens ?? 0,
         output_tokens: data.usage?.output_tokens ?? 0,
       },

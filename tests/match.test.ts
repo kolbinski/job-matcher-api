@@ -9,7 +9,7 @@ import { prisma } from '../src/lib/prisma'
 import { createFixtureOffers, deleteFixtureOffers } from '../src/test/fixtures'
 
 vi.mock('../src/services/claudeEvaluator', () => ({
-  evaluateOffers: vi.fn((_profile: unknown, offers: unknown[]) =>
+  evaluateOffers: vi.fn((_profile: unknown, offers: unknown[], _model: string) =>
     Promise.resolve({
       evaluations: offers.map((_, i) => ({
         offer_index: i,

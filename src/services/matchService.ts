@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { getClaudeModel } from '../lib/claudeModels'
 import { AppError } from '../lib/errors'
 import { applyPreFilters } from './redFlagFilter'
 import { scoreOffer } from './scoring'
@@ -23,6 +24,7 @@ export async function runMatchForUser(
 ): Promise<MatchResponse> {
   const startTime = Date.now()
   const callId = randomUUID()
+  const matchingModel = await getClaudeModel('matching')
   const doAiScoring = opts?.ai_scoring ?? true
   const includeUnmatched = opts?.include_unmatched ?? false
   const sortOrder = opts?.sort?.order ?? 'desc'
@@ -182,7 +184,7 @@ export async function runMatchForUser(
     const processBatch = async (batch: typeof filteredPairs, batchNum: number): Promise<void> => {
       console.log(`[match] Claude batch ${batchNum}/${totalBatches} (${batch.length} offers)`)
 
-      const batchResults = await evaluateOffers(profile, batch.map(p => p.original))
+      const batchResults = await evaluateOffers(profile, batch.map(p => p.original), matchingModel)
       if (!batchResults) {
         console.warn(`[match] Claude batch ${batchNum}/${totalBatches} returned null — skipping`)
         prisma.apiCall.create({
@@ -192,7 +194,7 @@ export async function runMatchForUser(
             offers_total: batch.length,
             status: 'error',
             call_type: 'matching',
-            model: 'claude-sonnet-4-6',
+            model: matchingModel,
           },
         }).catch(err => console.error('[match] Failed to log error api_call:', err))
         return
