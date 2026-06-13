@@ -170,6 +170,124 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     }
   }
 
+  const statuses = status.split('|').map(s => s.trim()).filter(Boolean)
+
+  // ── Multi-status path ──────────────────────────────────────────────────────
+  if (statuses.length > 1) {
+    const [{ learningGoals, salaryPrefs }, rates, subscription] = await Promise.all([
+      loadClientProfile(clientId),
+      loadExchangeRates(),
+      role === 'client'
+        ? prisma.subscription.findUnique({ where: { user_id: clientId }, include: { plan: true } })
+        : Promise.resolve(null),
+    ])
+    const limits = subscription?.plan?.limits as
+      | { max_apply_now: number | null; max_level_up: number | null }
+      | null
+
+    const offerSelect = {
+      title: true, company_name: true, url: true, employment_types: true,
+      source: true, city: true, workplace_type: true, experience_level: true,
+      working_time: true, required_skills: true, nice_to_have_skills: true,
+    } as const
+
+    const buckets: Record<string, { status: string; count: number; offers: unknown[] }> = {}
+
+    for (const bucketStatus of statuses) {
+      const bucketWhere = {
+        user_id: clientId,
+        status: bucketStatus,
+        ...(source && source !== 'all' ? { offer: { source } } : {}),
+      }
+
+      const rows = await prisma.userOffer.findMany({
+        where: bucketWhere,
+        include: {
+          offer: { select: offerSelect },
+          status_history: {
+            where: { status: 'applied' },
+            orderBy: { created_at: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: { updated_at: 'desc' },
+      })
+
+      // Dedup
+      const seen = new Map<string, typeof rows[number]>()
+      for (const uo of rows) {
+        const key = dedupKey(uo.offer)
+        const prev = seen.get(key)
+        if (!prev) {
+          seen.set(key, uo)
+        } else {
+          const prevScore = prev.claude_score ?? -1
+          const newScore = uo.claude_score ?? -1
+          if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+            seen.set(key, uo)
+          }
+        }
+      }
+
+      let result = [...seen.values()]
+
+      // Auto-apply learning goals filter for ai_rejected bucket
+      if (bucketStatus === 'ai_rejected' && learningGoals.length > 0) {
+        result = result.filter(uo =>
+          uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
+        )
+      }
+
+      const mapped = result.map(uo => ({
+        user_offer_id: uo.id,
+        offer_title: uo.offer.title,
+        offer_company: uo.offer.company_name,
+        offer_url: uo.offer.url,
+        claude_score: uo.claude_score,
+        claude_role_fit: uo.claude_role_fit,
+        claude_matched_reasons: uo.claude_matched_reasons,
+        claude_missing_skills: uo.claude_missing_skills,
+        claude_recommended: uo.claude_recommended,
+        rejection_reason: uo.rejection_reason,
+        matched_at: uo.matched_at,
+        applied_at: uo.status_history[0]?.created_at ?? null,
+        salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+        source: uo.offer.source,
+        city: uo.offer.city ?? null,
+        work_model: uo.offer.workplace_type ?? null,
+        required_skills: uo.offer.required_skills,
+        nice_to_have_skills: uo.offer.nice_to_have_skills,
+        cv_language: uo.cv_language,
+        cv_status: uo.cv_status ?? null,
+        cv_url: uo.cv_url ?? null,
+        cl_status: uo.cl_status ?? null,
+        cl_url: uo.cl_url ?? null,
+      }))
+
+      const count = mapped.length
+      let offers: typeof mapped = mapped
+
+      if (role === 'client' && limits != null) {
+        const bestDelta = (o: typeof mapped[number]) =>
+          Math.max(-Infinity, ...o.salary.map(s => s.delta))
+        const byScoreAndDelta = (a: typeof mapped[number], b: typeof mapped[number]) =>
+          (b.claude_score ?? 0) - (a.claude_score ?? 0) || bestDelta(b) - bestDelta(a)
+
+        if (bucketStatus === 'pending_apply' && limits.max_apply_now != null) {
+          offers = [...mapped].sort(byScoreAndDelta).slice(0, limits.max_apply_now)
+        } else if (bucketStatus === 'ai_rejected' && limits.max_level_up != null) {
+          offers = [...mapped].sort(byScoreAndDelta).slice(0, limits.max_level_up)
+        }
+      }
+
+      buckets[bucketStatus] = { status: bucketStatus, count, offers }
+    }
+
+    const totalCount = Object.values(buckets).reduce((sum, b) => sum + b.count, 0)
+    return res.json({ count: totalCount, ...buckets })
+  }
+
+  // ── Single-status path (backward compatible) ───────────────────────────────
   const where = {
     user_id: clientId,
     status,
