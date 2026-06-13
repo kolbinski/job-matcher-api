@@ -32,8 +32,8 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             matched_reasons: {
               type: 'object',
               properties: {
-                pros: { type: 'array', items: { type: 'string' }, description: 'Max 3 pros. Focus on: seniority match, work model match, domain/industry fit, unique strengths. DO NOT mention salary meeting minimum (shown separately). DO NOT repeat skills obvious from the role title. Each pro must add NEW information not visible elsewhere in the offer card.' },
-                cons: { type: 'array', items: { type: 'string' }, description: 'Max 3 cons. Focus on: seniority mismatch, salary concerns (only if below minimum), domain gaps, work model issues, contract type issues. DO NOT list skills already in missing_skills (shown separately as Missing tags). DO NOT repeat information already in role_fit. Each con must add NEW information not visible elsewhere in the offer card.' },
+                pros: { type: 'array', items: { type: 'string' }, description: 'Max 2-3 pros. NEVER include: salary information (shown separately in offer card), work model match (shown as tag), generic seniority match like "matches target" (too obvious), or skills that obviously match the role title (shown via role_fit). DO include: domain/industry fit or interesting growth angle, unique role characteristics (e.g. architecture scope, leadership exposure), specific differentiating skills that match. Every item must add information not visible elsewhere in the card.' },
+                cons: { type: 'array', items: { type: 'string' }, description: 'Max 2-3 cons. NEVER include: salary not disclosed or salary concerns (shown separately in offer card), skills already listed in missing_skills (shown as Missing tags). DO include: role scope mismatch (e.g. fullstack vs frontend target), domain gap (e.g. IoT or mobile when targeting web), seniority ambiguity (e.g. title says senior but listing describes mid-level), growth limitations. Every item must add information not visible elsewhere in the card.' },
               },
               required: ['pros', 'cons'],
             },
