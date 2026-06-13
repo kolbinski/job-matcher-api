@@ -285,7 +285,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   })
 })
 
-userOffersRouter.get('/subscribe', validateJwt, (req, res) => {
+userOffersRouter.get('/subscribe', (req, _res, next) => {
+  if (typeof req.query['token'] === 'string' && !req.headers['authorization']) {
+    req.headers['authorization'] = `Bearer ${req.query['token']}`
+  }
+  next()
+}, validateJwt, (req, res) => {
   if (req.jwt!.role !== 'client') {
     throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
   }
