@@ -62,8 +62,38 @@ model User {
   user_offers                         UserOffer[]
   user_syncs                          UserSync[]
   feedbacks                           Feedback[]
+  subscription                        Subscription?
 
   @@map("users")
+}
+
+model Plan {
+  id              String         @id @default(cuid())
+  name            String         @unique
+  stripe_price_id String?
+  limits          Json
+  features        Json
+  is_active       Boolean        @default(true)
+  created_at      DateTime       @default(now())
+  subscriptions   Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  user_id                String    @unique
+  plan_id                String
+  stripe_subscription_id String?
+  status                 String    @default("active")
+  current_period_start   DateTime?
+  current_period_end     DateTime?
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @updatedAt
+  user                   User      @relation(fields: [user_id], references: [id])
+  plan                   Plan      @relation(fields: [plan_id], references: [id])
+
+  @@map("subscriptions")
 }
 
 model Offer {
