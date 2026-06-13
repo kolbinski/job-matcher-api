@@ -1,10 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
-import { getSupabase } from '../lib/supabase'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { validateJwt } from '../middleware/validateJwt'
-import { AppError } from '../lib/errors'
 import { dedupKey } from '../utils/deduplicateOffers'
 
 export const userOffersRouter = Router()
@@ -282,56 +280,5 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     status,
     count: filtered.length,
     offers: filtered,
-  })
-})
-
-userOffersRouter.get('/subscribe', (req, _res, next) => {
-  if (typeof req.query['token'] === 'string' && !req.headers['authorization']) {
-    req.headers['authorization'] = `Bearer ${req.query['token']}`
-  }
-  next()
-}, validateJwt, (req, res) => {
-  if (req.jwt!.role !== 'client') {
-    throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
-  }
-
-  const userId = req.jwt!.user_id!
-
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
-  res.flushHeaders()
-  console.log('[SSE] client connected, userId:', userId)
-
-  const heartbeat = setInterval(() => {
-    console.log('[SSE] heartbeat sent to:', userId)
-    res.write('event: heartbeat\ndata: {}\n\n')
-  }, 20_000)
-
-  const channelName = `user_offers_${userId}`
-  const channel = getSupabase()
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'user_offers' },
-      (payload: { new: Record<string, unknown> }) => {
-        console.log('[SSE] INSERT received for user:', userId, 'status:', payload.new['status'])
-        if (payload.new['user_id'] !== userId) return
-        if (payload.new['status'] === 'pending_apply') {
-          console.log('[SSE] sending new_offer event to:', userId)
-          res.write(`event: new_offer\ndata: ${JSON.stringify(payload.new)}\n\n`)
-        }
-      },
-    )
-    .subscribe((status: string) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('[SSE] Supabase channel subscribed for:', userId)
-      }
-    })
-
-  req.on('close', () => {
-    console.log('[SSE] client disconnected:', userId)
-    clearInterval(heartbeat)
-    getSupabase().removeChannel(channel)
   })
 })
