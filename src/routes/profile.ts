@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
 import { syncUserById } from '../services/syncService'
 import { AppError } from '../lib/errors'
+import { compareMatchingFields } from '../lib/profileComparison'
 
 export const profileRouter = Router()
 
@@ -63,38 +64,50 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
 
   const { profile, profile_ready, client_id } = parsed.data
 
+  // Resolve userId from agent or client JWT
+  let userId: string
   if (req.jwt!.role === 'agent') {
     if (!client_id) {
       throw new AppError(422, 'INVALID_REQUEST', 'client_id is required when using agent JWT')
     }
-
     const link = await prisma.agentClient.findUnique({
       where: { agent_id_user_id: { agent_id: req.jwt!.agent_id!, user_id: client_id } },
     })
-
     if (!link) {
       throw new AppError(403, 'FORBIDDEN', 'Agent does not have access to this client')
     }
-
-    const updated = await prisma.user.update({
-      where: { id: client_id },
-      data: {
-        ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
-        ...(profile_ready !== undefined ? { profile_ready } : {}),
-        profile_synced_at: null,
-      },
-      select: { profile: true, profile_ready: true },
-    })
-
-    await prisma.userOffer.deleteMany({
-      where: { user_id: client_id, status: { in: ['pending_apply', 'ai_rejected'] } },
-    })
-
-    return res.json(updated)
+    userId = client_id
+  } else {
+    userId = req.jwt!.user_id!
   }
 
-  // Client path — internal JWT (role === 'client')
-  const userId = req.jwt!.user_id!
+  // Snapshot logic: fetch current state before updating
+  let matching_relevant_change: boolean | undefined
+  let snapshotUpdate: { profile_editing_snapshot?: Prisma.InputJsonValue | Prisma.NullTypes.JsonNull } = {}
+
+  if (profile_ready === false) {
+    // Entering edit mode: capture current profile as snapshot
+    const current = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profile: true },
+    })
+    snapshotUpdate = {
+      profile_editing_snapshot: current?.profile != null
+        ? (current.profile as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+    }
+  } else if (profile_ready === true) {
+    // Leaving edit mode: compare snapshot vs incoming profile, then clear snapshot
+    const current = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profile_editing_snapshot: true },
+    })
+    matching_relevant_change = compareMatchingFields(
+      current?.profile_editing_snapshot ?? null,
+      profile ?? null,
+    )
+    snapshotUpdate = { profile_editing_snapshot: Prisma.JsonNull }
+  }
 
   const updated = await prisma.user.update({
     where: { id: userId },
@@ -102,6 +115,7 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
       ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
       ...(profile_ready !== undefined ? { profile_ready } : {}),
       profile_synced_at: null,
+      ...snapshotUpdate,
     },
     select: { profile: true, profile_ready: true },
   })
@@ -110,7 +124,10 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
     where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
   })
 
-  res.json(updated)
+  res.json(matching_relevant_change !== undefined
+    ? { ...updated, matching_relevant_change }
+    : updated,
+  )
 })
 
 profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
