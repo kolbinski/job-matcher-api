@@ -5,6 +5,7 @@ import { PDFParse } from 'pdf-parse';
 import { validateJwt } from '../middleware/validateJwt';
 import { env } from '../lib/env';
 import { AppError } from '../lib/errors';
+import { prisma } from '../lib/prisma';
 
 export const onboardingRouter = Router();
 
@@ -192,6 +193,7 @@ ${cvText.slice(0, 12000)}`;
 
     const data = (await response.json()) as {
       content: Array<{ text: string }>;
+      usage?: { input_tokens: number; output_tokens: number };
     };
     const rawText = data.content[0].text.trim();
     const clean = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
@@ -226,6 +228,20 @@ ${cvText.slice(0, 12000)}`;
       } else if (job.work_model && !ALLOWED_WORK_MODELS.has(job.work_model)) {
         job.work_model = null;
       }
+    }
+
+    const userId = req.jwt!.user_id;
+    if (userId) {
+      prisma.apiCall.create({
+        data: {
+          user_id: userId,
+          status: 'success',
+          call_type: 'prepare_profile',
+          model: 'claude-sonnet-4-6',
+          input_tokens: data.usage?.input_tokens ?? 0,
+          output_tokens: data.usage?.output_tokens ?? 0,
+        },
+      }).catch(err => console.error('[prepare-profile] Failed to log api_call:', err));
     }
 
     return res.json({ profile });
@@ -388,7 +404,10 @@ RULES:
     throw new Error(`Claude API error ${response.status}: ${errBody}`);
   }
 
-  const data = (await response.json()) as { content: Array<{ text: string }> };
+  const data = (await response.json()) as {
+    content: Array<{ text: string }>;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
   const rawText = data.content[0].text.trim();
 
   let review: ReviewResponse;
@@ -404,6 +423,20 @@ RULES:
       'INTERNAL_ERROR',
       'Profile review parsing failed — Claude returned invalid JSON',
     );
+  }
+
+  const reviewUserId = req.jwt!.user_id;
+  if (reviewUserId) {
+    prisma.apiCall.create({
+      data: {
+        user_id: reviewUserId,
+        status: 'success',
+        call_type: 'review_profile',
+        model: 'claude-sonnet-4-6',
+        input_tokens: data.usage?.input_tokens ?? 0,
+        output_tokens: data.usage?.output_tokens ?? 0,
+      },
+    }).catch(err => console.error('[review-profile] Failed to log api_call:', err));
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

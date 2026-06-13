@@ -58,7 +58,7 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cv_status: 'generating' } })
 
   try {
-    const { html, filename } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name, user)
+    const { html, filename, usage } = await generateCV(profileParsed.data, offer_text, cv_language, job_title, company_name, user)
 
     // Convert HTML to PDF via Gotenberg
     const formData = new FormData()
@@ -89,6 +89,17 @@ cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
       where: { id: user_offer_id },
       data: { cv_status: 'done', cv_url: publicUrl, cv_language },
     })
+
+    prisma.apiCall.create({
+      data: {
+        user_id: client_id,
+        status: 'success',
+        call_type: 'cv',
+        model: 'claude-sonnet-4-6',
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+      },
+    }).catch(err => console.error('[cvGenerate] Failed to log api_call:', err))
 
     return res.json({ cv_url: publicUrl, cv_status: 'done' })
   } catch (err) {

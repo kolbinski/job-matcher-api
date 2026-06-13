@@ -173,6 +173,10 @@ model ApiCall {
   response_ms    Int?
   status         String
   error_message  String?
+  input_tokens   Int      @default(0)
+  output_tokens  Int      @default(0)
+  call_type      String?
+  model          String?
   user           User     @relation(fields: [user_id], references: [id])
 
   @@map("api_calls")

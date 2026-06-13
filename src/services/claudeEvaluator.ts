@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Offer } from '@prisma/client';
 import type { CandidateProfile } from '../types/profile';
-import { parseEmploymentTypes } from '../lib/offers';
+
 
 const anthropic = new Anthropic();
 
@@ -64,14 +64,20 @@ export interface ClaudeEvaluation {
   offer_language: 'pl' | 'en';
 }
 
+export interface EvaluateOffersResult {
+  evaluations: ClaudeEvaluation[];
+  input_tokens: number;
+  output_tokens: number;
+}
+
 // Evaluates all pre-filtered offers in a single Claude call.
 // Returns null on timeout, JSON parse error, or any Claude API error (RULE A-5).
 // Each evaluation carries offer_index so results can be matched back regardless of order.
 export async function evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
-): Promise<ClaudeEvaluation[] | null> {
-  if (offers.length === 0) return [];
+): Promise<EvaluateOffersResult | null> {
+  if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0 };
 
   const result = await _evaluateOffers(profile, offers);
   if (result !== null) return result;
@@ -84,7 +90,7 @@ export async function evaluateOffers(
 async function _evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
-): Promise<ClaudeEvaluation[] | null> {
+): Promise<EvaluateOffersResult | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const claudeStart = Date.now();
@@ -111,8 +117,9 @@ async function _evaluateOffers(
       { signal: controller.signal },
     );
 
+    const { input_tokens, output_tokens } = response.usage;
     console.log(
-      `[claudeEvaluator] Response received in ${Date.now() - claudeStart}ms`,
+      `[claudeEvaluator] Response received in ${Date.now() - claudeStart}ms | tokens: ${input_tokens} in / ${output_tokens} out`,
     );
 
     const toolUseBlock = response.content.find(b => b.type === 'tool_use') as
@@ -160,7 +167,7 @@ async function _evaluateOffers(
       }
       results.push(validated);
     }
-    return results;
+    return { evaluations: results, input_tokens, output_tokens };
   } catch (err) {
     console.error(
       '[claudeEvaluator] Offers sent:',
@@ -228,21 +235,11 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     // employment_types, workplace_type, experience_level). Omitting city, street,
     // latitude, longitude, multilocation, nice_to_have_skills, etc.
     const offer = offers[i];
-    const types = parseEmploymentTypes(offer);
-    const salaryStr =
-      types
-        .filter(t => t.from !== undefined || t.to !== undefined)
-        .map(
-          t =>
-            `${t.type ?? 'unknown'}: ${t.from ?? '?'}-${t.to ?? '?'} ${t.currency ?? 'PLN'}`,
-        )
-        .join(', ') || 'not specified';
 
     lines.push(`### [${i}] ${offer.title} — ${offer.company_name}`);
     lines.push(
       `Skills required: ${offer.required_skills.join(', ') || 'none listed'}`,
     );
-    lines.push(`Salary: ${salaryStr}`);
     lines.push(`Work type: ${offer.workplace_type ?? 'not specified'}`);
     lines.push(`Level: ${offer.experience_level ?? 'not specified'}`);
     lines.push('');

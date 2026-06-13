@@ -10,8 +10,8 @@ import { createFixtureOffers, deleteFixtureOffers } from '../src/test/fixtures'
 
 vi.mock('../src/services/claudeEvaluator', () => ({
   evaluateOffers: vi.fn((_profile: unknown, offers: unknown[]) =>
-    Promise.resolve(
-      offers.map((_, i) => ({
+    Promise.resolve({
+      evaluations: offers.map((_, i) => ({
         offer_index: i,
         score: 75,
         rank: i + 1,
@@ -20,8 +20,10 @@ vi.mock('../src/services/claudeEvaluator', () => ({
         salary_comparison: 'Within range',
         role_fit: 'Strong match for the candidate profile.',
         recommended: true,
-      }))
-    )
+      })),
+      input_tokens: 0,
+      output_tokens: 0,
+    })
   ),
 }))
 

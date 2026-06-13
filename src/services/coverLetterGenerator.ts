@@ -38,7 +38,7 @@ export async function generateCoverLetter(
   jobTitle?: string,
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
-): Promise<{ html: string; filename: string }> {
+): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
   const { basic_info } = profile
   const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
   const lang = isPl ? 'pl' : 'en'
@@ -107,7 +107,10 @@ Rules:
     throw new Error(`Claude API error: ${response.status} ${errorBody}`)
   }
 
-  const data = (await response.json()) as { content: Array<{ text: string }> }
+  const data = (await response.json()) as {
+    content: Array<{ text: string }>;
+    usage?: { input_tokens: number; output_tokens: number };
+  }
   const body = data.content[0].text.trim()
 
   // Contacts
@@ -172,5 +175,5 @@ Rules:
 
   html = html.replace(/—/g, '-')
 
-  return { html, filename }
+  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }

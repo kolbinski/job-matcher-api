@@ -56,7 +56,7 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
   await prisma.userOffer.update({ where: { id: user_offer_id }, data: { cl_status: 'generating' } })
 
   try {
-    const { html, filename } = await generateCoverLetter(profileParsed.data, offer_text, cl_language, job_title, company_name, user)
+    const { html, filename, usage } = await generateCoverLetter(profileParsed.data, offer_text, cl_language, job_title, company_name, user)
 
     const formData = new FormData()
     formData.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
@@ -85,6 +85,17 @@ clGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
       where: { id: user_offer_id },
       data: { cl_status: 'done', cl_url: publicUrl },
     })
+
+    prisma.apiCall.create({
+      data: {
+        user_id: client_id,
+        status: 'success',
+        call_type: 'cl',
+        model: 'claude-sonnet-4-6',
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+      },
+    }).catch(err => console.error('[clGenerate] Failed to log api_call:', err))
 
     return res.json({ cl_url: publicUrl, cl_status: 'done' })
   } catch (err) {

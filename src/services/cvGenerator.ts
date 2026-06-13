@@ -346,7 +346,7 @@ export async function generateCV(
   jobTitle?: string,
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
-): Promise<{ html: string; filename: string }> {
+): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -442,7 +442,10 @@ Rules:
     throw new Error(`Claude API error: ${response.status} ${errorBody}`);
   }
 
-  const data = (await response.json()) as { content: Array<{ text: string }> };
+  const data = (await response.json()) as {
+    content: Array<{ text: string }>;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
   const raw = data.content[0].text
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
@@ -515,5 +518,5 @@ Rules:
   html = html.replace('{{FOOTER_NOTES}}', footerParts.join('\n'));
   html = html.replace(/—/g, '-');
 
-  return { html, filename };
+  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } };
 }

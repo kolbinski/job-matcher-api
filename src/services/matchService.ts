@@ -166,6 +166,8 @@ export async function runMatchForUser(
   // leaves already-processed batches saved and seenIds grows with each batch.
   let aiScoring = false
   let claudeEvaluationsCount = 0
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
 
   if (doAiScoring && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
@@ -186,9 +188,12 @@ export async function runMatchForUser(
         return
       }
 
+      totalInputTokens += batchResults.input_tokens
+      totalOutputTokens += batchResults.output_tokens
+
       // Apply evaluations to this batch's pairs in-place
       const cvLanguageByIndex = new Map<number, 'pl' | 'en'>()
-      for (const ev of batchResults) {
+      for (const ev of batchResults.evaluations) {
         if (ev.offer_index < 0 || ev.offer_index >= batch.length) continue
         const p = batch[ev.offer_index]
         p.offer.score = ev.score
@@ -276,6 +281,10 @@ export async function runMatchForUser(
       offers_total: offers.length + skillExcluded.length,
       response_ms: responseMs,
       status: 'success',
+      call_type: 'matching',
+      model: 'claude-sonnet-4-6',
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
     },
   })
 
