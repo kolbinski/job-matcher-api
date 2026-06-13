@@ -77,6 +77,22 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     select: { id: true },
   })
 
+  const freePlan = await prisma.plan.findUnique({ where: { name: 'free' } })
+  if (freePlan) {
+    await prisma.subscription.upsert({
+      where: { user_id: user.id },
+      create: {
+        user_id: user.id,
+        plan_id: freePlan.id,
+        status: 'active',
+        stripe_subscription_id: null,
+        current_period_start: null,
+        current_period_end: null,
+      },
+      update: {},
+    })
+  }
+
   const jmToken = jwt.sign(
     { role: 'client', user_id: user.id, email },
     env.JWT_SECRET,

@@ -181,7 +181,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         ? prisma.subscription.findUnique({ where: { user_id: clientId }, include: { plan: true } })
         : Promise.resolve(null),
     ])
-    const limits = subscription?.plan?.limits as
+    const effectivePlan = subscription?.plan ?? (role === 'client' ? await prisma.plan.findUnique({ where: { name: 'free' } }) : null)
+    const limits = effectivePlan?.limits as
       | { max_apply_now: number | null; max_level_up: number | null }
       | null
 
@@ -394,7 +395,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       where: { user_id: clientId },
       include: { plan: true },
     })
-    const limits = subscription?.plan?.limits as
+    const effectivePlan = subscription?.plan ?? await prisma.plan.findUnique({ where: { name: 'free' } })
+    const limits = effectivePlan?.limits as
       | { max_apply_now: number | null; max_level_up: number | null }
       | null
 
