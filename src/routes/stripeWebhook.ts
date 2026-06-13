@@ -51,9 +51,8 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       console.log('[stripe-webhook] stripeSub keys:', Object.keys(stripeSub))
       console.log('[stripe-webhook] stripeSub.current_period_start:', (stripeSub as any).current_period_start)
       console.log('[stripe-webhook] stripeSub.current_period_end:', (stripeSub as any).current_period_end)
-      const sub = stripeSub as unknown as { current_period_start: number; current_period_end: number }
-      const currentPeriodStart = new Date(sub.current_period_start * 1000)
-      const currentPeriodEnd = new Date(sub.current_period_end * 1000)
+      const currentPeriodStart = new Date((stripeSub.items.data[0] as any).current_period_start * 1000)
+      const currentPeriodEnd = new Date((stripeSub.items.data[0] as any).current_period_end * 1000)
 
       const proPlan = await prisma.plan.findUnique({ where: { name: 'pro' } })
       if (!proPlan) {
