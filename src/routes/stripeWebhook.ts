@@ -34,6 +34,8 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const userId = obj.client_reference_id
       const stripeSubscriptionId = obj.subscription
 
+      console.log('[stripe-webhook] checkout.session.completed fields:', { client_reference_id: userId, subscription: stripeSubscriptionId })
+
       if (!userId || !stripeSubscriptionId) {
         console.error('[stripe-webhook] Missing userId or stripeSubscriptionId in checkout.session.completed')
         return res.json({ received: true })
@@ -50,7 +52,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         return res.json({ received: true })
       }
 
-      await prisma.subscription.upsert({
+      const upsertResult = await prisma.subscription.upsert({
         where: { user_id: userId },
         update: {
           plan_id: proPlan.id,
@@ -70,6 +72,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       })
 
       console.log(`[stripe-webhook] Upgraded user ${userId} to Pro plan`)
+      console.log('[stripe-webhook] upsert result:', JSON.stringify(upsertResult))
     }
 
     if (event.type === 'customer.subscription.deleted') {
