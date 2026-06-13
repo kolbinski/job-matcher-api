@@ -310,7 +310,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   res.json({
     client_id: clientId,
     status,
-    count: filtered.length,
+    count: mapped.length,
     apply_now_count,
     level_up_count,
     offers: filtered,
