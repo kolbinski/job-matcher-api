@@ -265,7 +265,37 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     cl_url: uo.cl_url ?? null,
   }))
 
+  const apply_now_count = mapped.filter(o => o.claude_recommended === true).length
+  const level_up_count = mapped.filter(o => o.claude_recommended === false).length
+
   let filtered = mapped
+
+  // Apply plan limits for pending_apply (client only; agent sees all)
+  if (role === 'client' && status === 'pending_apply') {
+    const subscription = await prisma.subscription.findUnique({
+      where: { user_id: clientId },
+      include: { plan: true },
+    })
+    const limits = subscription?.plan?.limits as
+      | { max_apply_now: number | null; max_level_up: number | null }
+      | null
+
+    if (limits != null && (limits.max_apply_now !== null || limits.max_level_up !== null)) {
+      const bestDelta = (o: typeof mapped[number]) =>
+        Math.max(-Infinity, ...o.salary.map(s => s.delta))
+      const byScoreAndDelta = (a: typeof mapped[number], b: typeof mapped[number]) =>
+        (b.claude_score ?? 0) - (a.claude_score ?? 0) || bestDelta(b) - bestDelta(a)
+
+      const applyNow = filtered.filter(o => o.claude_recommended === true).sort(byScoreAndDelta)
+      const levelUp = filtered.filter(o => o.claude_recommended === false).sort(byScoreAndDelta)
+
+      const limitedApplyNow = limits.max_apply_now != null ? applyNow.slice(0, limits.max_apply_now) : applyNow
+      const limitedLevelUp = limits.max_level_up != null ? levelUp.slice(0, limits.max_level_up) : levelUp
+
+      filtered = [...limitedApplyNow, ...limitedLevelUp]
+    }
+  }
+
   if (date_from) {
     const from = new Date(date_from)
     filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) >= from)
@@ -281,6 +311,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     client_id: clientId,
     status,
     count: filtered.length,
+    apply_now_count,
+    level_up_count,
     offers: filtered,
   })
 })
