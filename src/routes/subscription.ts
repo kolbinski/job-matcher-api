@@ -61,3 +61,31 @@ subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
 
   return res.json({ url: session.url })
 })
+
+subscriptionRouter.post('/cancel', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+  const userId = user_id!
+
+  const subscription = await prisma.subscription.findFirst({
+    where: { user_id: userId, status: 'active' },
+    include: { plan: { select: { name: true } } },
+  })
+
+  if (!subscription || subscription.plan.name === 'free' || !subscription.stripe_subscription_id) {
+    return res.status(400).json({ error: 'NO_ACTIVE_SUBSCRIPTION' })
+  }
+
+  await getStripe().subscriptions.update(subscription.stripe_subscription_id, {
+    cancel_at_period_end: true,
+  })
+
+  await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: { status: 'cancelling' },
+  })
+
+  return res.json({ success: true, current_period_end: subscription.current_period_end })
+})
