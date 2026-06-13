@@ -82,32 +82,29 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
   }
 
   // Snapshot logic: fetch current state before updating
-  let matching_relevant_change: boolean | undefined
+  let snapshotForComparison: unknown = null
   let snapshotUpdate: { profile_editing_snapshot?: Prisma.InputJsonValue | Prisma.NullTypes.JsonNull } = {}
 
   if (profile_ready === false) {
-    // Entering edit mode: capture current profile as snapshot
+    // Entering edit mode: capture current DB profile as snapshot
     const current = await prisma.user.findUnique({
       where: { id: userId },
       select: { profile: true },
     })
     console.log('[profile] saving editing snapshot for userId:', userId)
-    console.log('[profile] snapshot keys:', Object.keys(profile || {}))
+    console.log('[profile] snapshot keys:', Object.keys((current?.profile as Record<string, unknown>) || {}))
     snapshotUpdate = {
       profile_editing_snapshot: current?.profile != null
         ? (current.profile as Prisma.InputJsonValue)
         : Prisma.JsonNull,
     }
   } else if (profile_ready === true) {
-    // Leaving edit mode: compare snapshot vs incoming profile, then clear snapshot
+    // Leaving edit mode: fetch snapshot now, compare after update against full merged profile
     const current = await prisma.user.findUnique({
       where: { id: userId },
       select: { profile_editing_snapshot: true },
     })
-    matching_relevant_change = compareMatchingFields(
-      current?.profile_editing_snapshot ?? null,
-      profile ?? null,
-    )
+    snapshotForComparison = current?.profile_editing_snapshot ?? null
     snapshotUpdate = { profile_editing_snapshot: Prisma.JsonNull }
   }
 
@@ -121,6 +118,11 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
     },
     select: { profile: true, profile_ready: true },
   })
+
+  // Compare snapshot against the full merged profile from DB (not partial incoming body)
+  const matching_relevant_change = profile_ready === true
+    ? compareMatchingFields(snapshotForComparison, updated.profile)
+    : undefined
 
   await prisma.userOffer.deleteMany({
     where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
