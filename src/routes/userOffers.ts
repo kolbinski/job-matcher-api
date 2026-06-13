@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
+import { getSupabase } from '../lib/supabase'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { validateJwt } from '../middleware/validateJwt'
+import { AppError } from '../lib/errors'
 import { dedupKey } from '../utils/deduplicateOffers'
 
 export const userOffersRouter = Router()
@@ -280,5 +282,41 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     status,
     count: filtered.length,
     offers: filtered,
+  })
+})
+
+userOffersRouter.get('/subscribe', validateJwt, (req, res) => {
+  if (req.jwt!.role !== 'client') {
+    throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
+  }
+
+  const userId = req.jwt!.user_id!
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  const heartbeat = setInterval(() => {
+    res.write('event: heartbeat\ndata: {}\n\n')
+  }, 20_000)
+
+  const channelName = `user_offers_${userId}`
+  const channel = getSupabase()
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'user_offers', filter: `user_id=eq.${userId}` },
+      (payload: { new: Record<string, unknown> }) => {
+        if (payload.new['status'] === 'pending_apply') {
+          res.write(`event: new_offer\ndata: ${JSON.stringify(payload.new)}\n\n`)
+        }
+      },
+    )
+    .subscribe()
+
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    getSupabase().removeChannel(channel)
   })
 })
