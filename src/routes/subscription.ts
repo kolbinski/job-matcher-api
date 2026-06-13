@@ -19,11 +19,15 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
   }
 
   const subscription = await prisma.subscription.findFirst({
-    where: { user_id: user_id!, status: 'active' },
-    select: { current_period_end: true },
+    where: { user_id: user_id! },
+    include: { plan: { select: { name: true } } },
   })
 
-  return res.json({ subscribed_to: subscription?.current_period_end ?? null })
+  return res.json({
+    subscribed_to: subscription?.current_period_end ?? null,
+    plan_name: subscription?.plan.name ?? 'free',
+    current_period_end: subscription?.current_period_end ?? null,
+  })
 })
 
 subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
