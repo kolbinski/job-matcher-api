@@ -32,8 +32,8 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             matched_reasons: {
               type: 'object',
               properties: {
-                pros: { type: 'array', items: { type: 'string' }, description: '1-3 specific reasons this offer fits the candidate' },
-                cons: { type: 'array', items: { type: 'string' }, description: '1-3 gaps or concerns' },
+                pros: { type: 'array', items: { type: 'string' }, description: 'Max 3 pros. Focus on: seniority match, work model match, domain/industry fit, unique strengths. DO NOT mention salary meeting minimum (shown separately). DO NOT repeat skills obvious from the role title. Each pro must add NEW information not visible elsewhere in the offer card.' },
+                cons: { type: 'array', items: { type: 'string' }, description: 'Max 3 cons. Focus on: seniority mismatch, salary concerns (only if below minimum), domain gaps, work model issues, contract type issues. DO NOT list skills already in missing_skills (shown separately as Missing tags). DO NOT repeat information already in role_fit. Each con must add NEW information not visible elsewhere in the offer card.' },
               },
               required: ['pros', 'cons'],
             },
