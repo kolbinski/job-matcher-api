@@ -29,10 +29,13 @@ import { generalSettingsRouter } from './routes/generalSettings'
 import { profileRouter } from './routes/profile'
 import { accountRouter } from './routes/account'
 import { adminRouter } from './routes/admin'
+import { stripeWebhookRouter } from './routes/stripeWebhook'
 
 export const app = express()
 
 app.use(cors())
+// Stripe webhook must be registered before express.json() — signature verification requires raw body
+app.use('/v1/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter)
 app.use(express.json())
 
 app.use('/v1/health', healthRouter)

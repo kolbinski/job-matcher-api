@@ -7,6 +7,8 @@ const EnvSchema = z.object({
   GOTENBERG_URL: z.string().default(''),
   SUPABASE_URL: z.string().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
+  STRIPE_SECRET_KEY: z.string().default(''),
+  STRIPE_WEBHOOK_SECRET: z.string().default(''),
   JWT_SECRET: z.string().min(1).default('dev-jwt-secret-change-in-production'),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
