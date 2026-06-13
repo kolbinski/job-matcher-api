@@ -31,7 +31,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             rank:              { type: 'integer', minimum: 1, description: 'Overall ranking, 1 = best match' },
             matched_reasons: {
               type: 'object',
-              description: 'CRITICAL: Only reference information explicitly present in the offer data provided to you. Do NOT infer, estimate, assume, or fabricate any details not present in the offer. If information is not in the offer, do not mention it. CRITICAL: Do NOT mention salary in pros or cons under ANY circumstances — not salary amounts, not salary comparisons, not "salary not disclosed", not currency conversions. Salary is displayed separately in the UI. CRITICAL: If you include salary, remote work match, or duplicate mentions in pros/cons, your response violates these instructions.',
+              description: 'CRITICAL: Only reference information explicitly present in the offer data provided to you. Do NOT infer, estimate, assume, or fabricate any details not present in the offer. If information is not in the offer, do not mention it. CRITICAL: Do NOT mention salary in pros or cons under ANY circumstances — not salary amounts, not salary comparisons, not "salary not disclosed", not currency conversions. Salary is displayed separately in the UI. CRITICAL: If you include salary, remote work match, or duplicate mentions in pros/cons, your response violates these instructions. CRITICAL: Do not make assumptions about the depth or quality of a candidate\'s skills beyond what is explicitly stated in their profile. If a skill is listed, treat it as present — do not qualify it with phrases like "limited depth" or "basic knowledge". CRITICAL: Only mention seniority in cons when the offer seniority is BELOW the candidate\'s target. Only mention seniority in pros when the offer represents a genuine step-up opportunity (Lead, Architect, Principal for a Senior candidate). Do not write "Senior level aligns with candidate\'s target" — this is generic and adds no value.',
               properties: {
                 pros: { type: 'array', items: { type: 'string' }, description: 'Max 2-3 pros. NEVER include: salary information in any form (shown separately), remote/work model match (shown as tag), senior or seniority level match (too generic, not informative), generic seniority match like "matches target" (too obvious), or skills that obviously match the role title (shown via role_fit). DO include: domain/industry fit or interesting growth angle, unique role characteristics (e.g. architecture scope, leadership exposure), specific differentiating skills that match. Every item must add information not visible elsewhere in the card.' },
                 cons: { type: 'array', items: { type: 'string' }, description: 'Max 2-3 cons. NEVER include: salary not disclosed or any salary concerns (shown separately), "duplicate listing" (deduplication handled elsewhere, not relevant to candidate), skills already listed in missing_skills (shown as Missing tags), remote work model (shown as tag). DO include: role scope mismatch (e.g. fullstack vs frontend target), domain gap (e.g. IoT or mobile when targeting web), seniority ambiguity (e.g. title says senior but listing describes mid-level), growth limitations. Every item must add information not visible elsewhere in the card.' },
@@ -231,16 +231,14 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
   ];
 
   for (let i = 0; i < offers.length; i++) {
-    // Offer — only essential fields (slug, title, company_name, required_skills,
-    // employment_types, workplace_type, experience_level). Omitting city, street,
-    // latitude, longitude, multilocation, nice_to_have_skills, etc.
+    // Offer — only essential fields (title, company_name, required_skills, experience_level).
+    // Omitting salary, work_model, city and other fields shown separately in UI or handled by pre-filter.
     const offer = offers[i];
 
     lines.push(`### [${i}] ${offer.title} — ${offer.company_name}`);
     lines.push(
       `Skills required: ${offer.required_skills.join(', ') || 'none listed'}`,
     );
-    lines.push(`Work type: ${offer.workplace_type ?? 'not specified'}`);
     lines.push(`Level: ${offer.experience_level ?? 'not specified'}`);
     lines.push('');
   }
