@@ -54,6 +54,7 @@ model User {
   subscribed_to                       DateTime?
   profile_ready                       Boolean       @default(false)
   profile_synced_at                   DateTime?
+  sync_started_at                     DateTime?
   profile_editing_snapshot            Json?
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]

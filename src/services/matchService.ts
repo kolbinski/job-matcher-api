@@ -20,6 +20,7 @@ export async function runMatchForUser(
     include_unmatched?: boolean
     filters?: MatchFilters
     sort?: { order?: 'asc' | 'desc' }
+    syncStartedAt?: Date
   },
 ): Promise<MatchResponse> {
   const startTime = Date.now()
@@ -28,6 +29,7 @@ export async function runMatchForUser(
   const doAiScoring = opts?.ai_scoring ?? true
   const includeUnmatched = opts?.include_unmatched ?? false
   const sortOrder = opts?.sort?.order ?? 'desc'
+  const syncStartedAt = opts?.syncStartedAt
 
   // ── 1. Load profile + settings ────────────────────────────────────────────
   const [dbUser, claudeBatchSizeSetting] = await Promise.all([
@@ -250,20 +252,31 @@ export async function runMatchForUser(
           console.warn(`[match] Skipping ${batchRows.length - validBatchRows.length} claude rows with missing offer_ids`)
         }
         if (validBatchRows.length > 0) {
+          if (syncStartedAt !== undefined) {
+            const user = await prisma.user.findUnique({ where: { id: userId }, select: { sync_started_at: true } })
+            if (user?.sync_started_at?.getTime() !== syncStartedAt.getTime()) {
+              console.log(`[match] Batch ${batchNum}: sync superseded, skipping insert`)
+              return
+            }
+          }
           const writeResult = await prisma.userOffer.createMany({ data: validBatchRows, skipDuplicates: true })
           newlyInserted += writeResult.count
           if (writeResult.count > 0) {
             aiScoring = true
             const inserted = await prisma.userOffer.findMany({
               where: { user_id: userId, offer_id: { in: validBatchRows.map(r => r.offer_id) }, matched_at: now },
-              select: { id: true, status: true },
+              select: { id: true, status: true, claude_recommended: true },
             })
             await prisma.userOfferStatus.createMany({
               data: inserted.map(r => ({ user_offer_id: r.id, status: r.status })),
             })
             batchPendingApplyCount = inserted.filter(r => r.status === 'pending_apply').length
+            const applyNowCount = inserted.filter(r => r.claude_recommended === true).length
+            const levelUpCount = inserted.filter(r => r.claude_recommended === false).length
+            console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply (${applyNowCount} apply now, ${levelUpCount} level up)`)
+          } else {
+            console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply`)
           }
-          console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply`)
         }
       }
 

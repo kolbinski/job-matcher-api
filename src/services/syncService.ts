@@ -294,7 +294,10 @@ async function _syncUserById(userId: string): Promise<void> {
   const maxLevelUpSetting = await prisma.settings.findUnique({ where: { key: 'max_level_up' } });
   const maxLevelUp = parseInt(maxLevelUpSetting?.value ?? '40', 10);
 
-  const result = await runMatchForUser(userId, { ai_scoring: true });
+  const syncStartedAt = new Date()
+  await prisma.user.update({ where: { id: userId }, data: { sync_started_at: syncStartedAt } })
+
+  const result = await runMatchForUser(userId, { ai_scoring: true, syncStartedAt });
 
   const rawProfile = user.profile as unknown as {
     preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> };
