@@ -142,9 +142,38 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
     data: { profile_synced_at: new Date() },
   })
 
-  await prisma.userOffer.deleteMany({
-    where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
-  })
+  console.log(`[trigger-sync] Deleting stale offers for user ${userId}`)
+
+  let deleted = 1
+  while (deleted > 0) {
+    const result = await prisma.$executeRaw`
+      DELETE FROM user_offer_statuses
+      WHERE id IN (
+        SELECT uos.id FROM user_offer_statuses uos
+        JOIN user_offers uo ON uos.user_offer_id = uo.id
+        WHERE uo.user_id = ${userId}
+        AND uo.status IN ('pending_apply', 'ai_rejected')
+        LIMIT 1000
+      )`
+    deleted = result
+    if (deleted > 0) console.log(`[trigger-sync] Deleted ${deleted} user_offer_statuses rows`)
+  }
+  console.log(`[trigger-sync] user_offer_statuses cleanup done`)
+
+  deleted = 1
+  while (deleted > 0) {
+    const result = await prisma.$executeRaw`
+      DELETE FROM user_offers
+      WHERE id IN (
+        SELECT id FROM user_offers
+        WHERE user_id = ${userId}
+        AND status IN ('pending_apply', 'ai_rejected')
+        LIMIT 1000
+      )`
+    deleted = result
+    if (deleted > 0) console.log(`[trigger-sync] Deleted ${deleted} user_offers rows`)
+  }
+  console.log(`[trigger-sync] user_offers cleanup done`)
 
   res.status(202).json({ message: 'Sync queued' })
 
