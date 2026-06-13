@@ -42,6 +42,15 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       }
 
       const stripeSub = await getStripe().subscriptions.retrieve(stripeSubscriptionId)
+      console.log('[stripe-webhook] raw stripeSub:', JSON.stringify({
+        id: stripeSub.id,
+        current_period_start: (stripeSub as any).current_period_start,
+        current_period_end: (stripeSub as any).current_period_end,
+        status: (stripeSub as any).status,
+      }))
+      console.log('[stripe-webhook] stripeSub keys:', Object.keys(stripeSub))
+      console.log('[stripe-webhook] stripeSub.current_period_start:', (stripeSub as any).current_period_start)
+      console.log('[stripe-webhook] stripeSub.current_period_end:', (stripeSub as any).current_period_end)
       const sub = stripeSub as unknown as { current_period_start: number; current_period_end: number }
       const currentPeriodStart = new Date(sub.current_period_start * 1000)
       const currentPeriodEnd = new Date(sub.current_period_end * 1000)
