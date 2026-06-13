@@ -27,7 +27,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
           type: 'object',
           properties: {
             offer_index:       { type: 'integer', description: 'Exact index from the offer header (0-based)' },
-            score:             { type: 'integer', minimum: 0, maximum: 100, description: 'Overall match quality 0-100' },
+            score:             { type: 'integer', minimum: 0, maximum: 100, description: 'Overall match quality 0-100. CRITICAL: Score must reflect actual skill overlap. If the primary required skills are not in the candidate\'s profile (e.g. Java, Angular, C++, .NET), the score must be below 60 regardless of other factors.' },
             rank:              { type: 'integer', minimum: 1, description: 'Overall ranking, 1 = best match' },
             matched_reasons: {
               type: 'object',
@@ -40,7 +40,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             },
             missing_skills:    { type: 'array', items: { type: 'string' }, description: 'Skills in job requirements the candidate likely lacks' },
             salary_comparison: { type: 'string', description: 'One phrase comparing offered salary to the target' },
-            role_fit:          { type: 'string', description: 'One sentence on role alignment' },
+            role_fit:          { type: 'string', description: 'One sentence on role alignment. CRITICAL: role_fit must be based ONLY on the actual job title and required_skills provided in the offer data. Do NOT mention technologies, frameworks, or role types that are not explicitly listed in the offer. If the offer is for a DBA, say it is a DBA role. If the offer requires Java, do not describe it as a React role.' },
             recommended:       { type: 'boolean', description: 'True if candidate should apply' },
             offer_language:    { type: 'string', enum: ['pl', 'en'], description: 'Detected language of the offer' },
           },

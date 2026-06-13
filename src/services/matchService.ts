@@ -252,7 +252,6 @@ export async function runMatchForUser(
         if (validBatchRows.length > 0) {
           const writeResult = await prisma.userOffer.createMany({ data: validBatchRows, skipDuplicates: true })
           newlyInserted += writeResult.count
-          console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows`)
           if (writeResult.count > 0) {
             aiScoring = true
             const inserted = await prisma.userOffer.findMany({
@@ -264,6 +263,7 @@ export async function runMatchForUser(
             })
             batchPendingApplyCount = inserted.filter(r => r.status === 'pending_apply').length
           }
+          console.log(`[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply`)
         }
       }
 
