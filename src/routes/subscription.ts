@@ -18,16 +18,12 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: user_id! },
-    select: { subscribed_to: true },
+  const subscription = await prisma.subscription.findFirst({
+    where: { user_id: user_id!, status: 'active' },
+    select: { current_period_end: true },
   })
 
-  if (!user) {
-    return res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' })
-  }
-
-  return res.json({ subscribed_to: user.subscribed_to })
+  return res.json({ subscribed_to: subscription?.current_period_end ?? null })
 })
 
 subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
