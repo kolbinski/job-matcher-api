@@ -296,8 +296,10 @@ userOffersRouter.get('/subscribe', validateJwt, (req, res) => {
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders()
+  console.log('[SSE] client connected, userId:', userId)
 
   const heartbeat = setInterval(() => {
+    console.log('[SSE] heartbeat sent to:', userId)
     res.write('event: heartbeat\ndata: {}\n\n')
   }, 20_000)
 
@@ -308,14 +310,21 @@ userOffersRouter.get('/subscribe', validateJwt, (req, res) => {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'user_offers', filter: `user_id=eq.${userId}` },
       (payload: { new: Record<string, unknown> }) => {
+        console.log('[SSE] INSERT received for user:', userId, 'status:', payload.new['status'])
         if (payload.new['status'] === 'pending_apply') {
+          console.log('[SSE] sending new_offer event to:', userId)
           res.write(`event: new_offer\ndata: ${JSON.stringify(payload.new)}\n\n`)
         }
       },
     )
-    .subscribe()
+    .subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[SSE] Supabase channel subscribed for:', userId)
+      }
+    })
 
   req.on('close', () => {
+    console.log('[SSE] client disconnected:', userId)
     clearInterval(heartbeat)
     getSupabase().removeChannel(channel)
   })
