@@ -469,28 +469,32 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         cl_url: uo.cl_url ?? null,
       }));
 
-      const count = mapped.length;
-      let offers: typeof mapped = mapped;
+      const finalMapped = bucketStatus === 'ai_rejected'
+        ? mapped.filter(o => o.salary.length > 0)
+        : mapped;
+
+      const count = finalMapped.length;
+      let offers: typeof finalMapped = finalMapped;
 
       if (role === 'client' && limits != null) {
-        const bestDelta = (o: (typeof mapped)[number]) =>
+        const bestDelta = (o: (typeof finalMapped)[number]) =>
           Math.max(-Infinity, ...o.salary.map(s => s.delta));
         const byScoreAndDelta = (
-          a: (typeof mapped)[number],
-          b: (typeof mapped)[number],
+          a: (typeof finalMapped)[number],
+          b: (typeof finalMapped)[number],
         ) =>
           (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
           bestDelta(b) - bestDelta(a);
 
         if (bucketStatus === 'pending_apply' && limits.max_apply_now != null) {
-          offers = [...mapped]
+          offers = [...finalMapped]
             .sort(byScoreAndDelta)
             .slice(0, limits.max_apply_now);
         } else if (
           bucketStatus === 'ai_rejected' &&
           limits.max_level_up != null
         ) {
-          offers = [...mapped]
+          offers = [...finalMapped]
             .sort(byScoreAndDelta)
             .slice(0, limits.max_level_up);
         }
@@ -646,14 +650,18 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     cl_url: uo.cl_url ?? null,
   }));
 
-  const apply_now_count = mapped.filter(
+  const finalMapped = status === 'ai_rejected'
+    ? mapped.filter(o => o.salary.length > 0)
+    : mapped;
+
+  const apply_now_count = finalMapped.filter(
     o => o.claude_recommended === true,
   ).length;
-  const level_up_count = mapped.filter(
+  const level_up_count = finalMapped.filter(
     o => o.claude_recommended === false,
   ).length;
 
-  let filtered = mapped;
+  let filtered = finalMapped;
 
   // Apply plan limits for pending_apply (client only; agent sees all)
   if (role === 'client' && status === 'pending_apply') {
