@@ -39,17 +39,22 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const stripeCustomerId = obj.customer ?? null
       const sessionType = obj.metadata?.['type'] ?? null
 
-      if (sessionType === 'scan_package') {
+      if (sessionType === 'scan_package' || sessionType === 'cv_package' || sessionType === 'cl_package') {
         const userId = obj.metadata?.['user_id']
         const amount = Number(obj.metadata?.['amount'] ?? '0')
         if (!userId) {
-          console.error('[stripe-webhook] scan_package: missing user_id in metadata')
+          console.error(`[stripe-webhook] ${sessionType}: missing user_id in metadata`)
           return res.json({ received: true })
         }
 
+        const counterField =
+          sessionType === 'cv_package' ? 'cv_counter_max' :
+          sessionType === 'cl_package' ? 'cl_counter_max' :
+          'scan_page_counter_max'
+
         await prisma.user.update({
           where: { id: userId },
-          data: { scan_page_counter_max: { increment: amount } },
+          data: { [counterField]: { increment: amount } },
         })
 
         if (stripeCustomerId) {
@@ -59,7 +64,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           })
         }
 
-        console.log(`[stripe-webhook] scan_package: incremented scan_page_counter_max by ${amount} for user ${userId}`)
+        console.log(`[stripe-webhook] ${sessionType}: incremented ${counterField} by ${amount} for user ${userId}`)
         return res.json({ received: true })
       }
 
