@@ -79,6 +79,11 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         },
       })
 
+      await prisma.user.update({
+        where: { id: userId },
+        data: { free_plan_snapshot: null },
+      })
+
       console.log(`[stripe-webhook] Upgraded user ${userId} to Pro plan`)
       console.log('[stripe-webhook] upsert result:', JSON.stringify(upsertResult))
     }
