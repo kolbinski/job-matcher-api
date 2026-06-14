@@ -438,8 +438,7 @@ export async function buildAndSaveFreePlanSnapshot(
   const profile = userProfile as unknown as { preferences?: { learning_skills_goals?: string[] } } | null
   const learningGoals = (profile?.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase())
 
-  const [totalCount, allApplyNow, allLevelUpRaw] = await Promise.all([
-    prisma.userOffer.count({ where: { user_id: userId } }),
+  const [allApplyNow, allLevelUpRaw] = await Promise.all([
     prisma.userOffer.findMany({
       where: { user_id: userId, status: 'pending_apply' },
       include: { offer: { select: snapshotOfferSelect } },
@@ -452,16 +451,16 @@ export async function buildAndSaveFreePlanSnapshot(
     }),
   ])
 
-  const filteredLevelUp = learningGoals.length > 0
-    ? allLevelUpRaw.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
-    : allLevelUpRaw
+  const filteredLevelUp = allLevelUpRaw
+    .filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+    .filter(uo => learningGoals.length === 0 || uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
 
   const applyNowOffers = maxApplyNow != null ? allApplyNow.slice(0, maxApplyNow) : allApplyNow
   const levelUpOffers = maxLevelUp != null ? filteredLevelUp.slice(0, maxLevelUp) : filteredLevelUp
 
   const snapshot = {
     created_at: new Date().toISOString(),
-    count: applyNowOffers.length + levelUpOffers.length,
+    count: allApplyNow.length + filteredLevelUp.length,
     apply_now: {
       count: allApplyNow.length,
       status: 'pending_apply',

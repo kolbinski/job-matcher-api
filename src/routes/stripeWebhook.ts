@@ -36,7 +36,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       }
       const userId = obj.client_reference_id
       const stripeSubscriptionId = obj.subscription
-      const stripeCustomerId = (obj as any).customer as string | null
+      const stripeCustomerId = (obj as { customer?: string | null }).customer ?? null
 
       console.log('[stripe-webhook] checkout.session.completed fields:', { client_reference_id: userId, subscription: stripeSubscriptionId })
 
@@ -46,17 +46,9 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       }
 
       const stripeSub = await getStripe().subscriptions.retrieve(stripeSubscriptionId)
-      console.log('[stripe-webhook] raw stripeSub:', JSON.stringify({
-        id: stripeSub.id,
-        current_period_start: (stripeSub as any).current_period_start,
-        current_period_end: (stripeSub as any).current_period_end,
-        status: (stripeSub as any).status,
-      }))
-      console.log('[stripe-webhook] stripeSub keys:', Object.keys(stripeSub))
-      console.log('[stripe-webhook] stripeSub.current_period_start:', (stripeSub as any).current_period_start)
-      console.log('[stripe-webhook] stripeSub.current_period_end:', (stripeSub as any).current_period_end)
-      const currentPeriodStart = new Date((stripeSub.items.data[0] as any).current_period_start * 1000)
-      const currentPeriodEnd = new Date((stripeSub.items.data[0] as any).current_period_end * 1000)
+      const item0 = stripeSub.items.data[0] as unknown as { current_period_start: number; current_period_end: number }
+      const currentPeriodStart = new Date(item0.current_period_start * 1000)
+      const currentPeriodEnd = new Date(item0.current_period_end * 1000)
 
       const proPlan = await prisma.plan.findUnique({ where: { name: 'pro' } })
       if (!proPlan) {

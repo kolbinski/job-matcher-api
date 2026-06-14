@@ -242,11 +242,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
       let result = [...seen.values()]
 
-      // Auto-apply learning goals filter for ai_rejected bucket
-      if (bucketStatus === 'ai_rejected' && learningGoals.length > 0) {
-        result = result.filter(uo =>
-          uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
-        )
+      // Auto-apply filters for ai_rejected bucket
+      if (bucketStatus === 'ai_rejected') {
+        result = result.filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+        if (learningGoals.length > 0) {
+          result = result.filter(uo =>
+            uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
+          )
+        }
       }
 
       const mapped = result.map(uo => ({
@@ -360,8 +363,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   let result = [...seen.values()]
 
-  if (has_learning_skills_goals === 'true' && status === 'ai_rejected') {
-    if (learningGoals.length > 0) {
+  if (status === 'ai_rejected') {
+    result = result.filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+    if (has_learning_skills_goals === 'true' && learningGoals.length > 0) {
       result = result.filter(uo =>
         uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
       )
