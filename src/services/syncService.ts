@@ -329,4 +329,155 @@ async function _syncUserById(userId: string): Promise<void> {
     where: { id: userId },
     data: { profile_synced_at: new Date() },
   });
+
+  await buildAndSaveFreePlanSnapshot(userId, salaryPrefs, exchangeRates, user.profile);
+}
+
+const snapshotOfferSelect = {
+  title: true, company_name: true, url: true, employment_types: true,
+  source: true, city: true, workplace_type: true, required_skills: true, nice_to_have_skills: true,
+} as const
+
+type SnapshotUO = {
+  id: string
+  claude_score: number | null
+  claude_role_fit: string | null
+  claude_matched_reasons: Prisma.JsonValue
+  claude_missing_skills: string[]
+  claude_recommended: boolean | null
+  rejection_reason: string | null
+  matched_at: Date
+  cv_language: string | null
+  cv_status: string | null
+  cv_url: string | null
+  cl_status: string | null
+  cl_url: string | null
+  offer: {
+    title: string
+    company_name: string
+    url: string | null
+    employment_types: Prisma.JsonValue
+    source: string
+    city: string | null
+    workplace_type: string | null
+    required_skills: string[]
+    nice_to_have_skills: string[]
+  }
+}
+
+function buildSnapshotSalaryEntries(
+  employmentTypes: Prisma.JsonValue,
+  salaryPrefs: SalaryPref[],
+  rates: Record<string, number>,
+): Array<{ min: number; max: number; currency: string; type: string; delta: number; delta_normalized: number }> {
+  if (salaryPrefs.length === 0) return []
+  const types = Array.isArray(employmentTypes)
+    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
+    : []
+  const entries: ReturnType<typeof buildSnapshotSalaryEntries> = []
+  for (const et of types) {
+    const { from, to, currency, type: etType, unit } = et
+    if (from == null || to == null || !currency || !etType) continue
+    const pref = salaryPrefs.find(
+      p => p.type.toLowerCase() === etType.toLowerCase() &&
+           p.currency.toUpperCase() === currency.toUpperCase()
+    )
+    if (!pref) continue
+    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
+    const delta = effectiveTo - pref.min
+    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
+    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
+  }
+  return entries
+}
+
+function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Record<string, number>) {
+  return {
+    user_offer_id: uo.id,
+    offer_title: uo.offer.title,
+    offer_company: uo.offer.company_name,
+    offer_url: uo.offer.url,
+    claude_score: uo.claude_score,
+    claude_role_fit: uo.claude_role_fit,
+    claude_matched_reasons: uo.claude_matched_reasons,
+    claude_missing_skills: uo.claude_missing_skills,
+    claude_recommended: uo.claude_recommended,
+    rejection_reason: uo.rejection_reason,
+    matched_at: uo.matched_at,
+    applied_at: null,
+    salary: buildSnapshotSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+    source: uo.offer.source,
+    city: uo.offer.city ?? null,
+    work_model: uo.offer.workplace_type ?? null,
+    required_skills: uo.offer.required_skills,
+    nice_to_have_skills: uo.offer.nice_to_have_skills,
+    cv_language: uo.cv_language,
+    cv_status: uo.cv_status ?? null,
+    cv_url: uo.cv_url ?? null,
+    cl_status: uo.cl_status ?? null,
+    cl_url: uo.cl_url ?? null,
+  }
+}
+
+async function buildAndSaveFreePlanSnapshot(
+  userId: string,
+  salaryPrefs: SalaryPref[],
+  exchangeRates: Record<string, number>,
+  userProfile: Prisma.JsonValue,
+): Promise<void> {
+  const sub = await prisma.subscription.findFirst({
+    where: { user_id: userId, status: 'active' },
+    include: { plan: true },
+  })
+  if (sub?.plan?.name !== 'free') return
+
+  const limits = sub.plan.limits as { max_apply_now: number | null; max_level_up: number | null } | null
+  const maxApplyNow = limits?.max_apply_now ?? null
+  const maxLevelUp = limits?.max_level_up ?? null
+
+  const profile = userProfile as unknown as { preferences?: { learning_skills_goals?: string[] } } | null
+  const learningGoals = (profile?.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase())
+
+  const [totalCount, allApplyNow, allLevelUpRaw] = await Promise.all([
+    prisma.userOffer.count({ where: { user_id: userId } }),
+    prisma.userOffer.findMany({
+      where: { user_id: userId, status: 'pending_apply' },
+      include: { offer: { select: snapshotOfferSelect } },
+      orderBy: { claude_score: 'desc' },
+    }),
+    prisma.userOffer.findMany({
+      where: { user_id: userId, status: 'ai_rejected' },
+      include: { offer: { select: snapshotOfferSelect } },
+      orderBy: { claude_score: 'desc' },
+    }),
+  ])
+
+  const filteredLevelUp = learningGoals.length > 0
+    ? allLevelUpRaw.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
+    : allLevelUpRaw
+
+  const applyNowOffers = maxApplyNow != null ? allApplyNow.slice(0, maxApplyNow) : allApplyNow
+  const levelUpOffers = maxLevelUp != null ? filteredLevelUp.slice(0, maxLevelUp) : filteredLevelUp
+
+  const snapshot = {
+    created_at: new Date().toISOString(),
+    count: totalCount,
+    apply_now: {
+      count: allApplyNow.length,
+      status: 'pending_apply',
+      offers: applyNowOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
+    },
+    level_up: {
+      count: filteredLevelUp.length,
+      status: 'ai_rejected',
+      offers: levelUpOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
+    },
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { free_plan_snapshot: snapshot as unknown as Prisma.InputJsonValue },
+  })
+
+  console.log(`[sync] Built free plan snapshot for user ${userId}: ${applyNowOffers.length} apply_now, ${levelUpOffers.length} level_up`)
 }

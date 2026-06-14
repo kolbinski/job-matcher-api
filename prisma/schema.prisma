@@ -56,6 +56,7 @@ model User {
   profile_synced_at                   DateTime?
   sync_started_at                     DateTime?
   profile_editing_snapshot            Json?
+  free_plan_snapshot                  Json?
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

@@ -186,6 +186,16 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       | { max_apply_now: number | null; max_level_up: number | null }
       | null
 
+    if (role === 'client' && effectivePlan?.name === 'free') {
+      const userWithSnapshot = await prisma.user.findUnique({
+        where: { id: clientId },
+        select: { free_plan_snapshot: true },
+      })
+      if (userWithSnapshot?.free_plan_snapshot != null) {
+        return res.json(userWithSnapshot.free_plan_snapshot)
+      }
+    }
+
     const offerSelect = {
       title: true, company_name: true, url: true, employment_types: true,
       source: true, city: true, workplace_type: true, experience_level: true,
