@@ -503,7 +503,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       (sum, b) => sum + b.count,
       0,
     );
-    return res.json({ count: totalCount, ...buckets });
+    const bucketKeyMap: Record<string, string> = {
+      pending_apply: 'apply_now',
+      ai_rejected: 'level_up',
+    }
+    const namedBuckets = Object.fromEntries(
+      Object.entries(buckets).map(([k, v]) => [bucketKeyMap[k] ?? k, v]),
+    )
+    return res.json({ count: totalCount, ...namedBuckets });
   }
 
   // ── Single-status path (backward compatible) ───────────────────────────────
