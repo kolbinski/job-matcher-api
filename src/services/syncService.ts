@@ -452,7 +452,11 @@ export async function buildAndSaveFreePlanSnapshot(
   ])
 
   const filteredLevelUp = allLevelUpRaw
-    .filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+    .filter(uo => {
+      const types = uo.offer.employment_types as Array<{ from?: number | null; to?: number | null }> | null
+      if (!Array.isArray(types) || types.length === 0) return false
+      return types.some(et => (typeof et.from === 'number' && et.from > 0) || (typeof et.to === 'number' && et.to > 0))
+    })
     .filter(uo => learningGoals.length === 0 || uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
 
   const applyNowOffers = maxApplyNow != null ? allApplyNow.slice(0, maxApplyNow) : allApplyNow

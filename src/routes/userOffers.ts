@@ -71,6 +71,13 @@ async function loadExchangeRates(): Promise<Record<string, number>> {
   }
 }
 
+function hasSalaryData(types: unknown): boolean {
+  if (!Array.isArray(types) || types.length === 0) return false
+  return (types as Array<{ from?: number | null; to?: number | null }>).some(
+    et => (typeof et.from === 'number' && et.from > 0) || (typeof et.to === 'number' && et.to > 0),
+  )
+}
+
 function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[], rates: Record<string, number>): SalaryEntry[] {
   if (salaryPrefs.length === 0) return []
   const types = Array.isArray(employmentTypes)
@@ -315,7 +322,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
       // Auto-apply filters for ai_rejected bucket
       if (bucketStatus === 'ai_rejected') {
-        result = result.filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+        result = result.filter(uo => hasSalaryData(uo.offer.employment_types))
         if (learningGoals.length > 0) {
           result = result.filter(uo =>
             uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
@@ -384,22 +391,27 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
   }
 
-  // count_only=true without has_learning_skills_goals: pure DB count, no data transfer
-  if (count_only === 'true' && has_learning_skills_goals !== 'true') {
-    const count = await prisma.userOffer.count({ where })
-    return res.json({ count })
-  }
-
-  // count_only=true with has_learning_skills_goals=true: lean fetch (no offer join), filter in memory
-  if (count_only === 'true' && has_learning_skills_goals === 'true' && status === 'ai_rejected') {
+  // count_only for ai_rejected: must filter in memory to check real salary data
+  if (count_only === 'true' && status === 'ai_rejected') {
     const rows = await prisma.userOffer.findMany({
       where,
-      select: { claude_missing_skills: true },
+      select: { claude_missing_skills: true, offer: { select: { employment_types: true } } },
     })
-    const { learningGoals } = await loadClientProfile(clientId)
-    const count = learningGoals.length > 0
-      ? rows.filter(uo => uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))).length
-      : rows.length
+    let filtered = rows.filter(uo => hasSalaryData(uo.offer.employment_types))
+    if (has_learning_skills_goals === 'true') {
+      const { learningGoals } = await loadClientProfile(clientId)
+      if (learningGoals.length > 0) {
+        filtered = filtered.filter(uo =>
+          uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
+        )
+      }
+    }
+    return res.json({ count: filtered.length })
+  }
+
+  // count_only=true for non-ai_rejected statuses: pure DB count, no data transfer
+  if (count_only === 'true') {
+    const count = await prisma.userOffer.count({ where })
     return res.json({ count })
   }
 
@@ -440,7 +452,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   let result = [...seen.values()]
 
   if (status === 'ai_rejected') {
-    result = result.filter(uo => Array.isArray(uo.offer.employment_types) && uo.offer.employment_types.length > 0)
+    result = result.filter(uo => hasSalaryData(uo.offer.employment_types))
     if (has_learning_skills_goals === 'true' && learningGoals.length > 0) {
       result = result.filter(uo =>
         uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
