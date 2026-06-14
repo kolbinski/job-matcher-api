@@ -44,6 +44,7 @@ billingRouter.get('/history', validateJwt, async (req, res) => {
     currency: inv.currency,
     status: inv.status,
     created: inv.created,
+    date: new Date(inv.created * 1000).toISOString(),
     description: inv.description ?? inv.lines?.data?.[0]?.description ?? null,
     invoice_pdf: inv.invoice_pdf ?? null,
     hosted_invoice_url: inv.hosted_invoice_url ?? null,
@@ -57,6 +58,7 @@ billingRouter.get('/history', validateJwt, async (req, res) => {
       currency: pi.currency,
       status: pi.status,
       created: pi.created,
+      date: new Date(pi.created * 1000).toISOString(),
       description: pi.description ?? null,
       receipt_url: (pi.latest_charge as { receipt_url?: string } | null | string)
         && typeof pi.latest_charge === 'object'
