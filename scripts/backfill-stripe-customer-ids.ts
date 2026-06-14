@@ -12,38 +12,54 @@ async function main() {
   }
   const stripe = new Stripe(stripeKey)
 
-  const subscriptions = await prisma.subscription.findMany({
-    where: {
-      stripe_subscription_id: { not: null },
-      user: { stripe_customer_id: null },
-    },
-    select: { user_id: true, stripe_subscription_id: true },
+  // Only consider users who don't yet have a stripe_customer_id
+  const users = await prisma.user.findMany({
+    where: { stripe_customer_id: null },
+    select: { id: true, email: true },
   })
 
-  if (subscriptions.length === 0) {
-    console.log('No users to backfill — all paid users already have stripe_customer_id')
+  if (users.length === 0) {
+    console.log('No users to backfill — all users already have stripe_customer_id')
     return
   }
 
-  console.log(`Found ${subscriptions.length} subscriptions to backfill`)
+  console.log(`Found ${users.length} users without stripe_customer_id`)
 
-  let updated = 0
-  for (const sub of subscriptions) {
-    try {
-      const stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id!)
-      const customerId = typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer.id
-      await prisma.user.update({
-        where: { id: sub.user_id },
-        data: { stripe_customer_id: customerId },
-      })
-      updated++
-      console.log(`Updated user ${sub.user_id} → stripe_customer_id: ${customerId}`)
-    } catch (err) {
-      console.error(`Failed for user ${sub.user_id} / sub ${sub.stripe_subscription_id}:`, err)
+  // Build email → stripe customer_id map by paginating all Stripe customers
+  const emailToCustomerId = new Map<string, string>()
+  let page = await stripe.customers.list({ limit: 100 })
+  while (true) {
+    for (const customer of page.data) {
+      if (customer.email) {
+        emailToCustomerId.set(customer.email.toLowerCase(), customer.id)
+      }
     }
+    if (!page.has_more) break
+    page = await stripe.customers.list({ limit: 100, starting_after: page.data[page.data.length - 1]!.id })
   }
 
-  console.log(`Done. Updated ${updated} / ${subscriptions.length} users`)
+  console.log(`Fetched ${emailToCustomerId.size} Stripe customers`)
+
+  let updated = 0
+  let skipped = 0
+
+  for (const user of users) {
+    const customerId = emailToCustomerId.get(user.email.toLowerCase())
+    if (!customerId) {
+      skipped++
+      continue
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { stripe_customer_id: customerId },
+    })
+
+    updated++
+    console.log(`Updated user ${user.id} (${user.email}) → ${customerId}`)
+  }
+
+  console.log(`Done. Updated ${updated}, skipped ${skipped} (no Stripe customer found).`)
 }
 
 main()

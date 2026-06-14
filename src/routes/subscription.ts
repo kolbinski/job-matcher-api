@@ -143,7 +143,7 @@ subscriptionRouter.post('/cv-package-checkout', validateJwt, async (req, res) =>
   const [priceIdsSetting, generalSetting, user] = await Promise.all([
     prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
     prisma.settings.findUnique({ where: { key: 'general_settings' } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true, email: true } }),
   ])
 
   const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
@@ -166,7 +166,7 @@ subscriptionRouter.post('/cv-package-checkout', validateJwt, async (req, res) =>
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : {}),
+      : { customer_email: user?.email }),
   })
 
   return res.json({ url: session.url })
@@ -182,7 +182,7 @@ subscriptionRouter.post('/cl-package-checkout', validateJwt, async (req, res) =>
   const [priceIdsSetting, generalSetting, user] = await Promise.all([
     prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
     prisma.settings.findUnique({ where: { key: 'general_settings' } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true, email: true } }),
   ])
 
   const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
@@ -205,7 +205,7 @@ subscriptionRouter.post('/cl-package-checkout', validateJwt, async (req, res) =>
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : {}),
+      : { customer_email: user?.email }),
   })
 
   return res.json({ url: session.url })
@@ -221,7 +221,7 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
   const [priceIdsSetting, generalSetting, user] = await Promise.all([
     prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
     prisma.settings.findUnique({ where: { key: 'general_settings' } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true, email: true } }),
   ])
 
   const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
@@ -248,7 +248,7 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : {}),
+      : { customer_email: user?.email }),
   })
 
   return res.json({ url: session.url })

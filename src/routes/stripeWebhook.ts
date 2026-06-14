@@ -30,6 +30,10 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
     )
 
     if (event.type === 'checkout.session.completed') {
+      console.log('[stripe-webhook] session metadata:', JSON.stringify(event.data.object.metadata))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log('[stripe-webhook] client_reference_id:', (event.data.object as any).client_reference_id)
+
       const obj = event.data.object as {
         client_reference_id: string | null
         subscription: string | null
@@ -62,6 +66,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
             where: { id: userId },
             data: { stripe_customer_id: stripeCustomerId },
           })
+          console.log(`[stripe-webhook] saved stripe_customer_id: ${stripeCustomerId} for user: ${userId}`)
         }
 
         console.log(`[stripe-webhook] ${sessionType}: incremented ${counterField} by ${amount} for user ${userId}`)
