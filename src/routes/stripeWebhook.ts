@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import Stripe from 'stripe'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { env } from '../lib/env'
 import { buildAndSaveFreePlanSnapshot } from '../services/syncService'
@@ -83,7 +84,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
 
       await prisma.user.update({
         where: { id: userId },
-        data: { free_plan_snapshot: null },
+        data: { free_plan_snapshot: Prisma.JsonNull },
       })
 
       console.log(`[stripe-webhook] Upgraded user ${userId} to Pro plan`)
