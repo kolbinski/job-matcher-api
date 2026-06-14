@@ -63,12 +63,22 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           data: { [counterField]: { increment: amount } },
         })
 
-        if (stripeCustomerId) {
+        // customer field is null on mode='payment' events — retrieve session to expand it
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sessionId = (event.data.object as any).id as string
+        const fullSession = await getStripe().checkout.sessions.retrieve(sessionId, { expand: ['customer'] })
+        const packageCustomerId = typeof fullSession.customer === 'string'
+          ? fullSession.customer
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          : (fullSession.customer as any)?.id ?? null
+        console.log(`[stripe-webhook] ${sessionType}: retrieved customer from session: ${packageCustomerId}`)
+
+        if (packageCustomerId) {
           await prisma.user.update({
             where: { id: userId },
-            data: { stripe_customer_id: stripeCustomerId },
+            data: { stripe_customer_id: packageCustomerId },
           })
-          console.log(`[stripe-webhook] saved stripe_customer_id: ${stripeCustomerId} for user: ${userId}`)
+          console.log(`[stripe-webhook] saved stripe_customer_id: ${packageCustomerId} for user: ${userId}`)
         }
 
         console.log(`[stripe-webhook] ${sessionType}: incremented ${counterField} by ${amount} for user ${userId}`)
