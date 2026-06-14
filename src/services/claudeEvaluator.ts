@@ -7,19 +7,13 @@ const anthropic = new Anthropic();
 
 const TIMEOUT_MS = 300_000;
 
-function buildSystemPrompt(perspective: 'second' | 'third'): string {
-  const p = perspective === 'second'
-    ? { subject: 'you', possessive: 'your', profileLabel: 'Your profile', acceptsLabel: 'you accept', hasLabel: 'you have', forLabel: 'for you' }
-    : { subject: 'the candidate', possessive: "the candidate's", profileLabel: 'The candidate profile', acceptsLabel: 'the candidate accepts', hasLabel: 'the candidate has', forLabel: 'for a candidate' }
-
-  return `You are a senior tech recruiter evaluating job offers ${p.forLabel}.
+const SYSTEM_PROMPT = `You are a senior tech recruiter evaluating job offers for you.
 
 Scoring rules — apply all four consistently:
-1. SALARY: Compare offer MAX salary to ${p.possessive} minimum. If offer max >= ${p.possessive} minimum, salary is acceptable — do not penalize it. Only mark salary as a concern if offer max < ${p.possessive} minimum. If salary is not disclosed, treat it as neutral and never use it as a reason for recommended=false.
-2. CONTRACT TYPE: ${p.profileLabel} lists accepted contract types. Only flag contract type if the offer's type is not in ${p.possessive} accepted list. If ${p.acceptsLabel} permanent contracts, do not penalize permanent offers.
-3. SENIORITY: Do not penalize offers listed as "mid" level if ${p.possessive} skills clearly match the requirements. Only flag seniority if the role explicitly requires fewer years of experience than ${p.hasLabel}, or uses the word "junior" in the title.
+1. SALARY: Compare offer MAX salary to your minimum. If offer max >= your minimum, salary is acceptable — do not penalize it. Only mark salary as a concern if offer max < your minimum. If salary is not disclosed, treat it as neutral and never use it as a reason for recommended=false.
+2. CONTRACT TYPE: Your profile lists accepted contract types. Only flag contract type if the offer's type is not in your accepted list. If you accept permanent contracts, do not penalize permanent offers.
+3. SENIORITY: Do not penalize offers listed as "mid" level if your skills clearly match the requirements. Only flag seniority if the role explicitly requires fewer years of experience than you have, or uses the word "junior" in the title.
 4. FOCUS: Prioritise technical skill overlap, salary acceptability, and work model. These three factors should drive the recommended field.`
-}
 
 const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
   name: 'evaluate_offers',
@@ -85,23 +79,21 @@ export async function evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
   model: string,
-  perspective: 'second' | 'third' = 'third',
 ): Promise<EvaluateOffersResult | null> {
   if (offers.length === 0) return { evaluations: [], input_tokens: 0, output_tokens: 0, response_ms: 0, model };
 
-  const result = await _evaluateOffers(profile, offers, model, perspective);
+  const result = await _evaluateOffers(profile, offers, model);
   if (result !== null) return result;
 
   console.error('[claudeEvaluator] Batch returned null — retrying once after 5s');
   await new Promise(resolve => setTimeout(resolve, 5_000));
-  return _evaluateOffers(profile, offers, model, perspective);
+  return _evaluateOffers(profile, offers, model);
 }
 
 async function _evaluateOffers(
   profile: CandidateProfile,
   offers: Offer[],
   model: string,
-  perspective: 'second' | 'third',
 ): Promise<EvaluateOffersResult | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -109,7 +101,7 @@ async function _evaluateOffers(
   let rawResponse: string | undefined;
 
   try {
-    const prompt = buildPrompt(profile, offers, perspective);
+    const prompt = buildPrompt(profile, offers);
 
     const response = await anthropic.messages.create(
       {
@@ -118,7 +110,7 @@ async function _evaluateOffers(
         system: [
           {
             type: 'text',
-            text: buildSystemPrompt(perspective),
+            text: SYSTEM_PROMPT,
             cache_control: { type: 'ephemeral' },
           },
         ],
@@ -217,9 +209,7 @@ export function stripCodeFences(raw: string): string {
     .trim();
 }
 
-function buildPrompt(profile: CandidateProfile, offers: Offer[], perspective: 'second' | 'third'): string {
-  const profileHeader = perspective === 'second' ? '## Your Profile' : '## Candidate Profile';
-
+function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
   // Profile — only essential fields sent to Claude (no employment_history, education, personal_projects)
   const name = `${profile.basic_info.first_name} ${profile.basic_info.last_name}`;
   const techs = Object.values(profile.skills).flat().map(t => t.name).join(', ');
@@ -232,7 +222,7 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[], perspective: 's
   const redFlagsText = profile.red_flags.map(f => `[${f.category}] ${Array.isArray(f.description) ? f.description.join(', ') : f.description}`).join('; ');
 
   const lines: string[] = [
-    profileHeader,
+    '## Your Profile',
     `Name: ${name}`,
     `Technologies: ${techs || 'not specified'}`,
     `Target roles: ${targetRoles || 'not specified'}`,

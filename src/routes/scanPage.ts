@@ -363,7 +363,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
     profileParsed.data,
     [offerForMatching],
     model,
-    'second',
   );
   if (!matchResult || matchResult.evaluations.length === 0) {
     throw new AppError(500, 'INTERNAL_ERROR', 'Offer matching failed');
