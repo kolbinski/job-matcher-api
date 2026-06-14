@@ -4,11 +4,56 @@ import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
 import { getSupabase } from '../lib/supabase'
 import { AppError } from '../lib/errors'
+import type { Prisma } from '@prisma/client'
 
 export const accountRouter = Router()
 
 const AgentBodySchema = z.object({
   client_id: z.string().uuid(),
+})
+
+const BillingDataSchema = z.object({
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  zip_code: z.string().optional(),
+  country: z.string().optional(),
+  vat_number: z.string().optional(),
+})
+
+accountRouter.get('/billing', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: user_id! },
+    select: { billing_data: true },
+  })
+
+  return res.json({ billing_data: user?.billing_data ?? null })
+})
+
+accountRouter.patch('/billing', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const parsed = BillingDataSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user_id! },
+    data: { billing_data: parsed.data as Prisma.InputJsonValue },
+    select: { billing_data: true },
+  })
+
+  return res.json({ billing_data: updated.billing_data })
 })
 
 async function findSupabaseUserId(email: string): Promise<string | null> {

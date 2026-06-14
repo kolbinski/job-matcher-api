@@ -60,6 +60,7 @@ model User {
   stripe_customer_id                  String?
   scan_page_counter                   Int       @default(0)
   scan_page_counter_max               Int       @default(0)
+  billing_data                        Json?
   cv_counter                          Int       @default(0)
   cv_counter_max                      Int       @default(0)
   cl_counter                          Int       @default(0)
