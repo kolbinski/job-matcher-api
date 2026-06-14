@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { getSupabase } from '../lib/supabase'
-import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { validateJwt } from '../middleware/validateJwt'
 import { generateCV } from '../services/cvGenerator'
 import { CandidateProfileSchema } from '../types/profile'
@@ -109,34 +108,34 @@ async function runGeneration(
   }
 }
 
-cvGenerateRouter.post('/generate', validateAgentJwt, async (req, res) => {
+cvGenerateRouter.post('/generate', validateJwt, async (req, res) => {
+  const { role, user_id, agent_id } = req.jwt!
+
+  if (role === 'client') {
+    const parsed = ClientGenerateCVSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
+    }
+    const { user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
+    return res.json(await runGeneration(user_id!, user_offer_id, offer_text, cv_language, job_title, company_name))
+  }
+
+  // agent path
+  if (!agent_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Agent ID missing from token' })
+  }
+
   const parsed = AgentGenerateCVSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
 
   const { client_id, user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
-  const agentId = req.agent!.id
 
   const link = await prisma.agentClient.findUnique({
-    where: { agent_id_user_id: { agent_id: agentId, user_id: client_id } },
+    where: { agent_id_user_id: { agent_id, user_id: client_id } },
   })
   if (!link) throw new AppError(403, 'FORBIDDEN', 'Client not found or not linked to this agent')
 
   return res.json(await runGeneration(client_id, user_offer_id, offer_text, cv_language, job_title, company_name))
-})
-
-cvGenerateRouter.post('/generate/client', validateJwt, async (req, res) => {
-  const { role, user_id } = req.jwt!
-  if (role !== 'client') {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
-  }
-
-  const parsed = ClientGenerateCVSchema.safeParse(req.body)
-  if (!parsed.success) {
-    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
-  }
-
-  const { user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
-  return res.json(await runGeneration(user_id!, user_offer_id, offer_text, cv_language, job_title, company_name))
 })
