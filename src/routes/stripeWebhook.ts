@@ -33,10 +33,39 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const obj = event.data.object as {
         client_reference_id: string | null
         subscription: string | null
+        metadata: Record<string, string> | null
+        customer?: string | null
       }
+      const stripeCustomerId = obj.customer ?? null
+      const sessionType = obj.metadata?.['type'] ?? null
+
+      if (sessionType === 'scan_package') {
+        const userId = obj.metadata?.['user_id']
+        const amount = Number(obj.metadata?.['amount'] ?? '0')
+        if (!userId) {
+          console.error('[stripe-webhook] scan_package: missing user_id in metadata')
+          return res.json({ received: true })
+        }
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { scan_page_counter_max: { increment: amount } },
+        })
+
+        if (stripeCustomerId) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { stripe_customer_id: stripeCustomerId },
+          })
+        }
+
+        console.log(`[stripe-webhook] scan_package: incremented scan_page_counter_max by ${amount} for user ${userId}`)
+        return res.json({ received: true })
+      }
+
+      // Pro subscription checkout
       const userId = obj.client_reference_id
       const stripeSubscriptionId = obj.subscription
-      const stripeCustomerId = (obj as { customer?: string | null }).customer ?? null
 
       console.log('[stripe-webhook] checkout.session.completed fields:', { client_reference_id: userId, subscription: stripeSubscriptionId })
 

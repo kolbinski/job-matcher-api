@@ -59,6 +59,7 @@ model User {
   free_plan_snapshot                  Json?
   stripe_customer_id                  String?
   scan_page_counter                   Int       @default(0)
+  scan_page_counter_max               Int       @default(0)
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

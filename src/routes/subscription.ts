@@ -120,3 +120,41 @@ subscriptionRouter.post('/renew', validateJwt, async (req, res) => {
 
   return res.json({ success: true })
 })
+
+subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+  const userId = user_id!
+
+  const [priceIdsSetting, generalSetting, user] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
+    prisma.settings.findUnique({ where: { key: 'general_settings' } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true } }),
+  ])
+
+  const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
+  const scanPackagePriceId = priceIds['scan_package_price_id']
+  if (!scanPackagePriceId) {
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'scan_package_price_id not configured' })
+  }
+
+  const generalSettings = JSON.parse(generalSetting?.value ?? '{}') as Record<string, unknown>
+  const packagePageScansAmount = Number(generalSettings['package_page_scans_amount'] ?? 0)
+
+  const session = await getStripe().checkout.sessions.create({
+    mode: 'payment',
+    line_items: [{ price: scanPackagePriceId, quantity: 1 }],
+    metadata: {
+      type: 'scan_package',
+      user_id: userId,
+      amount: String(packagePageScansAmount),
+    },
+    success_url: 'https://homodigital.io?upgrade=scan_package',
+    cancel_url: 'https://homodigital.io?upgrade=cancelled',
+    ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
+  })
+
+  return res.json({ url: session.url })
+})

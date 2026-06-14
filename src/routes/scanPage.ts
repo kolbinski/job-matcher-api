@@ -205,30 +205,17 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   }
   const { page_text, page_url } = parsed.data;
 
-  const [user, subscription, ratesSetting] = await Promise.all([
+  const [user, ratesSetting] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { profile: true, scan_page_counter: true },
-    }),
-    prisma.subscription.findFirst({
-      where: { user_id: userId },
-      include: { plan: true },
+      select: { profile: true, scan_page_counter: true, scan_page_counter_max: true },
     }),
     prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ]);
 
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found');
 
-  const limits = subscription?.plan?.limits as {
-    max_apply_now: number | null;
-    max_level_up: number | null;
-    max_scan_page: number | null;
-  } | null;
-
-  if (
-    limits?.max_scan_page != null &&
-    user.scan_page_counter >= limits.max_scan_page
-  ) {
+  if (user.scan_page_counter_max > 0 && user.scan_page_counter >= user.scan_page_counter_max) {
     return res.status(402).json({ error: 'SCAN_LIMIT_REACHED' });
   }
 
