@@ -84,7 +84,10 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const currentPeriodStart = new Date(item0.current_period_start * 1000)
       const currentPeriodEnd = new Date(item0.current_period_end * 1000)
 
-      const proPlan = await prisma.plan.findUnique({ where: { name: 'pro' } })
+      const [proPlan, freePlan] = await Promise.all([
+        prisma.plan.findUnique({ where: { name: 'pro' } }),
+        prisma.plan.findUnique({ where: { name: 'free' } }),
+      ])
       if (!proPlan) {
         console.error('[stripe-webhook] Pro plan not found in DB')
         return res.json({ received: true })
@@ -109,9 +112,17 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         },
       })
 
+      const proLimits = proPlan.limits as { max_scan_page?: number; max_cv?: number; max_cl?: number }
+      const freeLimits = (freePlan?.limits ?? {}) as { max_scan_page?: number; max_cv?: number; max_cl?: number }
+
       await prisma.user.update({
         where: { id: userId },
-        data: { free_plan_snapshot: Prisma.JsonNull },
+        data: {
+          free_plan_snapshot: Prisma.JsonNull,
+          scan_page_counter_max: { increment: (proLimits.max_scan_page ?? 0) - (freeLimits.max_scan_page ?? 0) },
+          cv_counter_max: { increment: (proLimits.max_cv ?? 0) - (freeLimits.max_cv ?? 0) },
+          cl_counter_max: { increment: (proLimits.max_cl ?? 0) - (freeLimits.max_cl ?? 0) },
+        },
       })
 
       if (stripeCustomerId) {
