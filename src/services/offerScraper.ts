@@ -83,7 +83,9 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     required_skills: extractSkillNames(raw.requiredSkills),
     nice_to_have_skills: extractSkillNames(raw.niceToHaveSkills),
     employment_types: Array.isArray(raw.employmentTypes)
-      ? (raw.employmentTypes as EmploymentTypeEntry[]).map(e => ({ ...e, type: e.type === 'b2b' ? 'contract' : e.type, unit: (e.unit ?? 'month').toLowerCase() }))
+      ? (raw.employmentTypes as EmploymentTypeEntry[])
+          .map(e => ({ ...e, type: e.type === 'b2b' ? 'contract' : e.type, unit: (e.unit ?? 'month').toLowerCase() }))
+          .filter(e => (e.from ?? 0) > 0 && (e.to ?? 0) > 0)
       : [],
     multilocation: Array.isArray(raw.locations) ? raw.locations : null,
     city: typeof raw.city === 'string' ? raw.city : null,
