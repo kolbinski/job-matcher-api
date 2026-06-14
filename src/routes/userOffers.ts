@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateAgentJwt } from '../middleware/validateAgentJwt'
 import { validateJwt } from '../middleware/validateJwt'
@@ -205,10 +206,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     const buckets: Record<string, { status: string; count: number; offers: unknown[] }> = {}
 
     for (const bucketStatus of statuses) {
+      const bucketOfferWhere = {
+        ...(source && source !== 'all' ? { source } : {}),
+        ...(bucketStatus === 'ai_rejected' ? { employment_types: { not: [] as Prisma.InputJsonValue } } : {}),
+      }
       const bucketWhere = {
         user_id: clientId,
         status: bucketStatus,
-        ...(source && source !== 'all' ? { offer: { source } } : {}),
+        ...(Object.keys(bucketOfferWhere).length > 0 ? { offer: bucketOfferWhere } : {}),
       }
 
       const rows = await prisma.userOffer.findMany({
@@ -303,10 +308,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   }
 
   // ── Single-status path (backward compatible) ───────────────────────────────
+  const offerWhere = {
+    ...(source && source !== 'all' ? { source } : {}),
+    ...(status === 'ai_rejected' ? { employment_types: { not: [] as Prisma.InputJsonValue } } : {}),
+  }
   const where = {
     user_id: clientId,
     status,
-    ...(source && source !== 'all' ? { offer: { source } } : {}),
+    ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
   }
 
   // count_only=true without has_learning_skills_goals: pure DB count, no data transfer

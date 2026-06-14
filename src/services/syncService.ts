@@ -445,7 +445,7 @@ export async function buildAndSaveFreePlanSnapshot(
       orderBy: { claude_score: 'desc' },
     }),
     prisma.userOffer.findMany({
-      where: { user_id: userId, status: 'ai_rejected' },
+      where: { user_id: userId, status: 'ai_rejected', offer: { employment_types: { not: [] as Prisma.InputJsonValue } } },
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),

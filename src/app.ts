@@ -31,6 +31,7 @@ import { accountRouter } from './routes/account'
 import { adminRouter } from './routes/admin'
 import { stripeWebhookRouter } from './routes/stripeWebhook'
 import { scanPageRouter } from './routes/scanPage'
+import { offersRouter } from './routes/offers'
 
 export const app = express()
 
@@ -70,6 +71,7 @@ app.use('/v1/account', accountRouter)
 app.use('/v1/skills', skillsRouter)
 app.use('/v1/admin', adminRouter)
 app.use('/v1/scan-page', scanPageRouter)
+app.use('/v1/offers', offersRouter)
 // 120s timeout for onboarding PDF parse + Claude
 app.use('/v1/onboarding', (req, _res, next) => { req.setTimeout(120_000); next() })
 app.use('/v1/onboarding', onboardingRouter)
