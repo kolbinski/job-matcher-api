@@ -1,10 +1,17 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import Stripe from 'stripe'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
 import { getSupabase } from '../lib/supabase'
 import { AppError } from '../lib/errors'
-import type { Prisma } from '@prisma/client'
+import { env } from '../lib/env'
+
+let _stripe: InstanceType<typeof Stripe> | null = null
+function getStripe(): InstanceType<typeof Stripe> {
+  if (!_stripe) _stripe = new Stripe(env.STRIPE_SECRET_KEY)
+  return _stripe
+}
 
 export const accountRouter = Router()
 
@@ -12,14 +19,12 @@ const AgentBodySchema = z.object({
   client_id: z.string().uuid(),
 })
 
-const BillingDataSchema = z.object({
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  address: z.string().optional(),
+const BillingUpdateSchema = z.object({
+  name: z.string().optional(),
+  line1: z.string().optional(),
   city: z.string().optional(),
-  zip_code: z.string().optional(),
+  postal_code: z.string().optional(),
   country: z.string().optional(),
-  vat_number: z.string().optional(),
 })
 
 accountRouter.get('/billing', validateJwt, async (req, res) => {
@@ -30,10 +35,25 @@ accountRouter.get('/billing', validateJwt, async (req, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: user_id! },
-    select: { billing_data: true },
+    select: { stripe_customer_id: true },
   })
 
-  return res.json({ billing_data: user?.billing_data ?? null })
+  if (!user?.stripe_customer_id) {
+    return res.json({ billing_data: null })
+  }
+
+  const customer = await getStripe().customers.retrieve(user.stripe_customer_id)
+  if (customer.deleted) {
+    return res.json({ billing_data: null })
+  }
+
+  return res.json({
+    billing_data: {
+      name: customer.name ?? null,
+      email: customer.email ?? null,
+      address: customer.address ?? null,
+    },
+  })
 })
 
 accountRouter.patch('/billing', validateJwt, async (req, res) => {
@@ -42,18 +62,34 @@ accountRouter.patch('/billing', validateJwt, async (req, res) => {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
   }
 
-  const parsed = BillingDataSchema.safeParse(req.body)
+  const parsed = BillingUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
   }
 
-  const updated = await prisma.user.update({
+  const user = await prisma.user.findUnique({
     where: { id: user_id! },
-    data: { billing_data: parsed.data as Prisma.InputJsonValue },
-    select: { billing_data: true },
+    select: { stripe_customer_id: true },
   })
 
-  return res.json({ billing_data: updated.billing_data })
+  if (!user?.stripe_customer_id) {
+    return res.status(400).json({ error: 'NO_STRIPE_CUSTOMER' })
+  }
+
+  const { name, line1, city, postal_code, country } = parsed.data
+
+  const updated = await getStripe().customers.update(user.stripe_customer_id, {
+    ...(name !== undefined ? { name } : {}),
+    address: { line1: line1 ?? '', city: city ?? '', postal_code: postal_code ?? '', country: country ?? '' },
+  })
+
+  return res.json({
+    billing_data: {
+      name: updated.name ?? null,
+      email: updated.email ?? null,
+      address: updated.address ?? null,
+    },
+  })
 })
 
 async function findSupabaseUserId(email: string): Promise<string | null> {

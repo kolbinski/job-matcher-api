@@ -71,6 +71,8 @@ subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
     client_reference_id: userId,
     customer_email: user.email,
+    billing_address_collection: 'required',
+    customer_update: { address: 'auto', name: 'auto' },
   })
 
   return res.json({ url: session.url })
@@ -160,6 +162,8 @@ subscriptionRouter.post('/cv-package-checkout', validateJwt, async (req, res) =>
     metadata: { type: 'cv_package', user_id: userId, amount: String(amount) },
     success_url: 'https://homodigital.io?upgrade=cv_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
+    billing_address_collection: 'required',
+    customer_update: { address: 'auto', name: 'auto' },
     ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
   })
 
@@ -195,6 +199,8 @@ subscriptionRouter.post('/cl-package-checkout', validateJwt, async (req, res) =>
     metadata: { type: 'cl_package', user_id: userId, amount: String(amount) },
     success_url: 'https://homodigital.io?upgrade=cl_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
+    billing_address_collection: 'required',
+    customer_update: { address: 'auto', name: 'auto' },
     ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
   })
 
@@ -234,6 +240,8 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
     },
     success_url: 'https://homodigital.io?upgrade=scan_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
+    billing_address_collection: 'required',
+    customer_update: { address: 'auto', name: 'auto' },
     ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
   })
 
