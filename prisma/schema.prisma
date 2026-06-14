@@ -57,6 +57,7 @@ model User {
   sync_started_at                     DateTime?
   profile_editing_snapshot            Json?
   free_plan_snapshot                  Json?
+  stripe_customer_id                  String?
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

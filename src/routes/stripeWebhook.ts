@@ -36,6 +36,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       }
       const userId = obj.client_reference_id
       const stripeSubscriptionId = obj.subscription
+      const stripeCustomerId = (obj as any).customer as string | null
 
       console.log('[stripe-webhook] checkout.session.completed fields:', { client_reference_id: userId, subscription: stripeSubscriptionId })
 
@@ -86,6 +87,13 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         where: { id: userId },
         data: { free_plan_snapshot: Prisma.JsonNull },
       })
+
+      if (stripeCustomerId) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { stripe_customer_id: stripeCustomerId },
+        })
+      }
 
       console.log(`[stripe-webhook] Upgraded user ${userId} to Pro plan`)
       console.log('[stripe-webhook] upsert result:', JSON.stringify(upsertResult))
