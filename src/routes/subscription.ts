@@ -51,15 +51,13 @@ subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
   }
   const userId = user_id!
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true },
-  })
+  const [user, proPlan] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true, stripe_customer_id: true } }),
+    prisma.plan.findUnique({ where: { name: 'pro' } }),
+  ])
   if (!user) {
     return res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' })
   }
-
-  const proPlan = await prisma.plan.findUnique({ where: { name: 'pro' } })
   if (!proPlan?.stripe_price_id) {
     return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Pro plan not configured with a Stripe price' })
   }
@@ -70,9 +68,10 @@ subscriptionRouter.post('/checkout', validateJwt, async (req, res) => {
     success_url: 'https://homodigital.io?upgrade=success',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
     client_reference_id: userId,
-    customer_email: user.email,
     billing_address_collection: 'required',
-    customer_update: { address: 'auto', name: 'auto' },
+    ...(user.stripe_customer_id
+      ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
+      : { customer_email: user.email }),
   })
 
   return res.json({ url: session.url })
@@ -163,8 +162,9 @@ subscriptionRouter.post('/cv-package-checkout', validateJwt, async (req, res) =>
     success_url: 'https://homodigital.io?upgrade=cv_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
     billing_address_collection: 'required',
-    customer_update: { address: 'auto', name: 'auto' },
-    ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
+    ...(user?.stripe_customer_id
+      ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
+      : {}),
   })
 
   return res.json({ url: session.url })
@@ -200,8 +200,9 @@ subscriptionRouter.post('/cl-package-checkout', validateJwt, async (req, res) =>
     success_url: 'https://homodigital.io?upgrade=cl_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
     billing_address_collection: 'required',
-    customer_update: { address: 'auto', name: 'auto' },
-    ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
+    ...(user?.stripe_customer_id
+      ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
+      : {}),
   })
 
   return res.json({ url: session.url })
@@ -241,8 +242,9 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
     success_url: 'https://homodigital.io?upgrade=scan_package',
     cancel_url: 'https://homodigital.io?upgrade=cancelled',
     billing_address_collection: 'required',
-    customer_update: { address: 'auto', name: 'auto' },
-    ...(user?.stripe_customer_id ? { customer: user.stripe_customer_id } : {}),
+    ...(user?.stripe_customer_id
+      ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
+      : {}),
   })
 
   return res.json({ url: session.url })
