@@ -166,7 +166,7 @@ subscriptionRouter.post('/cv-package-checkout', validateJwt, async (req, res) =>
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : { customer_email: user?.email }),
+      : { customer_email: user?.email, customer_creation: 'always' }),
   })
 
   return res.json({ url: session.url })
@@ -205,7 +205,7 @@ subscriptionRouter.post('/cl-package-checkout', validateJwt, async (req, res) =>
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : { customer_email: user?.email }),
+      : { customer_email: user?.email, customer_creation: 'always' }),
   })
 
   return res.json({ url: session.url })
@@ -248,7 +248,7 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
     tax_id_collection: { enabled: true },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
-      : { customer_email: user?.email }),
+      : { customer_email: user?.email, customer_creation: 'always' }),
   })
 
   return res.json({ url: session.url })
