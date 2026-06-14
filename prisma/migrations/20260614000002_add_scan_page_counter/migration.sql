@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "scan_page_counter" INTEGER NOT NULL DEFAULT 0;

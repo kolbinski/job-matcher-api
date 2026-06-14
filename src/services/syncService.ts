@@ -461,7 +461,7 @@ export async function buildAndSaveFreePlanSnapshot(
 
   const snapshot = {
     created_at: new Date().toISOString(),
-    count: totalCount,
+    count: applyNowOffers.length + levelUpOffers.length,
     apply_now: {
       count: allApplyNow.length,
       status: 'pending_apply',

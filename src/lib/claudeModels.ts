@@ -5,6 +5,7 @@ const DEFAULTS = {
   review_profile:   'claude-sonnet-4-6',
   cv_cl_generation: 'claude-sonnet-4-6',
   matching:         'claude-sonnet-4-6',
+  scan_page_model:  'claude-sonnet-4-6',
 } as const
 
 type ClaudeModelKey = keyof typeof DEFAULTS
