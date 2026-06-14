@@ -419,7 +419,7 @@ function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Reco
   }
 }
 
-async function buildAndSaveFreePlanSnapshot(
+export async function buildAndSaveFreePlanSnapshot(
   userId: string,
   salaryPrefs: SalaryPref[],
   exchangeRates: Record<string, number>,
