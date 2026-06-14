@@ -16,6 +16,7 @@ const anthropic = new Anthropic()
 
 const BodySchema = z.object({
   page_text: z.string().min(1),
+  page_url: z.string().url().optional(),
 })
 
 const PARSE_SYSTEM_PROMPT = 'You are a job offer parser. Extract structured data from the provided page text. If the page is not a job offer, set is_job_offer to false and all other fields to null/empty.'
@@ -81,7 +82,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   if (!parsed.success) {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
   }
-  const { page_text } = parsed.data
+  const { page_text, page_url } = parsed.data
 
   // Limit check
   const [user, subscription] = await Promise.all([
@@ -137,10 +138,10 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   // Upsert offer into offers table
   const title = parsedOffer.title ?? 'Unknown Title'
   const companyName = parsedOffer.company ?? 'Unknown Company'
-  const offerUrl = parsedOffer.url ?? null
+  const offerUrl = page_url ?? parsedOffer.url ?? null
 
-  const slug = offerUrl
-    ? `manual-${slugify(offerUrl, { lower: true, strict: true }).slice(0, 180)}`
+  const slug = page_url
+    ? `manual-${slugify(page_url, { lower: true, strict: true }).slice(0, 180)}`
     : `manual-${randomUUID()}`
 
   const employmentTypes = parsedOffer.salary
