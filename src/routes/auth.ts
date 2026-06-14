@@ -91,6 +91,15 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       },
       update: {},
     })
+
+    const limits = freePlan.limits as { max_cv?: number; max_cl?: number }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        cv_counter_max: limits.max_cv ?? 0,
+        cl_counter_max: limits.max_cl ?? 0,
+      },
+    })
   }
 
   const jmToken = jwt.sign(
