@@ -9,6 +9,7 @@ import { getClaudeModel } from '../lib/claudeModels'
 import { CandidateProfileSchema } from '../types/profile'
 import { evaluateOffers } from '../services/claudeEvaluator'
 import { AppError } from '../lib/errors'
+import { type SalaryPref } from '../services/syncReport'
 
 export const scanPageRouter = Router()
 
@@ -27,10 +28,10 @@ const PARSE_TOOL: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     properties: {
-      is_job_offer:       { type: 'boolean' },
-      title:              { type: ['string', 'null'] },
-      company:            { type: ['string', 'null'] },
-      url:                { type: ['string', 'null'] },
+      is_job_offer:        { type: 'boolean' },
+      title:               { type: ['string', 'null'] },
+      company:             { type: ['string', 'null'] },
+      url:                 { type: ['string', 'null'] },
       salary: {
         oneOf: [
           {
@@ -46,12 +47,12 @@ const PARSE_TOOL: Anthropic.Tool = {
           { type: 'null' },
         ],
       },
-      required_skills:    { type: 'array', items: { type: 'string' } },
+      required_skills:     { type: 'array', items: { type: 'string' } },
       nice_to_have_skills: { type: 'array', items: { type: 'string' } },
-      workplace_type:     { type: ['string', 'null'], enum: ['remote', 'hybrid', 'office', null] },
-      city:               { type: ['string', 'null'] },
-      employment_type:    { type: ['string', 'null'] },
-      description:        { type: ['string', 'null'] },
+      workplace_type:      { type: ['string', 'null'], enum: ['remote', 'hybrid', 'office', null] },
+      city:                { type: ['string', 'null'] },
+      employment_type:     { type: ['string', 'null'] },
+      description:         { type: ['string', 'null'] },
     },
     required: ['is_job_offer'],
   },
@@ -71,6 +72,32 @@ interface ParsedOffer {
   description: string | null
 }
 
+function buildSalaryEntries(
+  employmentTypes: unknown,
+  salaryPrefs: SalaryPref[],
+  rates: Record<string, number>,
+): Array<{ min: number; max: number; currency: string; type: string; delta: number; delta_normalized: number }> {
+  if (salaryPrefs.length === 0) return []
+  const types = Array.isArray(employmentTypes)
+    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
+    : []
+  const entries: ReturnType<typeof buildSalaryEntries> = []
+  for (const et of types) {
+    const { from, to, currency, type: etType, unit } = et
+    if (from == null || to == null || !currency || !etType) continue
+    const pref = salaryPrefs.find(
+      p => p.type.toLowerCase() === etType.toLowerCase() &&
+           p.currency.toUpperCase() === currency.toUpperCase()
+    )
+    if (!pref) continue
+    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
+    const delta = effectiveTo - pref.min
+    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
+    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
+  }
+  return entries
+}
+
 scanPageRouter.post('/', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!
   if (role !== 'client') {
@@ -84,8 +111,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   }
   const { page_text, page_url } = parsed.data
 
-  // Limit check
-  const [user, subscription] = await Promise.all([
+  const [user, subscription, ratesSetting] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { profile: true, scan_page_counter: true },
@@ -94,6 +120,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       where: { user_id: userId },
       include: { plan: true },
     }),
+    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ])
 
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
@@ -105,6 +132,11 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   if (limits?.max_scan_page != null && user.scan_page_counter >= limits.max_scan_page) {
     return res.status(402).json({ error: 'SCAN_LIMIT_REACHED' })
   }
+
+  let exchangeRates: Record<string, number> = {}
+  try {
+    if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
+  } catch { /* rates stay empty */ }
 
   const model = await getClaudeModel('scan_page_model')
 
@@ -134,6 +166,13 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   if (!profileParsed.success) {
     throw new AppError(422, 'INVALID_PROFILE', 'No valid profile configured for matching')
   }
+
+  const rawProfile = user.profile as unknown as {
+    preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
+  }
+  const salaryPrefs: SalaryPref[] = (rawProfile.preferences?.salary ?? []).filter(
+    (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
+  )
 
   // Upsert offer into offers table
   const title = parsedOffer.title ?? 'Unknown Title'
@@ -218,22 +257,25 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   return res.json({
     is_job_offer: true,
     user_offer: {
-      id: userOffer.id,
-      offer_id: offer.id,
+      user_offer_id: userOffer.id,
+      offer_title: offer.title,
+      offer_company: offer.company_name,
+      offer_url: offer.url,
       claude_score: evaluation.score,
       claude_role_fit: evaluation.role_fit,
       claude_matched_reasons: evaluation.matched_reasons,
       claude_missing_skills: evaluation.missing_skills,
       claude_recommended: evaluation.recommended,
-      offer: {
-        title: offer.title,
-        company: offer.company_name,
-        url: offer.url,
-        salary: parsedOffer.salary,
-        required_skills: offer.required_skills,
-        workplace_type: offer.workplace_type,
-        city: offer.city,
-      },
+      required_skills: offer.required_skills,
+      nice_to_have_skills: offer.nice_to_have_skills,
+      salary: buildSalaryEntries(offer.employment_types, salaryPrefs, exchangeRates),
+      source: offer.source,
+      city: offer.city ?? null,
+      work_model: offer.workplace_type ?? null,
+      cv_status: userOffer.cv_status ?? null,
+      cv_url: userOffer.cv_url ?? null,
+      cl_status: userOffer.cl_status ?? null,
+      cl_url: userOffer.cl_url ?? null,
     },
   })
 })
