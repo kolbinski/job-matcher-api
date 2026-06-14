@@ -40,6 +40,8 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         metadata: Record<string, string> | null
         customer?: string | null
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log('[stripe-webhook] customer field raw:', (event.data.object as any).customer)
       const stripeCustomerId = obj.customer ?? null
       const sessionType = obj.metadata?.['type'] ?? null
 
