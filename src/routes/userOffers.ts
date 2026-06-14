@@ -1,12 +1,12 @@
-import { Router } from 'express'
-import { z } from 'zod'
-import { Prisma } from '@prisma/client'
-import { prisma } from '../lib/prisma'
-import { validateAgentJwt } from '../middleware/validateAgentJwt'
-import { validateJwt } from '../middleware/validateJwt'
-import { dedupKey } from '../utils/deduplicateOffers'
+import { Router } from 'express';
+import { z } from 'zod';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { validateAgentJwt } from '../middleware/validateAgentJwt';
+import { validateJwt } from '../middleware/validateJwt';
+import { dedupKey } from '../utils/deduplicateOffers';
 
-export const userOffersRouter = Router()
+export const userOffersRouter = Router();
 
 const QuerySchema = z.object({
   client_id: z.string().min(1).optional(),
@@ -16,88 +16,117 @@ const QuerySchema = z.object({
   source: z.string().optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
-})
+});
 
 interface SalaryPref {
-  type: string
-  currency: string
-  min: number
+  type: string;
+  currency: string;
+  min: number;
 }
 
 interface SalaryEntry {
-  min: number
-  max: number
-  currency: string
-  type: string
-  delta: number
-  delta_normalized: number
+  min: number;
+  max: number;
+  currency: string;
+  type: string;
+  delta: number;
+  delta_normalized: number;
 }
 
 interface ClientProfile {
-  learningGoals: string[]
-  salaryPrefs: SalaryPref[]
+  learningGoals: string[];
+  salaryPrefs: SalaryPref[];
 }
 
 async function loadClientProfile(clientId: string): Promise<ClientProfile> {
   const user = await prisma.user.findUnique({
     where: { id: clientId },
     select: { profile: true },
-  })
-  if (!user?.profile) return { learningGoals: [], salaryPrefs: [] }
+  });
+  if (!user?.profile) return { learningGoals: [], salaryPrefs: [] };
   try {
     const raw = user.profile as {
       preferences?: {
-        learning_skills_goals?: string[]
-        salary?: Array<{ type?: string; currency?: string; min?: number }>
-      }
-    }
+        learning_skills_goals?: string[];
+        salary?: Array<{ type?: string; currency?: string; min?: number }>;
+      };
+    };
     return {
-      learningGoals: (raw.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase()),
-      salaryPrefs: (raw.preferences?.salary ?? [])
-        .filter((p): p is SalaryPref => p.type != null && p.currency != null && p.min != null),
-    }
+      learningGoals: (raw.preferences?.learning_skills_goals ?? []).map(g =>
+        g.toLowerCase(),
+      ),
+      salaryPrefs: (raw.preferences?.salary ?? []).filter(
+        (p): p is SalaryPref =>
+          p.type != null && p.currency != null && p.min != null,
+      ),
+    };
   } catch {
-    return { learningGoals: [], salaryPrefs: [] }
+    return { learningGoals: [], salaryPrefs: [] };
   }
 }
 
 async function loadExchangeRates(): Promise<Record<string, number>> {
-  const setting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
-  if (!setting) return {}
+  const setting = await prisma.settings.findUnique({
+    where: { key: 'exchange_rates' },
+  });
+  if (!setting) return {};
   try {
-    return JSON.parse(setting.value) as Record<string, number>
+    return JSON.parse(setting.value) as Record<string, number>;
   } catch {
-    return {}
+    return {};
   }
 }
 
 function hasSalaryData(types: unknown): boolean {
-  if (!Array.isArray(types) || types.length === 0) return false
+  if (!Array.isArray(types) || types.length === 0) return false;
   return (types as Array<{ from?: number | null; to?: number | null }>).some(
-    et => (typeof et.from === 'number' && et.from > 0) || (typeof et.to === 'number' && et.to > 0),
-  )
+    et =>
+      (typeof et.from === 'number' && et.from > 0) ||
+      (typeof et.to === 'number' && et.to > 0),
+  );
 }
 
-function buildSalaryEntries(employmentTypes: unknown, salaryPrefs: SalaryPref[], rates: Record<string, number>): SalaryEntry[] {
-  if (salaryPrefs.length === 0) return []
+function buildSalaryEntries(
+  employmentTypes: unknown,
+  salaryPrefs: SalaryPref[],
+  rates: Record<string, number>,
+): SalaryEntry[] {
+  if (salaryPrefs.length === 0) return [];
   const types = Array.isArray(employmentTypes)
-    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
-    : []
-  const entries: SalaryEntry[] = []
+    ? (employmentTypes as Array<{
+        from?: number;
+        to?: number;
+        currency?: string;
+        type?: string;
+        unit?: string;
+      }>)
+    : [];
+  const entries: SalaryEntry[] = [];
   for (const et of types) {
-    const { from, to, currency, type: etType, unit } = et
-    if (from == null || to == null || !currency || !etType) continue
+    const { from, to, currency, type: etType, unit } = et;
+    if (from == null || to == null || !currency || !etType) continue;
     const pref = salaryPrefs.find(
-      p => p.type.toLowerCase() === etType.toLowerCase() &&
-           p.currency.toUpperCase() === currency.toUpperCase()
-    )
-    if (!pref) continue
-    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
-    const delta = effectiveTo - pref.min
-    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
-    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
+      p =>
+        p.type.toLowerCase() === etType.toLowerCase() &&
+        p.currency.toUpperCase() === currency.toUpperCase(),
+    );
+    if (!pref) continue;
+    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to;
+    const delta = effectiveTo - pref.min;
+    const rate =
+      currency.toUpperCase() === 'PLN'
+        ? 1
+        : (rates[currency.toUpperCase()] ?? 1);
+    entries.push({
+      min: from,
+      max: to,
+      currency,
+      type: etType,
+      delta,
+      delta_normalized: Math.round(delta * rate),
+    });
   }
-  return entries
+  return entries;
 }
 
 const StatusBodySchema = z.object({
@@ -109,30 +138,44 @@ const StatusBodySchema = z.object({
     'accepted',
     'client_withdrawn',
   ]),
-})
+});
 
 userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
-  const { role, user_id } = req.jwt!
+  const { role, user_id } = req.jwt!;
   if (role !== 'client') {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'Only clients can use this endpoint',
+    });
   }
 
-  const url = req.query['url'] as string | undefined
+  const url = req.query['url'] as string | undefined;
   if (!url) {
-    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: url' })
+    return res.status(422).json({
+      error: 'INVALID_REQUEST',
+      message: 'Missing required query param: url',
+    });
   }
 
-  const offer = await prisma.offer.findFirst({ where: { url } })
-  if (!offer) return res.json({ user_offer: null })
+  const offer = await prisma.offer.findFirst({ where: { url } });
+  if (!offer) return res.json({ user_offer: null });
 
   const uo = await prisma.userOffer.findFirst({
     where: { offer_id: offer.id, user_id: user_id! },
     include: {
       offer: {
         select: {
-          title: true, company_name: true, url: true, employment_types: true,
-          source: true, city: true, workplace_type: true, experience_level: true,
-          working_time: true, required_skills: true, nice_to_have_skills: true,
+          title: true,
+          company_name: true,
+          url: true,
+          employment_types: true,
+          source: true,
+          city: true,
+          workplace_type: true,
+          experience_level: true,
+          working_time: true,
+          required_skills: true,
+          nice_to_have_skills: true,
         },
       },
       status_history: {
@@ -141,10 +184,8 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
         take: 1,
       },
     },
-  })
-  if (!uo) return res.json({ user_offer: null })
-
-  const [{ salaryPrefs }, rates] = await Promise.all([loadClientProfile(user_id!), loadExchangeRates()])
+  });
+  if (!uo) return res.json({ user_offer: null });
 
   return res.json({
     user_offer: {
@@ -161,7 +202,20 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
       applied_at: uo.status_history[0]?.created_at ?? null,
-      salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+      salary: Array.isArray(uo.offer.employment_types)
+        ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(
+            et => ({
+              min: typeof et['from'] === 'number' ? et['from'] : 0,
+              max: typeof et['to'] === 'number' ? et['to'] : 0,
+              currency:
+                typeof et['currency'] === 'string' ? et['currency'] : 'PLN',
+              type: typeof et['type'] === 'string' ? et['type'] : 'permanent',
+              unit: typeof et['unit'] === 'string' ? et['unit'] : 'month',
+              delta: 0,
+              delta_normalized: 0,
+            }),
+          )
+        : [],
       source: uo.offer.source,
       city: uo.offer.city ?? null,
       work_model: uo.offer.workplace_type ?? null,
@@ -174,120 +228,169 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       cl_url: uo.cl_url ?? null,
       status: uo.status,
     },
-  })
-})
+  });
+});
 
 userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
-  const { id } = req.params as { id: string }
-  const parsed = StatusBodySchema.safeParse(req.body)
+  const { id } = req.params as { id: string };
+  const parsed = StatusBodySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid status value' })
+    return res
+      .status(422)
+      .json({ error: 'INVALID_REQUEST', message: 'Invalid status value' });
   }
 
-  const agentId = req.agent!.id
+  const agentId = req.agent!.id;
 
   const userOffer = await prisma.userOffer.findUnique({
     where: { id },
     select: { id: true, user_id: true },
-  })
+  });
   if (!userOffer) {
-    return res.status(404).json({ error: 'NOT_FOUND', message: 'User offer not found' })
+    return res
+      .status(404)
+      .json({ error: 'NOT_FOUND', message: 'User offer not found' });
   }
 
   const agentClient = await prisma.agentClient.findUnique({
-    where: { agent_id_user_id: { agent_id: agentId, user_id: userOffer.user_id } },
-  })
+    where: {
+      agent_id_user_id: { agent_id: agentId, user_id: userOffer.user_id },
+    },
+  });
   if (!agentClient) {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer does not belong to your client' })
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'User offer does not belong to your client',
+    });
   }
 
   const updated = await prisma.userOffer.update({
     where: { id },
     data: { status: parsed.data.status },
-  })
+  });
 
   await prisma.userOfferStatus.create({
     data: { user_offer_id: id, status: parsed.data.status },
-  })
+  });
 
-  return res.json(updated)
-})
+  return res.json(updated);
+});
 
 userOffersRouter.get('/', validateJwt, async (req, res) => {
-  const parsed = QuerySchema.safeParse(req.query)
+  const parsed = QuerySchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(422).json({
       error: 'INVALID_REQUEST',
       message: 'Missing required query param: status',
       issues: parsed.error.issues,
-    })
+    });
   }
 
-  const { status, has_learning_skills_goals, count_only, source, date_from, date_to } = parsed.data
-  const { role, agent_id, user_id } = req.jwt!
+  const {
+    status,
+    has_learning_skills_goals,
+    count_only,
+    source,
+    date_from,
+    date_to,
+  } = parsed.data;
+  const { role, agent_id, user_id } = req.jwt!;
 
-  let clientId: string
+  let clientId: string;
 
   if (role === 'client') {
-    clientId = user_id!
+    clientId = user_id!;
   } else {
     if (!parsed.data.client_id) {
-      return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: client_id' })
+      return res.status(422).json({
+        error: 'INVALID_REQUEST',
+        message: 'Missing required query param: client_id',
+      });
     }
-    clientId = parsed.data.client_id
+    clientId = parsed.data.client_id;
 
     const agentClient = await prisma.agentClient.findUnique({
       where: { agent_id_user_id: { agent_id: agent_id!, user_id: clientId } },
-    })
+    });
     if (!agentClient) {
-      return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Client not linked to this agent',
+      });
     }
   }
 
-  const statuses = status.split('|').map(s => s.trim()).filter(Boolean)
+  const statuses = status
+    .split('|')
+    .map(s => s.trim())
+    .filter(Boolean);
 
   // ── Multi-status path ──────────────────────────────────────────────────────
   if (statuses.length > 1) {
-    const [{ learningGoals, salaryPrefs }, rates, subscription] = await Promise.all([
-      loadClientProfile(clientId),
-      loadExchangeRates(),
-      role === 'client'
-        ? prisma.subscription.findUnique({ where: { user_id: clientId }, include: { plan: true } })
-        : Promise.resolve(null),
-    ])
-    const effectivePlan = subscription?.plan ?? (role === 'client' ? await prisma.plan.findUnique({ where: { name: 'free' } }) : null)
-    const limits = effectivePlan?.limits as
-      | { max_apply_now: number | null; max_level_up: number | null }
-      | null
+    const [{ learningGoals, salaryPrefs }, rates, subscription] =
+      await Promise.all([
+        loadClientProfile(clientId),
+        loadExchangeRates(),
+        role === 'client'
+          ? prisma.subscription.findUnique({
+              where: { user_id: clientId },
+              include: { plan: true },
+            })
+          : Promise.resolve(null),
+      ]);
+    const effectivePlan =
+      subscription?.plan ??
+      (role === 'client'
+        ? await prisma.plan.findUnique({ where: { name: 'free' } })
+        : null);
+    const limits = effectivePlan?.limits as {
+      max_apply_now: number | null;
+      max_level_up: number | null;
+    } | null;
 
     if (role === 'client' && effectivePlan?.name === 'free') {
       const userWithSnapshot = await prisma.user.findUnique({
         where: { id: clientId },
         select: { free_plan_snapshot: true },
-      })
+      });
       if (userWithSnapshot?.free_plan_snapshot != null) {
-        return res.json(userWithSnapshot.free_plan_snapshot)
+        return res.json(userWithSnapshot.free_plan_snapshot);
       }
     }
 
     const offerSelect = {
-      title: true, company_name: true, url: true, employment_types: true,
-      source: true, city: true, workplace_type: true, experience_level: true,
-      working_time: true, required_skills: true, nice_to_have_skills: true,
-    } as const
+      title: true,
+      company_name: true,
+      url: true,
+      employment_types: true,
+      source: true,
+      city: true,
+      workplace_type: true,
+      experience_level: true,
+      working_time: true,
+      required_skills: true,
+      nice_to_have_skills: true,
+    } as const;
 
-    const buckets: Record<string, { status: string; count: number; offers: unknown[] }> = {}
+    const buckets: Record<
+      string,
+      { status: string; count: number; offers: unknown[] }
+    > = {};
 
     for (const bucketStatus of statuses) {
       const bucketOfferWhere = {
         ...(source && source !== 'all' ? { source } : {}),
-        ...(bucketStatus === 'ai_rejected' ? { employment_types: { not: [] as Prisma.InputJsonValue } } : {}),
-      }
+        ...(bucketStatus === 'ai_rejected'
+          ? { employment_types: { not: [] as Prisma.InputJsonValue } }
+          : {}),
+      };
       const bucketWhere = {
         user_id: clientId,
         status: bucketStatus,
-        ...(Object.keys(bucketOfferWhere).length > 0 ? { offer: bucketOfferWhere } : {}),
-      }
+        ...(Object.keys(bucketOfferWhere).length > 0
+          ? { offer: bucketOfferWhere }
+          : {}),
+      };
 
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
@@ -300,33 +403,38 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           },
         },
         orderBy: { updated_at: 'desc' },
-      })
+      });
 
       // Dedup
-      const seen = new Map<string, typeof rows[number]>()
+      const seen = new Map<string, (typeof rows)[number]>();
       for (const uo of rows) {
-        const key = dedupKey(uo.offer)
-        const prev = seen.get(key)
+        const key = dedupKey(uo.offer);
+        const prev = seen.get(key);
         if (!prev) {
-          seen.set(key, uo)
+          seen.set(key, uo);
         } else {
-          const prevScore = prev.claude_score ?? -1
-          const newScore = uo.claude_score ?? -1
-          if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
-            seen.set(key, uo)
+          const prevScore = prev.claude_score ?? -1;
+          const newScore = uo.claude_score ?? -1;
+          if (
+            newScore > prevScore ||
+            (newScore === prevScore && uo.matched_at > prev.matched_at)
+          ) {
+            seen.set(key, uo);
           }
         }
       }
 
-      let result = [...seen.values()]
+      let result = [...seen.values()];
 
       // Auto-apply filters for ai_rejected bucket
       if (bucketStatus === 'ai_rejected') {
-        result = result.filter(uo => hasSalaryData(uo.offer.employment_types))
+        result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
         if (learningGoals.length > 0) {
           result = result.filter(uo =>
-            uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
-          )
+            uo.claude_missing_skills.some(sk =>
+              learningGoals.includes(sk.toLowerCase()),
+            ),
+          );
         }
       }
 
@@ -344,7 +452,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         rejection_reason: uo.rejection_reason,
         matched_at: uo.matched_at,
         applied_at: uo.status_history[0]?.created_at ?? null,
-        salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+        salary: buildSalaryEntries(
+          uo.offer.employment_types,
+          salaryPrefs,
+          rates,
+        ),
         source: uo.offer.source,
         city: uo.offer.city ?? null,
         work_model: uo.offer.workplace_type ?? null,
@@ -355,70 +467,105 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         cv_url: uo.cv_url ?? null,
         cl_status: uo.cl_status ?? null,
         cl_url: uo.cl_url ?? null,
-      }))
+      }));
 
-      const count = mapped.length
-      let offers: typeof mapped = mapped
+      const count = mapped.length;
+      let offers: typeof mapped = mapped;
 
       if (role === 'client' && limits != null) {
-        const bestDelta = (o: typeof mapped[number]) =>
-          Math.max(-Infinity, ...o.salary.map(s => s.delta))
-        const byScoreAndDelta = (a: typeof mapped[number], b: typeof mapped[number]) =>
-          (b.claude_score ?? 0) - (a.claude_score ?? 0) || bestDelta(b) - bestDelta(a)
+        const bestDelta = (o: (typeof mapped)[number]) =>
+          Math.max(-Infinity, ...o.salary.map(s => s.delta));
+        const byScoreAndDelta = (
+          a: (typeof mapped)[number],
+          b: (typeof mapped)[number],
+        ) =>
+          (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
+          bestDelta(b) - bestDelta(a);
 
         if (bucketStatus === 'pending_apply' && limits.max_apply_now != null) {
-          offers = [...mapped].sort(byScoreAndDelta).slice(0, limits.max_apply_now)
-        } else if (bucketStatus === 'ai_rejected' && limits.max_level_up != null) {
-          offers = [...mapped].sort(byScoreAndDelta).slice(0, limits.max_level_up)
+          offers = [...mapped]
+            .sort(byScoreAndDelta)
+            .slice(0, limits.max_apply_now);
+        } else if (
+          bucketStatus === 'ai_rejected' &&
+          limits.max_level_up != null
+        ) {
+          offers = [...mapped]
+            .sort(byScoreAndDelta)
+            .slice(0, limits.max_level_up);
         }
       }
 
-      buckets[bucketStatus] = { status: bucketStatus, count, offers }
+      buckets[bucketStatus] = { status: bucketStatus, count, offers };
     }
 
-    const totalCount = Object.values(buckets).reduce((sum, b) => sum + b.count, 0)
-    return res.json({ count: totalCount, ...buckets })
+    const totalCount = Object.values(buckets).reduce(
+      (sum, b) => sum + b.count,
+      0,
+    );
+    return res.json({ count: totalCount, ...buckets });
   }
 
   // ── Single-status path (backward compatible) ───────────────────────────────
   const offerWhere = {
     ...(source && source !== 'all' ? { source } : {}),
-    ...(status === 'ai_rejected' ? { employment_types: { not: [] as Prisma.InputJsonValue } } : {}),
-  }
+    ...(status === 'ai_rejected'
+      ? { employment_types: { not: [] as Prisma.InputJsonValue } }
+      : {}),
+  };
   const where = {
     user_id: clientId,
     status,
     ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
-  }
+  };
 
   // count_only for ai_rejected: must filter in memory to check real salary data
   if (count_only === 'true' && status === 'ai_rejected') {
     const rows = await prisma.userOffer.findMany({
       where,
-      select: { claude_missing_skills: true, offer: { select: { employment_types: true } } },
-    })
-    let filtered = rows.filter(uo => hasSalaryData(uo.offer.employment_types))
+      select: {
+        claude_missing_skills: true,
+        offer: { select: { employment_types: true } },
+      },
+    });
+    let filtered = rows.filter(uo => hasSalaryData(uo.offer.employment_types));
     if (has_learning_skills_goals === 'true') {
-      const { learningGoals } = await loadClientProfile(clientId)
+      const { learningGoals } = await loadClientProfile(clientId);
       if (learningGoals.length > 0) {
         filtered = filtered.filter(uo =>
-          uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
-        )
+          uo.claude_missing_skills.some(sk =>
+            learningGoals.includes(sk.toLowerCase()),
+          ),
+        );
       }
     }
-    return res.json({ count: filtered.length })
+    return res.json({ count: filtered.length });
   }
 
   // count_only=true for non-ai_rejected statuses: pure DB count, no data transfer
   if (count_only === 'true') {
-    const count = await prisma.userOffer.count({ where })
-    return res.json({ count })
+    const count = await prisma.userOffer.count({ where });
+    return res.json({ count });
   }
 
   const userOffers = await prisma.userOffer.findMany({
     where,
     include: {
-      offer: { select: { title: true, company_name: true, url: true, employment_types: true, source: true, city: true, workplace_type: true, experience_level: true, working_time: true, required_skills: true, nice_to_have_skills: true } },
+      offer: {
+        select: {
+          title: true,
+          company_name: true,
+          url: true,
+          employment_types: true,
+          source: true,
+          city: true,
+          workplace_type: true,
+          experience_level: true,
+          working_time: true,
+          required_skills: true,
+          nice_to_have_skills: true,
+        },
+      },
       status_history: {
         where: { status: 'applied' },
         orderBy: { created_at: 'desc' },
@@ -426,37 +573,42 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       },
     },
     orderBy: { updated_at: 'desc' },
-  })
+  });
 
   const [{ learningGoals, salaryPrefs }, rates] = await Promise.all([
     loadClientProfile(clientId),
     loadExchangeRates(),
-  ])
+  ]);
 
   // Dedup: one row per unique offer fingerprint; prefer highest claude_score, then most recent matched_at
-  const seen = new Map<string, typeof userOffers[number]>()
+  const seen = new Map<string, (typeof userOffers)[number]>();
   for (const uo of userOffers) {
-    const key = dedupKey(uo.offer)
-    const prev = seen.get(key)
+    const key = dedupKey(uo.offer);
+    const prev = seen.get(key);
     if (!prev) {
-      seen.set(key, uo)
+      seen.set(key, uo);
     } else {
-      const prevScore = prev.claude_score ?? -1
-      const newScore = uo.claude_score ?? -1
-      if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
-        seen.set(key, uo)
+      const prevScore = prev.claude_score ?? -1;
+      const newScore = uo.claude_score ?? -1;
+      if (
+        newScore > prevScore ||
+        (newScore === prevScore && uo.matched_at > prev.matched_at)
+      ) {
+        seen.set(key, uo);
       }
     }
   }
 
-  let result = [...seen.values()]
+  let result = [...seen.values()];
 
   if (status === 'ai_rejected') {
-    result = result.filter(uo => hasSalaryData(uo.offer.employment_types))
+    result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
     if (has_learning_skills_goals === 'true' && learningGoals.length > 0) {
       result = result.filter(uo =>
-        uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))
-      )
+        uo.claude_missing_skills.some(sk =>
+          learningGoals.includes(sk.toLowerCase()),
+        ),
+      );
     }
   }
 
@@ -485,50 +637,78 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     cv_url: uo.cv_url ?? null,
     cl_status: uo.cl_status ?? null,
     cl_url: uo.cl_url ?? null,
-  }))
+  }));
 
-  const apply_now_count = mapped.filter(o => o.claude_recommended === true).length
-  const level_up_count = mapped.filter(o => o.claude_recommended === false).length
+  const apply_now_count = mapped.filter(
+    o => o.claude_recommended === true,
+  ).length;
+  const level_up_count = mapped.filter(
+    o => o.claude_recommended === false,
+  ).length;
 
-  let filtered = mapped
+  let filtered = mapped;
 
   // Apply plan limits for pending_apply (client only; agent sees all)
   if (role === 'client' && status === 'pending_apply') {
     const subscription = await prisma.subscription.findUnique({
       where: { user_id: clientId },
       include: { plan: true },
-    })
-    const effectivePlan = subscription?.plan ?? await prisma.plan.findUnique({ where: { name: 'free' } })
-    const limits = effectivePlan?.limits as
-      | { max_apply_now: number | null; max_level_up: number | null }
-      | null
+    });
+    const effectivePlan =
+      subscription?.plan ??
+      (await prisma.plan.findUnique({ where: { name: 'free' } }));
+    const limits = effectivePlan?.limits as {
+      max_apply_now: number | null;
+      max_level_up: number | null;
+    } | null;
 
-    if (limits != null && (limits.max_apply_now !== null || limits.max_level_up !== null)) {
-      const bestDelta = (o: typeof mapped[number]) =>
-        Math.max(-Infinity, ...o.salary.map(s => s.delta))
-      const byScoreAndDelta = (a: typeof mapped[number], b: typeof mapped[number]) =>
-        (b.claude_score ?? 0) - (a.claude_score ?? 0) || bestDelta(b) - bestDelta(a)
+    if (
+      limits != null &&
+      (limits.max_apply_now !== null || limits.max_level_up !== null)
+    ) {
+      const bestDelta = (o: (typeof mapped)[number]) =>
+        Math.max(-Infinity, ...o.salary.map(s => s.delta));
+      const byScoreAndDelta = (
+        a: (typeof mapped)[number],
+        b: (typeof mapped)[number],
+      ) =>
+        (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
+        bestDelta(b) - bestDelta(a);
 
-      const applyNow = filtered.filter(o => o.claude_recommended === true).sort(byScoreAndDelta)
-      const levelUp = filtered.filter(o => o.claude_recommended === false).sort(byScoreAndDelta)
+      const applyNow = filtered
+        .filter(o => o.claude_recommended === true)
+        .sort(byScoreAndDelta);
+      const levelUp = filtered
+        .filter(o => o.claude_recommended === false)
+        .sort(byScoreAndDelta);
 
-      const limitedApplyNow = limits.max_apply_now != null ? applyNow.slice(0, limits.max_apply_now) : applyNow
-      const limitedLevelUp = limits.max_level_up != null ? levelUp.slice(0, limits.max_level_up) : levelUp
+      const limitedApplyNow =
+        limits.max_apply_now != null
+          ? applyNow.slice(0, limits.max_apply_now)
+          : applyNow;
+      const limitedLevelUp =
+        limits.max_level_up != null
+          ? levelUp.slice(0, limits.max_level_up)
+          : levelUp;
 
-      filtered = [...limitedApplyNow, ...limitedLevelUp]
+      filtered = [...limitedApplyNow, ...limitedLevelUp];
     }
   }
 
   if (date_from) {
-    const from = new Date(date_from)
-    filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) >= from)
+    const from = new Date(date_from);
+    filtered = filtered.filter(
+      o => o.applied_at != null && new Date(o.applied_at) >= from,
+    );
   }
   if (date_to) {
-    const to = new Date(date_to)
-    filtered = filtered.filter(o => o.applied_at != null && new Date(o.applied_at) <= to)
+    const to = new Date(date_to);
+    filtered = filtered.filter(
+      o => o.applied_at != null && new Date(o.applied_at) <= to,
+    );
   }
 
-  result.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime())
+  result.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
 
   res.json({
     client_id: clientId,
@@ -537,5 +717,5 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     apply_now_count,
     level_up_count,
     offers: filtered,
-  })
-})
+  });
+});
