@@ -104,6 +104,72 @@ const StatusBodySchema = z.object({
   ]),
 })
 
+userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const url = req.query['url'] as string | undefined
+  if (!url) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: url' })
+  }
+
+  const offer = await prisma.offer.findFirst({ where: { url } })
+  if (!offer) return res.json({ user_offer: null })
+
+  const uo = await prisma.userOffer.findFirst({
+    where: { offer_id: offer.id, user_id: user_id! },
+    include: {
+      offer: {
+        select: {
+          title: true, company_name: true, url: true, employment_types: true,
+          source: true, city: true, workplace_type: true, experience_level: true,
+          working_time: true, required_skills: true, nice_to_have_skills: true,
+        },
+      },
+      status_history: {
+        where: { status: 'applied' },
+        orderBy: { created_at: 'desc' },
+        take: 1,
+      },
+    },
+  })
+  if (!uo) return res.json({ user_offer: null })
+
+  const [{ salaryPrefs }, rates] = await Promise.all([loadClientProfile(user_id!), loadExchangeRates()])
+
+  return res.json({
+    user_offer: {
+      user_offer_id: uo.id,
+      offer_id: uo.offer_id,
+      offer_title: uo.offer.title,
+      offer_company: uo.offer.company_name,
+      offer_url: uo.offer.url,
+      claude_score: uo.claude_score,
+      claude_role_fit: uo.claude_role_fit,
+      claude_matched_reasons: uo.claude_matched_reasons,
+      claude_missing_skills: uo.claude_missing_skills,
+      claude_recommended: uo.claude_recommended,
+      rejection_reason: uo.rejection_reason,
+      matched_at: uo.matched_at,
+      applied_at: uo.status_history[0]?.created_at ?? null,
+      salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+      source: uo.offer.source,
+      city: uo.offer.city ?? null,
+      work_model: uo.offer.workplace_type ?? null,
+      required_skills: uo.offer.required_skills,
+      nice_to_have_skills: uo.offer.nice_to_have_skills,
+      cv_language: uo.cv_language,
+      cv_status: uo.cv_status ?? null,
+      cv_url: uo.cv_url ?? null,
+      cl_status: uo.cl_status ?? null,
+      cl_url: uo.cl_url ?? null,
+      status: uo.status,
+    },
+  })
+})
+
 userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
   const { id } = req.params as { id: string }
   const parsed = StatusBodySchema.safeParse(req.body)
