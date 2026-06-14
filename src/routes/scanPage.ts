@@ -1,27 +1,28 @@
-import { randomUUID } from 'crypto'
-import { Router } from 'express'
-import { z } from 'zod'
-import Anthropic from '@anthropic-ai/sdk'
-import slugify from 'slugify'
-import type { Offer } from '@prisma/client'
-import { prisma } from '../lib/prisma'
-import { validateJwt } from '../middleware/validateJwt'
-import { getClaudeModel } from '../lib/claudeModels'
-import { CandidateProfileSchema } from '../types/profile'
-import { evaluateOffers } from '../services/claudeEvaluator'
-import { AppError } from '../lib/errors'
-import { type SalaryPref } from '../services/syncReport'
+import { randomUUID } from 'crypto';
+import { Router } from 'express';
+import { z } from 'zod';
+import Anthropic from '@anthropic-ai/sdk';
+import slugify from 'slugify';
+import type { Offer } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { validateJwt } from '../middleware/validateJwt';
+import { getClaudeModel } from '../lib/claudeModels';
+import { CandidateProfileSchema } from '../types/profile';
+import { evaluateOffers } from '../services/claudeEvaluator';
+import { AppError } from '../lib/errors';
+import { type SalaryPref } from '../services/syncReport';
 
-export const scanPageRouter = Router()
+export const scanPageRouter = Router();
 
-const anthropic = new Anthropic()
+const anthropic = new Anthropic();
 
 const BodySchema = z.object({
   page_text: z.string().min(1),
   page_url: z.string().url().optional(),
-})
+});
 
-const PARSE_SYSTEM_PROMPT = 'You are a job offer parser. Extract structured data from the provided page text. If the page is not a job offer, set is_job_offer to false and all other fields to null/empty.'
+const PARSE_SYSTEM_PROMPT =
+  'You are a job offer parser. Extract structured data from the provided page text. If the page is not a job offer, set is_job_offer to false and all other fields to null/empty.';
 
 const PARSE_TOOL: Anthropic.Tool = {
   name: 'parse_job_offer',
@@ -29,78 +30,126 @@ const PARSE_TOOL: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     properties: {
-      is_job_offer:        { type: 'boolean' },
-      title:               { type: ['string', 'null'] },
-      company:             { type: ['string', 'null'] },
-      url:                 { type: ['string', 'null'] },
+      is_job_offer: { type: 'boolean' },
+      title: { type: ['string', 'null'] },
+      company: { type: ['string', 'null'] },
+      url: { type: ['string', 'null'] },
       salary: {
         oneOf: [
           {
             type: 'object',
             properties: {
-              type:     { type: 'string' },
+              type: { type: 'string' },
               currency: { type: 'string' },
-              from:     { type: ['number', 'null'] },
-              to:       { type: ['number', 'null'] },
+              from: { type: ['number', 'null'] },
+              to: { type: ['number', 'null'] },
+              unit: {
+                type: ['string', 'null'],
+                description: "Pay period unit, e.g. 'Month', 'Hour', 'Day'",
+              },
             },
             required: ['type', 'currency'],
           },
           { type: 'null' },
         ],
       },
-      required_skills:     { type: 'array', items: { type: 'string' } },
+      required_skills: { type: 'array', items: { type: 'string' } },
       nice_to_have_skills: { type: 'array', items: { type: 'string' } },
-      workplace_type:      { type: ['string', 'null'], enum: ['remote', 'hybrid', 'office', null] },
-      city:                { type: ['string', 'null'] },
-      employment_type:     { type: ['string', 'null'] },
-      description:         { type: ['string', 'null'] },
+      workplace_type: {
+        type: ['string', 'null'],
+        enum: ['remote', 'hybrid', 'office', null],
+      },
+      city: { type: ['string', 'null'] },
+      employment_type: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
     },
     required: ['is_job_offer'],
   },
-}
+};
 
 interface ParsedOffer {
-  is_job_offer: boolean
-  title: string | null
-  company: string | null
-  url: string | null
-  salary: { type: string; currency: string; from: number | null; to: number | null } | null
-  required_skills: string[]
-  nice_to_have_skills: string[]
-  workplace_type: 'remote' | 'hybrid' | 'office' | null
-  city: string | null
-  employment_type: string | null
-  description: string | null
+  is_job_offer: boolean;
+  title: string | null;
+  company: string | null;
+  url: string | null;
+  salary: {
+    type: string;
+    currency: string;
+    from: number | null;
+    to: number | null;
+    unit: string | null;
+  } | null;
+  required_skills: string[];
+  nice_to_have_skills: string[];
+  workplace_type: 'remote' | 'hybrid' | 'office' | null;
+  city: string | null;
+  employment_type: string | null;
+  description: string | null;
 }
 
 function buildSalaryEntries(
   employmentTypes: unknown,
   salaryPrefs: SalaryPref[],
   rates: Record<string, number>,
-): Array<{ min: number; max: number; currency: string; type: string; delta: number; delta_normalized: number }> {
-  if (salaryPrefs.length === 0) return []
+): Array<{
+  min: number;
+  max: number;
+  currency: string;
+  type: string;
+  delta: number;
+  delta_normalized: number;
+}> {
+  if (salaryPrefs.length === 0) return [];
   const types = Array.isArray(employmentTypes)
-    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
-    : []
-  const entries: ReturnType<typeof buildSalaryEntries> = []
+    ? (employmentTypes as Array<{
+        from?: number;
+        to?: number;
+        currency?: string;
+        type?: string;
+        unit?: string;
+      }>)
+    : [];
+  const entries: ReturnType<typeof buildSalaryEntries> = [];
   for (const et of types) {
-    const { from, to, currency, type: etType, unit } = et
-    if (from == null || to == null || !currency || !etType) continue
+    const { from, to, currency, type: etType, unit } = et;
+    if (from == null || to == null || !currency || !etType) continue;
     const pref = salaryPrefs.find(
-      p => p.type.toLowerCase() === etType.toLowerCase() &&
-           p.currency.toUpperCase() === currency.toUpperCase()
-    )
-    if (!pref) continue
-    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
-    const delta = effectiveTo - pref.min
-    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
-    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
+      p =>
+        p.type.toLowerCase() === etType.toLowerCase() &&
+        p.currency.toUpperCase() === currency.toUpperCase(),
+    );
+    if (!pref) continue;
+    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to;
+    const delta = effectiveTo - pref.min;
+    const rate =
+      currency.toUpperCase() === 'PLN'
+        ? 1
+        : (rates[currency.toUpperCase()] ?? 1);
+    entries.push({
+      min: from,
+      max: to,
+      currency,
+      type: etType,
+      delta,
+      delta_normalized: Math.round(delta * rate),
+    });
   }
-  return entries
+  return entries;
 }
 
 function mapUserOfferResponse(
-  userOffer: { id: string; claude_score: number | null; claude_role_fit: string | null; claude_matched_reasons: unknown; claude_missing_skills: string[]; claude_recommended: boolean | null; cv_status: string | null; cv_url: string | null; cl_status: string | null; cl_url: string | null },
+  userOffer: {
+    id: string;
+    claude_score: number | null;
+    claude_role_fit: string | null;
+    claude_matched_reasons: unknown;
+    claude_missing_skills: string[];
+    claude_recommended: boolean | null;
+    cv_status: string | null;
+    cv_url: string | null;
+    cl_status: string | null;
+    cl_url: string | null;
+  },
   offer: Offer,
   salaryPrefs: SalaryPref[],
   exchangeRates: Record<string, number>,
@@ -117,7 +166,11 @@ function mapUserOfferResponse(
     claude_recommended: userOffer.claude_recommended,
     required_skills: offer.required_skills,
     nice_to_have_skills: offer.nice_to_have_skills,
-    salary: buildSalaryEntries(offer.employment_types, salaryPrefs, exchangeRates),
+    salary: buildSalaryEntries(
+      offer.employment_types,
+      salaryPrefs,
+      exchangeRates,
+    ),
     source: offer.source,
     city: offer.city ?? null,
     work_model: offer.workplace_type ?? null,
@@ -125,21 +178,31 @@ function mapUserOfferResponse(
     cv_url: userOffer.cv_url ?? null,
     cl_status: userOffer.cl_status ?? null,
     cl_url: userOffer.cl_url ?? null,
-  }
+  };
 }
 
 scanPageRouter.post('/', validateJwt, async (req, res) => {
-  const { role, user_id } = req.jwt!
+  const { role, user_id } = req.jwt!;
   if (role !== 'client') {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+    return res
+      .status(403)
+      .json({
+        error: 'FORBIDDEN',
+        message: 'Only clients can use this endpoint',
+      });
   }
-  const userId = user_id!
+  const userId = user_id!;
 
-  const parsed = BodySchema.safeParse(req.body)
+  const parsed = BodySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
+    return res
+      .status(422)
+      .json({
+        error: 'INVALID_REQUEST',
+        message: parsed.error.issues[0]?.message ?? 'Invalid body',
+      });
   }
-  const { page_text, page_url } = parsed.data
+  const { page_text, page_url } = parsed.data;
 
   const [user, subscription, ratesSetting] = await Promise.all([
     prisma.user.findUnique({
@@ -151,56 +214,80 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       include: { plan: true },
     }),
     prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
-  ])
+  ]);
 
-  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found');
 
-  const limits = subscription?.plan?.limits as
-    | { max_apply_now: number | null; max_level_up: number | null; max_scan_page: number | null }
-    | null
+  const limits = subscription?.plan?.limits as {
+    max_apply_now: number | null;
+    max_level_up: number | null;
+    max_scan_page: number | null;
+  } | null;
 
-  if (limits?.max_scan_page != null && user.scan_page_counter >= limits.max_scan_page) {
-    return res.status(402).json({ error: 'SCAN_LIMIT_REACHED' })
+  if (
+    limits?.max_scan_page != null &&
+    user.scan_page_counter >= limits.max_scan_page
+  ) {
+    return res.status(402).json({ error: 'SCAN_LIMIT_REACHED' });
   }
 
-  let exchangeRates: Record<string, number> = {}
+  let exchangeRates: Record<string, number> = {};
   try {
-    if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
-  } catch { /* rates stay empty */ }
+    if (ratesSetting)
+      exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>;
+  } catch {
+    /* rates stay empty */
+  }
 
   const rawProfile = user.profile as unknown as {
-    preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
-  }
-  const salaryPrefs: SalaryPref[] = (rawProfile.preferences?.salary ?? []).filter(
-    (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
-  )
+    preferences?: {
+      salary?: Array<{ type?: string; currency?: string; min?: number }>;
+    };
+  };
+  const salaryPrefs: SalaryPref[] = (
+    rawProfile.preferences?.salary ?? []
+  ).filter(
+    (p): p is SalaryPref =>
+      p.type != null && p.currency != null && p.min != null,
+  );
 
-  const model = await getClaudeModel('scan_page_model')
+  const model = await getClaudeModel('scan_page_model');
 
   // Dedup check — if page_url is known, avoid re-parsing and re-matching an already-seen offer
-  let offerForMatching: Offer | null = null
+  let offerForMatching: Offer | null = null;
   if (page_url) {
-    const existingOffer = await prisma.offer.findFirst({ where: { url: page_url } })
+    const existingOffer = await prisma.offer.findFirst({
+      where: { url: page_url },
+    });
     if (existingOffer) {
       const existingUserOffer = await prisma.userOffer.findFirst({
         where: { user_id: userId, offer_id: existingOffer.id },
-      })
+      });
       if (existingUserOffer) {
         // Case 1: offer + user_offer both exist — return as-is, no Claude calls
         return res.json({
           is_job_offer: true,
-          user_offer: mapUserOfferResponse(existingUserOffer, existingOffer, salaryPrefs, exchangeRates),
-        })
+          user_offer: mapUserOfferResponse(
+            existingUserOffer,
+            existingOffer,
+            salaryPrefs,
+            exchangeRates,
+          ),
+        });
       }
       // Case 2: offer exists, user_offer does not — skip parsing, proceed to matching
-      offerForMatching = existingOffer
+      offerForMatching = existingOffer;
     }
   }
 
   // Validate profile (needed for matching in both Case 2 and Case 3)
-  const profileParsed = CandidateProfileSchema.safeParse(user.profile)
+  const profileParsed = CandidateProfileSchema.safeParse(user.profile);
   if (!profileParsed.success) {
-    throw new AppError(422, 'INVALID_PROFILE', 'No valid profile configured for matching')
+    throw new AppError(
+      422,
+      'INVALID_PROFILE',
+      'No valid profile configured for matching',
+    );
   }
 
   // Case 3: no existing offer — parse the page and upsert the offer
@@ -212,30 +299,46 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       tools: [PARSE_TOOL],
       tool_choice: { type: 'tool', name: 'parse_job_offer' },
       messages: [{ role: 'user', content: page_text.slice(0, 8000) }],
-    })
+    });
 
-    const toolUseBlock = parseResponse.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+    const toolUseBlock = parseResponse.content.find(
+      b => b.type === 'tool_use',
+    ) as Anthropic.ToolUseBlock | undefined;
     if (!toolUseBlock) {
-      throw new AppError(500, 'INTERNAL_ERROR', 'Page parsing failed — no tool_use block returned')
+      throw new AppError(
+        500,
+        'INTERNAL_ERROR',
+        'Page parsing failed — no tool_use block returned',
+      );
     }
 
-    const parsedOffer = toolUseBlock.input as ParsedOffer
+    const parsedOffer = toolUseBlock.input as ParsedOffer;
 
     if (!parsedOffer.is_job_offer) {
-      return res.json({ is_job_offer: false })
+      return res.json({ is_job_offer: false });
     }
 
-    const title = parsedOffer.title ?? 'Unknown Title'
-    const companyName = parsedOffer.company ?? 'Unknown Company'
-    const offerUrl = page_url ?? parsedOffer.url ?? null
+    const title = parsedOffer.title ?? 'Unknown Title';
+    const companyName = parsedOffer.company ?? 'Unknown Company';
+    const offerUrl = page_url ?? parsedOffer.url ?? null;
 
     const slug = page_url
       ? `manual-${slugify(page_url, { lower: true, strict: true }).slice(0, 180)}`
-      : `manual-${randomUUID()}`
+      : `manual-${randomUUID()}`;
 
+    const employmentType =
+      parsedOffer.salary?.type === 'contract' ? 'contract' : 'permanent';
     const employmentTypes = parsedOffer.salary
-      ? [{ from: parsedOffer.salary.from ?? 0, to: parsedOffer.salary.to ?? 0, currency: parsedOffer.salary.currency, type: parsedOffer.salary.type }]
-      : []
+      ? [
+          {
+            from: parsedOffer.salary.from ?? 0,
+            to: parsedOffer.salary.to ?? 0,
+            currency: parsedOffer.salary.currency ?? 'USD',
+            type: employmentType,
+            unit: parsedOffer.salary.unit ?? 'Month',
+          },
+        ]
+      : [];
 
     offerForMatching = await prisma.offer.upsert({
       where: { slug },
@@ -264,19 +367,25 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
         city: parsedOffer.city ?? null,
         fetched_at: new Date(),
       },
-    })
+    });
   }
 
   // Match offer against user profile (Cases 2 and 3)
-  const matchResult = await evaluateOffers(profileParsed.data, [offerForMatching], model)
+  const matchResult = await evaluateOffers(
+    profileParsed.data,
+    [offerForMatching],
+    model,
+  );
   if (!matchResult || matchResult.evaluations.length === 0) {
-    throw new AppError(500, 'INTERNAL_ERROR', 'Offer matching failed')
+    throw new AppError(500, 'INTERNAL_ERROR', 'Offer matching failed');
   }
-  const evaluation = matchResult.evaluations[0]!
+  const evaluation = matchResult.evaluations[0]!;
 
   // Upsert user_offer
   const userOffer = await prisma.userOffer.upsert({
-    where: { user_id_offer_id: { user_id: userId, offer_id: offerForMatching.id } },
+    where: {
+      user_id_offer_id: { user_id: userId, offer_id: offerForMatching.id },
+    },
     create: {
       user_id: userId,
       offer_id: offerForMatching.id,
@@ -297,15 +406,20 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       claude_recommended: evaluation.recommended,
       claude_salary_comparison: evaluation.salary_comparison,
     },
-  })
+  });
 
   await prisma.user.update({
     where: { id: userId },
     data: { scan_page_counter: { increment: 1 } },
-  })
+  });
 
   return res.json({
     is_job_offer: true,
-    user_offer: mapUserOfferResponse(userOffer, offerForMatching, salaryPrefs, exchangeRates),
-  })
-})
+    user_offer: mapUserOfferResponse(
+      userOffer,
+      offerForMatching,
+      salaryPrefs,
+      exchangeRates,
+    ),
+  });
+});
