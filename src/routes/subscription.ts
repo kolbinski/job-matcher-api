@@ -145,6 +145,7 @@ subscriptionRouter.post('/scan-package-checkout', validateJwt, async (req, res) 
 
   const session = await getStripe().checkout.sessions.create({
     mode: 'payment',
+    currency: 'usd',
     line_items: [{ price: scanPackagePriceId, quantity: 1 }],
     metadata: {
       type: 'scan_package',
