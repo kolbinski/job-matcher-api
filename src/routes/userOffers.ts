@@ -208,7 +208,7 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
               min: typeof et['from'] === 'number' ? et['from'] : 0,
               max: typeof et['to'] === 'number' ? et['to'] : 0,
               currency:
-                typeof et['currency'] === 'string' ? et['currency'] : 'PLN',
+                typeof et['currency'] === 'string' ? et['currency'] : 'USD',
               type: typeof et['type'] === 'string' ? et['type'] : 'permanent',
               unit: typeof et['unit'] === 'string' ? et['unit'] : 'month',
               delta: 0,
