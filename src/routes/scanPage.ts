@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import slugify from 'slugify'
+import type { Offer } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
 import { getClaudeModel } from '../lib/claudeModels'
@@ -98,6 +99,35 @@ function buildSalaryEntries(
   return entries
 }
 
+function mapUserOfferResponse(
+  userOffer: { id: string; claude_score: number | null; claude_role_fit: string | null; claude_matched_reasons: unknown; claude_missing_skills: string[]; claude_recommended: boolean | null; cv_status: string | null; cv_url: string | null; cl_status: string | null; cl_url: string | null },
+  offer: Offer,
+  salaryPrefs: SalaryPref[],
+  exchangeRates: Record<string, number>,
+) {
+  return {
+    user_offer_id: userOffer.id,
+    offer_title: offer.title,
+    offer_company: offer.company_name,
+    offer_url: offer.url,
+    claude_score: userOffer.claude_score,
+    claude_role_fit: userOffer.claude_role_fit,
+    claude_matched_reasons: userOffer.claude_matched_reasons,
+    claude_missing_skills: userOffer.claude_missing_skills,
+    claude_recommended: userOffer.claude_recommended,
+    required_skills: offer.required_skills,
+    nice_to_have_skills: offer.nice_to_have_skills,
+    salary: buildSalaryEntries(offer.employment_types, salaryPrefs, exchangeRates),
+    source: offer.source,
+    city: offer.city ?? null,
+    work_model: offer.workplace_type ?? null,
+    cv_status: userOffer.cv_status ?? null,
+    cv_url: userOffer.cv_url ?? null,
+    cl_status: userOffer.cl_status ?? null,
+    cl_url: userOffer.cl_url ?? null,
+  }
+}
+
 scanPageRouter.post('/', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!
   if (role !== 'client') {
@@ -138,35 +168,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
     if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
   } catch { /* rates stay empty */ }
 
-  const model = await getClaudeModel('scan_page_model')
-
-  // Step 1: Parse the page with Claude
-  const parseResponse = await anthropic.messages.create({
-    model,
-    max_tokens: 2000,
-    system: [{ type: 'text', text: PARSE_SYSTEM_PROMPT }],
-    tools: [PARSE_TOOL],
-    tool_choice: { type: 'tool', name: 'parse_job_offer' },
-    messages: [{ role: 'user', content: page_text.slice(0, 8000) }],
-  })
-
-  const toolUseBlock = parseResponse.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
-  if (!toolUseBlock) {
-    throw new AppError(500, 'INTERNAL_ERROR', 'Page parsing failed — no tool_use block returned')
-  }
-
-  const parsedOffer = toolUseBlock.input as ParsedOffer
-
-  if (!parsedOffer.is_job_offer) {
-    return res.json({ is_job_offer: false })
-  }
-
-  // Validate user has a profile for matching
-  const profileParsed = CandidateProfileSchema.safeParse(user.profile)
-  if (!profileParsed.success) {
-    throw new AppError(422, 'INVALID_PROFILE', 'No valid profile configured for matching')
-  }
-
   const rawProfile = user.profile as unknown as {
     preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
   }
@@ -174,61 +175,111 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
     (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
   )
 
-  // Upsert offer into offers table
-  const title = parsedOffer.title ?? 'Unknown Title'
-  const companyName = parsedOffer.company ?? 'Unknown Company'
-  const offerUrl = page_url ?? parsedOffer.url ?? null
+  const model = await getClaudeModel('scan_page_model')
 
-  const slug = page_url
-    ? `manual-${slugify(page_url, { lower: true, strict: true }).slice(0, 180)}`
-    : `manual-${randomUUID()}`
+  // Dedup check — if page_url is known, avoid re-parsing and re-matching an already-seen offer
+  let offerForMatching: Offer | null = null
+  if (page_url) {
+    const existingOffer = await prisma.offer.findFirst({ where: { url: page_url } })
+    if (existingOffer) {
+      const existingUserOffer = await prisma.userOffer.findFirst({
+        where: { user_id: userId, offer_id: existingOffer.id },
+      })
+      if (existingUserOffer) {
+        // Case 1: offer + user_offer both exist — return as-is, no Claude calls
+        return res.json({
+          is_job_offer: true,
+          user_offer: mapUserOfferResponse(existingUserOffer, existingOffer, salaryPrefs, exchangeRates),
+        })
+      }
+      // Case 2: offer exists, user_offer does not — skip parsing, proceed to matching
+      offerForMatching = existingOffer
+    }
+  }
 
-  const employmentTypes = parsedOffer.salary
-    ? [{ from: parsedOffer.salary.from ?? 0, to: parsedOffer.salary.to ?? 0, currency: parsedOffer.salary.currency, type: parsedOffer.salary.type }]
-    : []
+  // Validate profile (needed for matching in both Case 2 and Case 3)
+  const profileParsed = CandidateProfileSchema.safeParse(user.profile)
+  if (!profileParsed.success) {
+    throw new AppError(422, 'INVALID_PROFILE', 'No valid profile configured for matching')
+  }
 
-  const offer = await prisma.offer.upsert({
-    where: { slug },
-    create: {
-      slug,
-      source: 'manual',
-      title,
-      company_name: companyName,
-      url: offerUrl,
-      required_skills: parsedOffer.required_skills ?? [],
-      nice_to_have_skills: parsedOffer.nice_to_have_skills ?? [],
-      employment_types: employmentTypes,
-      workplace_type: parsedOffer.workplace_type ?? null,
-      city: parsedOffer.city ?? null,
-      is_active: true,
-      fetched_at: new Date(),
-    },
-    update: {
-      title,
-      company_name: companyName,
-      url: offerUrl,
-      required_skills: parsedOffer.required_skills ?? [],
-      nice_to_have_skills: parsedOffer.nice_to_have_skills ?? [],
-      employment_types: employmentTypes,
-      workplace_type: parsedOffer.workplace_type ?? null,
-      city: parsedOffer.city ?? null,
-      fetched_at: new Date(),
-    },
-  })
+  // Case 3: no existing offer — parse the page and upsert the offer
+  if (!offerForMatching) {
+    const parseResponse = await anthropic.messages.create({
+      model,
+      max_tokens: 2000,
+      system: [{ type: 'text', text: PARSE_SYSTEM_PROMPT }],
+      tools: [PARSE_TOOL],
+      tool_choice: { type: 'tool', name: 'parse_job_offer' },
+      messages: [{ role: 'user', content: page_text.slice(0, 8000) }],
+    })
 
-  // Step 2: Match offer against user profile
-  const matchResult = await evaluateOffers(profileParsed.data, [offer], model)
+    const toolUseBlock = parseResponse.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+    if (!toolUseBlock) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'Page parsing failed — no tool_use block returned')
+    }
+
+    const parsedOffer = toolUseBlock.input as ParsedOffer
+
+    if (!parsedOffer.is_job_offer) {
+      return res.json({ is_job_offer: false })
+    }
+
+    const title = parsedOffer.title ?? 'Unknown Title'
+    const companyName = parsedOffer.company ?? 'Unknown Company'
+    const offerUrl = page_url ?? parsedOffer.url ?? null
+
+    const slug = page_url
+      ? `manual-${slugify(page_url, { lower: true, strict: true }).slice(0, 180)}`
+      : `manual-${randomUUID()}`
+
+    const employmentTypes = parsedOffer.salary
+      ? [{ from: parsedOffer.salary.from ?? 0, to: parsedOffer.salary.to ?? 0, currency: parsedOffer.salary.currency, type: parsedOffer.salary.type }]
+      : []
+
+    offerForMatching = await prisma.offer.upsert({
+      where: { slug },
+      create: {
+        slug,
+        source: 'manual',
+        title,
+        company_name: companyName,
+        url: offerUrl,
+        required_skills: parsedOffer.required_skills ?? [],
+        nice_to_have_skills: parsedOffer.nice_to_have_skills ?? [],
+        employment_types: employmentTypes,
+        workplace_type: parsedOffer.workplace_type ?? null,
+        city: parsedOffer.city ?? null,
+        is_active: true,
+        fetched_at: new Date(),
+      },
+      update: {
+        title,
+        company_name: companyName,
+        url: offerUrl,
+        required_skills: parsedOffer.required_skills ?? [],
+        nice_to_have_skills: parsedOffer.nice_to_have_skills ?? [],
+        employment_types: employmentTypes,
+        workplace_type: parsedOffer.workplace_type ?? null,
+        city: parsedOffer.city ?? null,
+        fetched_at: new Date(),
+      },
+    })
+  }
+
+  // Match offer against user profile (Cases 2 and 3)
+  const matchResult = await evaluateOffers(profileParsed.data, [offerForMatching], model)
   if (!matchResult || matchResult.evaluations.length === 0) {
     throw new AppError(500, 'INTERNAL_ERROR', 'Offer matching failed')
   }
   const evaluation = matchResult.evaluations[0]!
 
-  // Upsert user_offer (unique on user_id + offer_id)
+  // Upsert user_offer
   const userOffer = await prisma.userOffer.upsert({
-    where: { user_id_offer_id: { user_id: userId, offer_id: offer.id } },
+    where: { user_id_offer_id: { user_id: userId, offer_id: offerForMatching.id } },
     create: {
       user_id: userId,
-      offer_id: offer.id,
+      offer_id: offerForMatching.id,
       status: 'pending_apply',
       claude_score: evaluation.score,
       claude_role_fit: evaluation.role_fit,
@@ -248,7 +299,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
     },
   })
 
-  // Increment scan_page_counter
   await prisma.user.update({
     where: { id: userId },
     data: { scan_page_counter: { increment: 1 } },
@@ -256,26 +306,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
 
   return res.json({
     is_job_offer: true,
-    user_offer: {
-      user_offer_id: userOffer.id,
-      offer_title: offer.title,
-      offer_company: offer.company_name,
-      offer_url: offer.url,
-      claude_score: evaluation.score,
-      claude_role_fit: evaluation.role_fit,
-      claude_matched_reasons: evaluation.matched_reasons,
-      claude_missing_skills: evaluation.missing_skills,
-      claude_recommended: evaluation.recommended,
-      required_skills: offer.required_skills,
-      nice_to_have_skills: offer.nice_to_have_skills,
-      salary: buildSalaryEntries(offer.employment_types, salaryPrefs, exchangeRates),
-      source: offer.source,
-      city: offer.city ?? null,
-      work_model: offer.workplace_type ?? null,
-      cv_status: userOffer.cv_status ?? null,
-      cv_url: userOffer.cv_url ?? null,
-      cl_status: userOffer.cl_status ?? null,
-      cl_url: userOffer.cl_url ?? null,
-    },
+    user_offer: mapUserOfferResponse(userOffer, offerForMatching, salaryPrefs, exchangeRates),
   })
 })
