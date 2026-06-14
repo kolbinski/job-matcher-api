@@ -156,6 +156,7 @@ function mapUserOfferResponse(
 ) {
   return {
     user_offer_id: userOffer.id,
+    offer_id: offer.id,
     offer_title: offer.title,
     offer_company: offer.company_name,
     offer_url: offer.url,
@@ -333,9 +334,9 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
           {
             from: parsedOffer.salary.from ?? 0,
             to: parsedOffer.salary.to ?? 0,
-            currency: parsedOffer.salary.currency ?? 'USD',
+            currency: parsedOffer.salary.currency ?? 'PLN',
             type: employmentType,
-            unit: parsedOffer.salary.unit ?? 'Month',
+            unit: (parsedOffer.salary.unit ?? 'month').toLowerCase(),
           },
         ]
       : [];

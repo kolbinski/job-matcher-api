@@ -254,6 +254,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
       const mapped = result.map(uo => ({
         user_offer_id: uo.id,
+        offer_id: uo.offer_id,
         offer_title: uo.offer.title,
         offer_company: uo.offer.company_name,
         offer_url: uo.offer.url,
@@ -374,6 +375,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   const mapped = result.map(uo => ({
     user_offer_id: uo.id,
+    offer_id: uo.offer_id,
     offer_title: uo.offer.title,
     offer_company: uo.offer.company_name,
     offer_url: uo.offer.url,
