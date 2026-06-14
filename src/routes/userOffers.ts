@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { validateAgentJwt } from '../middleware/validateAgentJwt';
 import { validateJwt } from '../middleware/validateJwt';
 import { dedupKey } from '../utils/deduplicateOffers';
 
@@ -231,7 +230,7 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
   });
 });
 
-userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
+userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
   const { id } = req.params as { id: string };
   const parsed = StatusBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -240,28 +239,34 @@ userOffersRouter.patch('/:id/status', validateAgentJwt, async (req, res) => {
       .json({ error: 'INVALID_REQUEST', message: 'Invalid status value' });
   }
 
-  const agentId = req.agent!.id;
+  const { role, user_id, agent_id } = req.jwt!;
 
-  const userOffer = await prisma.userOffer.findUnique({
-    where: { id },
-    select: { id: true, user_id: true },
-  });
-  if (!userOffer) {
-    return res
-      .status(404)
-      .json({ error: 'NOT_FOUND', message: 'User offer not found' });
-  }
-
-  const agentClient = await prisma.agentClient.findUnique({
-    where: {
-      agent_id_user_id: { agent_id: agentId, user_id: userOffer.user_id },
-    },
-  });
-  if (!agentClient) {
-    return res.status(403).json({
-      error: 'FORBIDDEN',
-      message: 'User offer does not belong to your client',
+  if (role === 'client') {
+    const userOffer = await prisma.userOffer.findFirst({
+      where: { id, user_id: user_id! },
     });
+    if (!userOffer) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer not found or does not belong to you' });
+    }
+  } else {
+    if (!agent_id) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Agent ID missing from token' });
+    }
+
+    const userOffer = await prisma.userOffer.findUnique({
+      where: { id },
+      select: { id: true, user_id: true },
+    });
+    if (!userOffer) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: 'User offer not found' });
+    }
+
+    const agentClient = await prisma.agentClient.findUnique({
+      where: { agent_id_user_id: { agent_id, user_id: userOffer.user_id } },
+    });
+    if (!agentClient) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer does not belong to your client' });
+    }
   }
 
   const updated = await prisma.userOffer.update({
