@@ -15,6 +15,7 @@ const QuerySchema = z.object({
   source: z.string().optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
+  page: z.coerce.number().int().min(1).optional(),
 });
 
 interface SalaryPref {
@@ -298,7 +299,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     source,
     date_from,
     date_to,
+    page: pageParam,
   } = parsed.data;
+  const page = pageParam ?? 1;
   const { role, agent_id, user_id } = req.jwt!;
 
   let clientId: string;
@@ -332,7 +335,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   // ── Multi-status path ──────────────────────────────────────────────────────
   if (statuses.length > 1) {
-    const [{ learningGoals, salaryPrefs }, rates, subscription] =
+    const [{ learningGoals, salaryPrefs }, rates, subscription, pageSizeSetting] =
       await Promise.all([
         loadClientProfile(clientId),
         loadExchangeRates(),
@@ -342,7 +345,10 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
               include: { plan: true },
             })
           : Promise.resolve(null),
+        prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
       ]);
+    const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
+    const start = (page - 1) * pageSize;
     const effectivePlan =
       subscription?.plan ??
       (role === 'client'
@@ -379,7 +385,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
     const buckets: Record<
       string,
-      { status: string; count: number; offers: unknown[] }
+      { status: string; count: number; has_more: boolean; offers: unknown[] }
     > = {};
 
     for (const bucketStatus of statuses) {
@@ -505,7 +511,10 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         }
       }
 
-      buckets[bucketStatus] = { status: bucketStatus, count, offers };
+      const pagedOffers = offers.slice(start, start + pageSize);
+      const has_more = offers.length > start + pageSize;
+
+      buckets[bucketStatus] = { status: bucketStatus, count, has_more, offers: pagedOffers };
     }
 
     const totalCount = Object.values(buckets).reduce(
@@ -591,10 +600,13 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     orderBy: { updated_at: 'desc' },
   });
 
-  const [{ learningGoals, salaryPrefs }, rates] = await Promise.all([
+  const [{ learningGoals, salaryPrefs }, rates, pageSizeSetting] = await Promise.all([
     loadClientProfile(clientId),
     loadExchangeRates(),
+    prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
   ]);
+  const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
+  const start = (page - 1) * pageSize;
 
   // Dedup: one row per unique offer fingerprint; prefer highest claude_score, then most recent matched_at
   const seen = new Map<string, (typeof userOffers)[number]>();
@@ -730,12 +742,16 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   result.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
 
+  const pagedOffers = filtered.slice(start, start + pageSize);
+  const has_more = filtered.length > start + pageSize;
+
   res.json({
     client_id: clientId,
     status,
     count: mapped.length,
     apply_now_count,
     level_up_count,
-    offers: filtered,
+    has_more,
+    offers: pagedOffers,
   });
 });
