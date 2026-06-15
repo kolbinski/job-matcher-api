@@ -17,6 +17,7 @@ import type {
   StretchOffer,
 } from '../types/match';
 import { parseEmploymentTypes } from '../lib/offers';
+import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
@@ -42,12 +43,13 @@ export async function runMatchForUser(
   const syncStartedAt = opts?.syncStartedAt;
 
   // ── 1. Load profile + settings ────────────────────────────────────────────
-  const [dbUser, claudeBatchSizeSetting] = await Promise.all([
+  const [dbUser, claudeBatchSizeSetting, exchangeRatesSetting] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { profile: true, email: true },
+      select: { profile: true, email: true, preferred_currency: true },
     }),
     prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
+    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ]);
   if (!dbUser?.profile)
     throw new AppError(
@@ -70,6 +72,12 @@ export async function runMatchForUser(
     throw new AppError(422, 'INVALID_PROFILE', 'Profile is invalid');
   }
   const profile = profileParseResult.data;
+
+  const preferredCurrency = dbUser.preferred_currency ?? 'USD'
+  const salaryPrefs = (profile.preferences?.salary ?? []) as Array<{ type: string; currency: string; min: number }>
+  const exchangeRates: Record<string, number> = exchangeRatesSetting
+    ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
+    : {}
 
   const isTestUser =
     dbUser.email?.endsWith('@jobmatcher-test.invalid') ?? false;
@@ -331,6 +339,12 @@ export async function runMatchForUser(
         .map((p, idx) => {
           const isPendingApply =
             p.offer.recommended === true && p.offer.role_fit !== null;
+          const salaryResult = calculateUserOfferSalary(
+            Array.isArray(p.original.employment_types) ? p.original.employment_types : [],
+            preferredCurrency,
+            salaryPrefs,
+            exchangeRates,
+          )
           return {
             user_id: userId,
             offer_id: p.original.id,
@@ -347,6 +361,10 @@ export async function runMatchForUser(
             cv_language: cvLanguageByIndex.get(idx) ?? 'en',
             matched_at: now,
             updated_at: now,
+            salary_min: salaryResult?.salary_min ?? null,
+            salary_max: salaryResult?.salary_max ?? null,
+            salary_currency: salaryResult?.salary_currency ?? null,
+            salary_delta: salaryResult?.salary_delta ?? null,
           };
         });
 

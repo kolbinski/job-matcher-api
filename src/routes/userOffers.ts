@@ -22,24 +22,8 @@ const QuerySchema = z.object({
   sort_by: z.enum(['score', 'salary_delta']).optional(),
 });
 
-interface SalaryPref {
-  type: string;
-  currency: string;
-  min: number;
-}
-
-interface SalaryEntry {
-  min: number;
-  max: number;
-  currency: string;
-  type: string;
-  delta: number;
-  delta_normalized: number;
-}
-
 interface ClientProfile {
   learningGoals: string[];
-  salaryPrefs: SalaryPref[];
 }
 
 async function loadClientProfile(clientId: string): Promise<ClientProfile> {
@@ -47,37 +31,18 @@ async function loadClientProfile(clientId: string): Promise<ClientProfile> {
     where: { id: clientId },
     select: { profile: true },
   });
-  if (!user?.profile) return { learningGoals: [], salaryPrefs: [] };
+  if (!user?.profile) return { learningGoals: [] };
   try {
     const raw = user.profile as {
-      preferences?: {
-        learning_skills_goals?: string[];
-        salary?: Array<{ type?: string; currency?: string; min?: number }>;
-      };
+      preferences?: { learning_skills_goals?: string[] };
     };
     return {
       learningGoals: (raw.preferences?.learning_skills_goals ?? []).map(g =>
         g.toLowerCase(),
       ),
-      salaryPrefs: (raw.preferences?.salary ?? []).filter(
-        (p): p is SalaryPref =>
-          p.type != null && p.currency != null && p.min != null,
-      ),
     };
   } catch {
-    return { learningGoals: [], salaryPrefs: [] };
-  }
-}
-
-async function loadExchangeRates(): Promise<Record<string, number>> {
-  const setting = await prisma.settings.findUnique({
-    where: { key: 'exchange_rates' },
-  });
-  if (!setting) return {};
-  try {
-    return JSON.parse(setting.value) as Record<string, number>;
-  } catch {
-    return {};
+    return { learningGoals: [] };
   }
 }
 
@@ -88,49 +53,6 @@ function hasSalaryData(types: unknown): boolean {
       (typeof et.from === 'number' && et.from > 0) ||
       (typeof et.to === 'number' && et.to > 0),
   );
-}
-
-function buildSalaryEntries(
-  employmentTypes: unknown,
-  salaryPrefs: SalaryPref[],
-  rates: Record<string, number>,
-): SalaryEntry[] {
-  if (salaryPrefs.length === 0) return [];
-  const types = Array.isArray(employmentTypes)
-    ? (employmentTypes as Array<{
-        from?: number;
-        to?: number;
-        currency?: string;
-        type?: string;
-        unit?: string;
-      }>)
-    : [];
-  const entries: SalaryEntry[] = [];
-  for (const et of types) {
-    const { from, to, currency, type: etType, unit } = et;
-    if (from == null || to == null || !currency || !etType) continue;
-    const pref = salaryPrefs.find(
-      p =>
-        p.type.toLowerCase() === etType.toLowerCase() &&
-        p.currency.toUpperCase() === currency.toUpperCase(),
-    );
-    if (!pref) continue;
-    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to;
-    const delta = effectiveTo - pref.min;
-    const rate =
-      currency.toUpperCase() === 'PLN'
-        ? 1
-        : (rates[currency.toUpperCase()] ?? 1);
-    entries.push({
-      min: from,
-      max: to,
-      currency,
-      type: etType,
-      delta,
-      delta_normalized: Math.round(delta * rate),
-    });
-  }
-  return entries;
 }
 
 const StatusBodySchema = z.object({
@@ -307,6 +229,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     min_score: minScoreParam,
     generated_cv,
     generated_cl,
+    sort_by: sortBy,
   } = parsed.data;
   const page = pageParam ?? 1;
   const minScore = minScoreParam ?? 0;
@@ -351,10 +274,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   // ── Multi-status path ──────────────────────────────────────────────────────
   if (statuses.length > 1) {
-    const [{ learningGoals, salaryPrefs }, rates, subscription, pageSizeSetting] =
+    const [{ learningGoals }, subscription, pageSizeSetting] =
       await Promise.all([
         loadClientProfile(clientId),
-        loadExchangeRates(),
         role === 'client'
           ? prisma.subscription.findUnique({
               where: { user_id: clientId },
@@ -450,7 +372,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
             take: 1,
           },
         },
-        orderBy: { claude_score: 'desc' },
+        orderBy: sortBy === 'salary_delta' ? { salary_delta: 'desc' } : { claude_score: 'desc' },
       });
       console.log(`[user-offers] bucket=${bucketStatus} prisma returned ${rows.length} rows`);
 
@@ -501,11 +423,10 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         rejection_reason: uo.rejection_reason,
         matched_at: uo.matched_at,
         applied_at: uo.status_history[0]?.created_at ?? null,
-        salary: buildSalaryEntries(
-          uo.offer.employment_types,
-          salaryPrefs,
-          rates,
-        ),
+        salary: uo.salary_min != null
+          ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta! }]
+          : [],
+        salary_delta: uo.salary_delta,
         source: uo.offer.source,
         city: uo.offer.city ?? null,
         work_model: uo.offer.workplace_type ?? null,
@@ -526,14 +447,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       let offers: typeof finalMapped = finalMapped;
 
       if (role === 'client' && limits != null) {
-        const bestDelta = (o: (typeof finalMapped)[number]) =>
-          Math.max(-Infinity, ...o.salary.map(s => s.delta));
         const byScoreAndDelta = (
           a: (typeof finalMapped)[number],
           b: (typeof finalMapped)[number],
         ) =>
           (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
-          bestDelta(b) - bestDelta(a);
+          (b.salary_delta ?? -Infinity) - (a.salary_delta ?? -Infinity);
 
         if (bucketStatus === 'pending_apply' && limits.max_apply_now != null) {
           offers = [...finalMapped]
@@ -641,12 +560,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { claude_score: 'desc' },
+    orderBy: sortBy === 'salary_delta' ? { salary_delta: 'desc' } : { claude_score: 'desc' },
   });
 
-  const [{ learningGoals, salaryPrefs }, rates, pageSizeSetting] = await Promise.all([
+  const [{ learningGoals }, pageSizeSetting] = await Promise.all([
     loadClientProfile(clientId),
-    loadExchangeRates(),
     prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
   ]);
   const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
@@ -698,7 +616,10 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     rejection_reason: uo.rejection_reason,
     matched_at: uo.matched_at,
     applied_at: uo.status_history[0]?.created_at ?? null,
-    salary: buildSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+    salary: uo.salary_min != null
+      ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta! }]
+      : [],
+    salary_delta: uo.salary_delta,
     source: uo.offer.source,
     city: uo.offer.city ?? null,
     work_model: uo.offer.workplace_type ?? null,
@@ -742,14 +663,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       limits != null &&
       (limits.max_apply_now !== null || limits.max_level_up !== null)
     ) {
-      const bestDelta = (o: (typeof mapped)[number]) =>
-        Math.max(-Infinity, ...o.salary.map(s => s.delta));
       const byScoreAndDelta = (
         a: (typeof mapped)[number],
         b: (typeof mapped)[number],
       ) =>
         (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
-        bestDelta(b) - bestDelta(a);
+        (b.salary_delta ?? -Infinity) - (a.salary_delta ?? -Infinity);
 
       const applyNow = filtered
         .filter(o => o.claude_recommended === true)

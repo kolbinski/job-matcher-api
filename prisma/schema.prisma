@@ -162,6 +162,10 @@ model UserOffer {
   cv_url                   String?
   cl_status                String?
   cl_url                   String?
+  salary_min               Float?
+  salary_max               Float?
+  salary_currency          String?
+  salary_delta             Float?
   status_history           UserOfferStatus[]
   offer                    Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
   user                     User              @relation(fields: [user_id], references: [id])
