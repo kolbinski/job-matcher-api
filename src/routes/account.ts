@@ -169,10 +169,30 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
   await prisma.apiCall.deleteMany({ where: { user_id: targetUserId } })
   await prisma.subscription.deleteMany({ where: { user_id: targetUserId } })
 
-  // Step 4: Delete the user row
+  // Step 4: Delete CV and CL files from Supabase Storage (best-effort — don't block account deletion)
+  try {
+    const sanitizedEmail = targetEmail.replace(/@/g, '_at_').replace(/\./g, '_').replace(/\+/g, '_')
+    const supabase = getSupabase()
+    const [{ data: cvFiles }, { data: clFiles }] = await Promise.all([
+      supabase.storage.from('homo-digital').list(`cvs/${sanitizedEmail}`),
+      supabase.storage.from('homo-digital').list(`cls/${sanitizedEmail}`),
+    ])
+    const pathsToDelete = [
+      ...(cvFiles ?? []).map(f => `cvs/${sanitizedEmail}/${f.name}`),
+      ...(clFiles ?? []).map(f => `cls/${sanitizedEmail}/${f.name}`),
+    ]
+    if (pathsToDelete.length > 0) {
+      const { error } = await supabase.storage.from('homo-digital').remove(pathsToDelete)
+      if (error) console.error(`[delete-account] Storage deletion failed for ${sanitizedEmail}:`, error)
+    }
+  } catch (err) {
+    console.error('[delete-account] Storage cleanup error:', err)
+  }
+
+  // Step 5: Delete the user row
   await prisma.user.delete({ where: { id: targetUserId } })
 
-  // Step 5: Delete from Supabase auth (best-effort — password-login users may have no Supabase entry)
+  // Step 6: Delete from Supabase auth (best-effort — password-login users may have no Supabase entry)
   const supabaseUid = await findSupabaseUserId(targetEmail)
   if (supabaseUid) {
     const { error } = await getSupabase().auth.admin.deleteUser(supabaseUid)
