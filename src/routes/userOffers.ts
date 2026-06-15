@@ -424,9 +424,18 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         matched_at: uo.matched_at,
         applied_at: uo.status_history[0]?.created_at ?? null,
         salary: uo.salary_min != null
-          ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta! }]
+          ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta!, type: uo.salary_type ?? '' }]
           : [],
         salary_delta: uo.salary_delta,
+        raw_salaries: Array.isArray(uo.offer.employment_types)
+          ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
+              from: et['from'] ?? null,
+              to: et['to'] ?? null,
+              currency: et['currency'] ?? null,
+              unit: et['unit'] ?? null,
+              type: et['type'] ?? null,
+            }))
+          : [],
         source: uo.offer.source,
         city: uo.offer.city ?? null,
         work_model: uo.offer.workplace_type ?? null,
@@ -617,9 +626,18 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     matched_at: uo.matched_at,
     applied_at: uo.status_history[0]?.created_at ?? null,
     salary: uo.salary_min != null
-      ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta! }]
+      ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta!, type: '' }]
       : [],
     salary_delta: uo.salary_delta,
+    raw_salaries: Array.isArray(uo.offer.employment_types)
+      ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
+          from: et['from'] ?? null,
+          to: et['to'] ?? null,
+          currency: et['currency'] ?? null,
+          unit: et['unit'] ?? null,
+          type: et['type'] ?? null,
+        }))
+      : [],
     source: uo.offer.source,
     city: uo.offer.city ?? null,
     work_model: uo.offer.workplace_type ?? null,

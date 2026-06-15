@@ -17,6 +17,7 @@ interface SalaryResult {
   salary_max: number
   salary_currency: string
   salary_delta: number
+  salary_type: string | null
 }
 
 function toMonthly(value: number, unit: string | null | undefined): number {
@@ -83,5 +84,6 @@ export function calculateUserOfferSalary(
     salary_max: Math.round(salaryMax),
     salary_currency: preferredCurrency,
     salary_delta: Math.round(salaryMax - prefMin),
+    salary_type: entry.type ?? null,
   }
 }

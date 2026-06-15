@@ -55,6 +55,7 @@ async function main() {
             salary_max: result?.salary_max ?? null,
             salary_currency: result?.salary_currency ?? null,
             salary_delta: result?.salary_delta ?? null,
+            salary_type: result?.salary_type ?? null,
           },
         })
         totalUpdated++

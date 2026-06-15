@@ -365,6 +365,7 @@ export async function runMatchForUser(
             salary_max: salaryResult?.salary_max ?? null,
             salary_currency: salaryResult?.salary_currency ?? null,
             salary_delta: salaryResult?.salary_delta ?? null,
+            salary_type: salaryResult?.salary_type ?? null,
           };
         });
 
