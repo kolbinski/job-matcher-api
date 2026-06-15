@@ -145,15 +145,48 @@ describe('POST /v1/match', () => {
   })
 
   it('writes an api_calls row per Claude batch on success', async () => {
-    await request(app)
-      .post('/v1/match')
-      .set('X-API-Key', apiKey)
-      .send({ options: { ai_scoring: true } })
+    // Non-test email so isTestUser is false and the mocked evaluateOffers is called
+    const realApiKey = `jm_live_${crypto.randomBytes(16).toString('hex')}`
+    const realUser = await prisma.user.create({
+      data: {
+        email: `match-apicall-${crypto.randomBytes(8).toString('hex')}@example.com`,
+        jobmatcher_api_key: realApiKey,
+        profile: TEST_PROFILE,
+      },
+    })
 
-    const calls = await prisma.apiCall.findMany({ where: { user_id: userId, call_type: 'matching' } })
-    expect(calls.length).toBeGreaterThanOrEqual(1)
-    expect(calls[0].status).toBe('success')
-    expect(calls[0].call_type).toBe('matching')
+    // Limit to 1 passing offer (remote-ts-senior) so only one item goes to evaluateOffers
+    const singleOffer = fixtureOffers.slice(0, 1)
+    // prisma.offer.findMany is already a spy from beforeAll — override impl for this test only
+    ;(prisma.offer.findMany as ReturnType<typeof vi.fn>).mockImplementation(async (args?: unknown) => {
+      const a = args as { where?: { id?: { in?: unknown[] } }; select?: { id?: boolean } } | undefined
+      if (a?.where?.id?.in) return origFindMany(a as Parameters<typeof origFindMany>[0])
+      if (a?.select?.id) return []
+      return singleOffer
+    })
+
+    try {
+      await request(app)
+        .post('/v1/match')
+        .set('X-API-Key', realApiKey)
+        .send({ options: { ai_scoring: true } })
+
+      const calls = await prisma.apiCall.findMany({ where: { user_id: realUser.id, call_type: 'matching' } })
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      expect(calls[0].status).toBe('success')
+      expect(calls[0].call_type).toBe('matching')
+    } finally {
+      // Restore global mock
+      ;(prisma.offer.findMany as ReturnType<typeof vi.fn>).mockImplementation(async (args?: unknown) => {
+        const a = args as { where?: { id?: { in?: unknown[] } }; select?: { id?: boolean } } | undefined
+        if (a?.where?.id?.in) return origFindMany(a as Parameters<typeof origFindMany>[0])
+        if (a?.select?.id) return []
+        return fixtureOffers
+      })
+      await prisma.userOffer.deleteMany({ where: { user_id: realUser.id } })
+      await prisma.apiCall.deleteMany({ where: { user_id: realUser.id } })
+      await prisma.user.delete({ where: { id: realUser.id } })
+    }
   })
 
   it('writes user_offer rows for pre-filtered offers; skips unscored matched offers', async () => {

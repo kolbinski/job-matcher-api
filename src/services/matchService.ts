@@ -33,7 +33,7 @@ export async function runMatchForUser(
 
   // ── 1. Load profile + settings ────────────────────────────────────────────
   const [dbUser, claudeBatchSizeSetting] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { profile: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { profile: true, email: true } }),
     prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
   ])
   if (!dbUser?.profile) throw new AppError(422, 'INVALID_PROFILE', 'No profile configured for this user')
@@ -45,6 +45,11 @@ export async function runMatchForUser(
     throw new AppError(422, 'INVALID_PROFILE', 'Profile is invalid')
   }
   const profile = profileParseResult.data
+
+  const isTestUser = dbUser.email?.endsWith('@jobmatcher-test.invalid') ?? false
+  if (isTestUser && doAiScoring) {
+    console.log(`[match] Test user ${userId} — skipping Claude API call`)
+  }
 
   // ── 2. Normalize profile once ──────────────────────────────────────────────
   const norm = normalizeProfile(profile)
@@ -173,9 +178,9 @@ export async function runMatchForUser(
   let aiScoring = false
   let claudeEvaluationsCount = 0
 
-  if (doAiScoring && filteredPairs.length === 0) {
+  if ((doAiScoring && !isTestUser) && filteredPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call')
-  } else if (doAiScoring) {
+  } else if (doAiScoring && !isTestUser) {
     const allBatches: typeof filteredPairs[] = []
     for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
       allBatches.push(filteredPairs.slice(i, i + claudeBatchSize))
