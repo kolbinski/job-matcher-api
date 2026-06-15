@@ -50,21 +50,29 @@ billingRouter.get('/history', validateJwt, async (req, res) => {
     hosted_invoice_url: inv.hosted_invoice_url ?? null,
   }))
 
-  const paymentIntentItems = (paymentIntentsResult?.data ?? [])
-    .filter((pi: StripePaymentIntent) => pi.status === 'succeeded')
-    .map((pi: StripePaymentIntent) => ({
-      id: pi.id,
-      amount: pi.amount,
-      currency: pi.currency,
-      status: pi.status,
-      created: pi.created,
-      date: new Date(pi.created * 1000).toISOString(),
-      description: pi.description ?? null,
-      receipt_url: (pi.latest_charge as { receipt_url?: string } | null | string)
-        && typeof pi.latest_charge === 'object'
-        ? (pi.latest_charge as { receipt_url?: string })?.receipt_url ?? null
-        : null,
-    }))
+  const succeededPaymentIntents = (paymentIntentsResult?.data ?? []).filter(
+    (pi: StripePaymentIntent) => pi.status === 'succeeded',
+  )
+
+  const paymentIntentItems = await Promise.all(
+    succeededPaymentIntents.map(async (pi: StripePaymentIntent) => {
+      const [sessions, charges] = await Promise.all([
+        stripe.checkout.sessions.list({ payment_intent: pi.id, limit: 1, expand: ['data.line_items'] }).catch(() => null),
+        stripe.charges.list({ payment_intent: pi.id, limit: 1 }).catch(() => null),
+      ])
+      return {
+        id: pi.id,
+        amount: pi.amount,
+        currency: pi.currency,
+        status: pi.status,
+        created: pi.created,
+        date: new Date(pi.created * 1000).toISOString(),
+        description: sessions?.data[0]?.line_items?.data?.[0]?.description ?? null,
+        receipt_url: charges?.data[0]?.receipt_url ?? null,
+        invoice_url: null,
+      }
+    }),
+  )
 
   const history = [...invoiceItems, ...paymentIntentItems].sort((a, b) => b.created - a.created)
 
