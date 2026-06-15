@@ -7,6 +7,7 @@ import { env } from '../lib/env';
 import { AppError } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { getClaudeModel } from '../lib/claudeModels';
+import { calculateCost } from '../lib/aiCost';
 
 export const onboardingRouter = Router();
 
@@ -245,6 +246,25 @@ ${cvText.slice(0, 12000)}`;
           output_tokens: data.usage?.output_tokens ?? 0,
         },
       }).catch(err => console.error('[prepare-profile] Failed to log api_call:', err));
+
+      const inputT = data.usage?.input_tokens ?? 0;
+      const outputT = data.usage?.output_tokens ?? 0;
+      calculateCost(prepareProfileModel, inputT, outputT)
+        .then(async cost => {
+          const emailRow = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+          return prisma.aiUsage.create({
+            data: {
+              user_id: userId,
+              email: emailRow?.email ?? null,
+              type: 'prepare_profile',
+              model: prepareProfileModel,
+              input_tokens: inputT,
+              output_tokens: outputT,
+              cost,
+            },
+          });
+        })
+        .catch(err => console.error('[ai_usage] insert failed:', err));
     }
 
     return res.json({ profile });
@@ -442,6 +462,25 @@ RULES:
         output_tokens: data.usage?.output_tokens ?? 0,
       },
     }).catch(err => console.error('[review-profile] Failed to log api_call:', err));
+
+    const inputT = data.usage?.input_tokens ?? 0;
+    const outputT = data.usage?.output_tokens ?? 0;
+    calculateCost(reviewProfileModel, inputT, outputT)
+      .then(async cost => {
+        const emailRow = await prisma.user.findUnique({ where: { id: reviewUserId }, select: { email: true } });
+        return prisma.aiUsage.create({
+          data: {
+            user_id: reviewUserId,
+            email: emailRow?.email ?? null,
+            type: 'profile_review',
+            model: reviewProfileModel,
+            input_tokens: inputT,
+            output_tokens: outputT,
+            cost,
+          },
+        });
+      })
+      .catch(err => console.error('[ai_usage] insert failed:', err));
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

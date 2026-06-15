@@ -11,6 +11,7 @@ import { CandidateProfileSchema } from '../types/profile';
 import { evaluateOffers } from '../services/claudeEvaluator';
 import { AppError } from '../lib/errors';
 import { type SalaryPref } from '../services/syncReport';
+import { calculateCost } from '../lib/aiCost';
 
 export const scanPageRouter = Router();
 
@@ -208,7 +209,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   const [user, ratesSetting] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { profile: true, scan_page_counter: true, scan_page_counter_max: true },
+      select: { profile: true, scan_page_counter: true, scan_page_counter_max: true, email: true },
     }),
     prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ]);
@@ -289,6 +290,20 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       messages: [{ role: 'user', content: page_text.slice(0, 8000) }],
     });
 
+    calculateCost(model, parseResponse.usage.input_tokens, parseResponse.usage.output_tokens)
+      .then(cost => prisma.aiUsage.create({
+        data: {
+          user_id: userId,
+          email: user.email ?? null,
+          type: 'scan_page',
+          model,
+          input_tokens: parseResponse.usage.input_tokens,
+          output_tokens: parseResponse.usage.output_tokens,
+          cost,
+        },
+      }))
+      .catch(err => console.error('[ai_usage] insert failed:', err));
+
     const toolUseBlock = parseResponse.content.find(
       b => b.type === 'tool_use',
     ) as Anthropic.ToolUseBlock | undefined;
@@ -367,6 +382,21 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
   if (!matchResult || matchResult.evaluations.length === 0) {
     throw new AppError(500, 'INTERNAL_ERROR', 'Offer matching failed');
   }
+
+  calculateCost(model, matchResult.input_tokens, matchResult.output_tokens)
+    .then(cost => prisma.aiUsage.create({
+      data: {
+        user_id: userId,
+        email: user.email ?? null,
+        type: 'scan_page',
+        model,
+        input_tokens: matchResult.input_tokens,
+        output_tokens: matchResult.output_tokens,
+        cost,
+      },
+    }))
+    .catch(err => console.error('[ai_usage] insert failed:', err));
+
   const evaluation = matchResult.evaluations[0]!;
 
   // Upsert user_offer

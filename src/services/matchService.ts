@@ -18,6 +18,7 @@ import type {
 } from '../types/match';
 import { parseEmploymentTypes } from '../lib/offers';
 import { calculateUserOfferSalary } from '../lib/salaryCalculator';
+import { calculateCost } from '../lib/aiCost';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
@@ -453,6 +454,19 @@ export async function runMatchForUser(
         .catch(err =>
           console.error('[match] Failed to log api_call for batch:', err),
         );
+      calculateCost(batchResults.model, batchResults.input_tokens, batchResults.output_tokens)
+        .then(cost => prisma.aiUsage.create({
+          data: {
+            user_id: userId,
+            email: dbUser.email ?? null,
+            type: 'matching',
+            model: batchResults.model,
+            input_tokens: batchResults.input_tokens,
+            output_tokens: batchResults.output_tokens,
+            cost,
+          },
+        }))
+        .catch(err => console.error('[ai_usage] insert failed:', err));
     };
 
     for (let i = 0; i < batchesToProcess.length; i += CONCURRENCY) {

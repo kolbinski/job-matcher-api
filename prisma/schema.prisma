@@ -287,6 +287,20 @@ model Feedback {
   @@map("feedbacks")
 }
 
+model AiUsage {
+  id            String   @id @default(uuid())
+  user_id       String?
+  email         String?
+  type          String
+  model         String
+  input_tokens  Int
+  output_tokens Int
+  cost          Float
+  created_at    DateTime @default(now())
+
+  @@map("ai_usage")
+}
+
 model NotificationLock {
   id         String   @id @default(cuid())
   lock_key   String   @unique

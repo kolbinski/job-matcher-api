@@ -33,6 +33,7 @@ import { stripeWebhookRouter } from './routes/stripeWebhook'
 import { scanPageRouter } from './routes/scanPage'
 import { offersRouter } from './routes/offers'
 import { billingRouter } from './routes/billing'
+import { agentAiUsageRouter } from './routes/agentAiUsage'
 
 export const app = express()
 
@@ -61,6 +62,7 @@ app.use('/v1/prospects', prospectsRouter)
 app.use('/v1/push-tokens', pushTokensRouter)
 app.use('/v1/notifications', notificationsRouter)
 app.use('/v1/agent', agentMeRouter)
+app.use('/v1/agent', agentAiUsageRouter)
 app.use('/v1/user-syncs', userSyncsRouter)
 app.use('/v1/settings', settingsRouter)
 app.use('/v1/feedback', feedbackRouter)

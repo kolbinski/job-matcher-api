@@ -8,6 +8,7 @@ import { CandidateProfileSchema } from '../types/profile'
 import { AppError } from '../lib/errors'
 import { env } from '../lib/env'
 import { getClaudeModel } from '../lib/claudeModels'
+import { calculateCost } from '../lib/aiCost'
 
 export const clGenerateRouter = Router()
 
@@ -99,6 +100,20 @@ async function runGeneration(
         output_tokens: usage.output_tokens,
       },
     }).catch(err => console.error('[clGenerate] Failed to log api_call:', err))
+
+    calculateCost(clModel, usage.input_tokens, usage.output_tokens)
+      .then(cost => prisma.aiUsage.create({
+        data: {
+          user_id: userId,
+          email: user?.email ?? null,
+          type: 'cl_generation',
+          model: clModel,
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          cost,
+        },
+      }))
+      .catch(err => console.error('[ai_usage] insert failed:', err))
 
     return { cl_url: publicUrl, cl_status: 'done' }
   } catch (err) {
