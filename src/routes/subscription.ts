@@ -25,7 +25,7 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     }),
     prisma.user.findUnique({
       where: { id: user_id! },
-      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true },
+      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true, scan_page_counter: true, scan_page_counter_max: true },
     }),
   ])
 
@@ -41,6 +41,8 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     cv_counter_max: user?.cv_counter_max ?? 0,
     cl_counter: user?.cl_counter ?? 0,
     cl_counter_max: user?.cl_counter_max ?? 0,
+    scan_page_counter: user?.scan_page_counter ?? 0,
+    scan_page_counter_max: user?.scan_page_counter_max ?? 0,
   })
 })
 
