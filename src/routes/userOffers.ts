@@ -16,6 +16,10 @@ const QuerySchema = z.object({
   date_from: z.string().optional(),
   date_to: z.string().optional(),
   page: z.coerce.number().int().min(1).optional(),
+  min_score: z.coerce.number().int().min(0).optional(),
+  generated_cv: z.enum(['true', 'false']).optional(),
+  generated_cl: z.enum(['true', 'false']).optional(),
+  sort_by: z.enum(['score', 'salary_delta']).optional(),
 });
 
 interface SalaryPref {
@@ -300,8 +304,20 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     date_from,
     date_to,
     page: pageParam,
+    min_score: minScoreParam,
+    generated_cv,
+    generated_cl,
   } = parsed.data;
   const page = pageParam ?? 1;
+  const minScore = minScoreParam ?? 0;
+
+  const filterSnapshotOffers = (offers: unknown[]): unknown[] => {
+    let arr = offers as Array<Record<string, unknown>>;
+    if (minScore > 0) arr = arr.filter(o => ((o['claude_score'] as number | null) ?? 0) >= minScore);
+    if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
+    if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
+    return arr;
+  };
   const { role, agent_id, user_id } = req.jwt!;
 
   let clientId: string;
@@ -369,7 +385,19 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       });
       if (userWithSnapshot?.free_plan_snapshot != null) {
         console.log('[user-offers] returning free plan snapshot');
-        return res.json(userWithSnapshot.free_plan_snapshot);
+        const snap = userWithSnapshot.free_plan_snapshot as {
+          count?: number;
+          apply_now?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
+          level_up?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
+        };
+        const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
+        const levelUpOffers = filterSnapshotOffers(snap.level_up?.offers ?? []);
+        return res.json({
+          ...snap,
+          count: applyNowOffers.length + levelUpOffers.length,
+          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowOffers.length, offers: applyNowOffers } } : {}),
+          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpOffers.length, offers: levelUpOffers } } : {}),
+        });
       }
     }
 
@@ -399,9 +427,13 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           ? { employment_types: { not: [] as Prisma.InputJsonValue } }
           : {}),
       };
+      const isScoreRelevant = bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected';
       const bucketWhere = {
         user_id: clientId,
         status: bucketStatus,
+        ...(isScoreRelevant && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
+        ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
+        ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
         ...(Object.keys(bucketOfferWhere).length > 0
           ? { offer: bucketOfferWhere }
           : {}),
@@ -418,7 +450,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
             take: 1,
           },
         },
-        orderBy: { updated_at: 'desc' },
+        orderBy: { claude_score: 'desc' },
       });
       console.log(`[user-offers] bucket=${bucketStatus} prisma returned ${rows.length} rows`);
 
@@ -546,9 +578,13 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       ? { employment_types: { not: [] as Prisma.InputJsonValue } }
       : {}),
   };
+  const isScoreStatus = status === 'pending_apply' || status === 'ai_rejected';
   const where = {
     user_id: clientId,
     status,
+    ...(isScoreStatus && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
+    ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
+    ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
     ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
   };
 
@@ -605,7 +641,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { updated_at: 'desc' },
+    orderBy: { claude_score: 'desc' },
   });
 
   const [{ learningGoals, salaryPrefs }, rates, pageSizeSetting] = await Promise.all([
