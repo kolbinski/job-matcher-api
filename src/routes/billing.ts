@@ -38,7 +38,7 @@ billingRouter.get('/history', validateJwt, async (req, res) => {
     stripe.paymentIntents.list({ customer: customerId, limit: 20 }).catch(() => null),
   ])
 
-  const invoiceItems = (invoicesResult?.data ?? []).map((inv: StripeInvoice) => ({
+  const invoiceItems = (invoicesResult?.data ?? []).filter((inv: StripeInvoice) => inv.status === 'paid').map((inv: StripeInvoice) => ({
     id: inv.id,
     amount: inv.amount_paid,
     currency: inv.currency,
