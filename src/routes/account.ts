@@ -166,6 +166,7 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
   await prisma.agentClient.deleteMany({ where: { user_id: targetUserId } })
   await prisma.feedback.deleteMany({ where: { user_id: targetUserId } })
   await prisma.userSync.deleteMany({ where: { user_id: targetUserId } })
+  await prisma.notificationLock.deleteMany({ where: { lock_key: { contains: targetUserId } } })
   await prisma.apiCall.deleteMany({ where: { user_id: targetUserId } })
   await prisma.subscription.deleteMany({ where: { user_id: targetUserId } })
 

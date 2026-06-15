@@ -308,9 +308,18 @@ async function _syncUserById(userId: string): Promise<void> {
 
   const dedupedResult = deduplicateMatchResult(result);
   const syncReport = buildSyncReport(dedupedResult, salaryPrefs, exchangeRates, maxLevelUp);
-  const userSync = await prisma.userSync.create({
-    data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
-  });
+  let userSync: { id: string };
+  try {
+    userSync = await prisma.userSync.create({
+      data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
+    });
+  } catch (e: unknown) {
+    if ((e as { code?: string }).code === 'P2003') {
+      console.log(`[sync] user ${userId} no longer exists, stopping sync`);
+      return;
+    }
+    throw e;
+  }
 
   const newOffersCount = result.meta.newly_inserted;
   const stretchCount = result.stretch_offers.length;
