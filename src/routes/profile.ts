@@ -190,3 +190,30 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
     console.error(`[trigger-sync] Sync failed for user ${userId}:`, err),
   )
 })
+
+profileRouter.post('/cancel-edit', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: user_id! },
+    select: { profile_editing_snapshot: true },
+  })
+
+  if (!user || user.profile_editing_snapshot === null) {
+    return res.status(400).json({ error: 'NO_SNAPSHOT' })
+  }
+
+  await prisma.user.update({
+    where: { id: user_id! },
+    data: {
+      profile: user.profile_editing_snapshot as Prisma.InputJsonValue,
+      profile_editing_snapshot: Prisma.JsonNull,
+      profile_ready: true,
+    },
+  })
+
+  return res.json({ success: true })
+})
