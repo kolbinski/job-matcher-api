@@ -43,18 +43,21 @@ generalSettingsRouter.get('/', async (_req, res) => {
   const scanPackagePriceId = priceIds['scan_package_price_id'] ?? null
   const cvPackagePriceId = priceIds['cv_package_price_id'] ?? null
   const clPackagePriceId = priceIds['cl_package_price_id'] ?? null
+  const profileRematchPriceId = priceIds['profile_rematch_package_price_id'] ?? null
 
-  const [proStripePrice, scanStripePrice, cvStripePrice, clStripePrice] = await Promise.all([
+  const [proStripePrice, scanStripePrice, cvStripePrice, clStripePrice, profileRematchStripePrice] = await Promise.all([
     plan?.stripe_price_id ? stripe.prices.retrieve(plan.stripe_price_id).catch(() => null) : Promise.resolve(null),
     scanPackagePriceId ? stripe.prices.retrieve(scanPackagePriceId).catch(() => null) : Promise.resolve(null),
     cvPackagePriceId ? stripe.prices.retrieve(cvPackagePriceId).catch(() => null) : Promise.resolve(null),
     clPackagePriceId ? stripe.prices.retrieve(clPackagePriceId).catch(() => null) : Promise.resolve(null),
+    profileRematchPriceId ? stripe.prices.retrieve(profileRematchPriceId).catch(() => null) : Promise.resolve(null),
   ])
 
   parsed.pro_price = formatStripePrice(proStripePrice)
   parsed.scan_package_price = formatStripePrice(scanStripePrice)
   parsed.cv_package_price = formatStripePrice(cvStripePrice)
   parsed.cl_package_price = formatStripePrice(clStripePrice)
+  parsed.profile_rematch_package_price = formatStripePrice(profileRematchStripePrice)
   parsed.plans = allPlans
     ? Object.fromEntries(allPlans.map(p => [p.name, p.limits]))
     : null
