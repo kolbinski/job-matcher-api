@@ -22,9 +22,6 @@ import { calculateCost } from '../lib/aiCost';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
-const DEV_CLAUDE_MAX_BATCHES = 1; // 0 = disabled, use all batches
-const DEV_CLAUDE_BATCH_SIZE = 50; // 0 = disabled, use value from settings
-
 export async function runMatchForUser(
   userId: string,
   opts?: {
@@ -44,7 +41,7 @@ export async function runMatchForUser(
   const syncStartedAt = opts?.syncStartedAt;
 
   // ── 1. Load profile + settings ────────────────────────────────────────────
-  const [dbUser, claudeBatchSizeSetting, exchangeRatesSetting] =
+  const [dbUser, claudeBatchSizeSetting, exchangeRatesSetting, devModeSetting] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -52,6 +49,7 @@ export async function runMatchForUser(
       }),
       prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
       prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+      prisma.settings.findUnique({ where: { key: 'dev_mode' } }),
     ]);
   if (!dbUser?.profile)
     throw new AppError(
@@ -59,15 +57,13 @@ export async function runMatchForUser(
       'INVALID_PROFILE',
       'No profile configured for this user',
     );
+  const devMode = devModeSetting
+    ? (JSON.parse(devModeSetting.value) as { ai_max_batches?: number; ai_batch_size?: number })
+    : { ai_max_batches: 0, ai_batch_size: 0 };
   const settingsBatchSize =
     parseInt(claudeBatchSizeSetting?.value ?? '10', 10) || 10;
   const claudeBatchSize =
-    DEV_CLAUDE_BATCH_SIZE > 0 ? DEV_CLAUDE_BATCH_SIZE : settingsBatchSize;
-  if (DEV_CLAUDE_MAX_BATCHES > 0 || DEV_CLAUDE_BATCH_SIZE > 0) {
-    console.log(
-      `[match] DEV limits active: max_batches=${DEV_CLAUDE_MAX_BATCHES} batch_size=${DEV_CLAUDE_BATCH_SIZE}`,
-    );
-  }
+    (devMode.ai_batch_size ?? 0) > 0 ? devMode.ai_batch_size! : settingsBatchSize;
 
   const profileParseResult = CandidateProfileSchema.safeParse(dbUser.profile);
   if (!profileParseResult.success) {
@@ -265,16 +261,12 @@ export async function runMatchForUser(
     for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
       allBatches.push(filteredPairs.slice(i, i + claudeBatchSize));
     }
+    const aiMaxBatches = devMode.ai_max_batches ?? 0;
     const batchesToProcess =
-      DEV_CLAUDE_MAX_BATCHES > 0
-        ? allBatches.slice(0, DEV_CLAUDE_MAX_BATCHES)
-        : allBatches;
-    if (
-      DEV_CLAUDE_MAX_BATCHES > 0 &&
-      batchesToProcess.length < allBatches.length
-    ) {
+      aiMaxBatches > 0 ? allBatches.slice(0, aiMaxBatches) : allBatches;
+    if (aiMaxBatches > 0 || (devMode.ai_batch_size ?? 0) > 0) {
       console.log(
-        `[match] CLAUDE_MAX_BATCHES limit applied: processing ${batchesToProcess.length} of ${allBatches.length} batches`,
+        `[match] DEV mode: max_batches=${aiMaxBatches || 'unlimited'} batch_size=${devMode.ai_batch_size || 'default'} — processing ${batchesToProcess.length} of ${allBatches.length} total batch(es)`,
       );
     }
     const totalBatches = batchesToProcess.length;
