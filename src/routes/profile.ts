@@ -99,13 +99,13 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
         : Prisma.JsonNull,
     }
   } else if (profile_ready === true) {
-    // Leaving edit mode: fetch snapshot now, compare after update against full merged profile
+    // Leaving edit mode: fetch snapshot for comparison but do NOT clear it here —
+    // trigger-sync reads it to decide whether to increment the rematch counter.
     const current = await prisma.user.findUnique({
       where: { id: userId },
       select: { profile_editing_snapshot: true },
     })
     snapshotForComparison = current?.profile_editing_snapshot ?? null
-    snapshotUpdate = { profile_editing_snapshot: Prisma.JsonNull }
   }
 
   const updated = await prisma.user.update({
@@ -148,6 +148,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
 
   const matchingRelevantChange = compareMatchingFields(user.profile_editing_snapshot, user.profile)
+  console.log(`[trigger-sync] userId=${userId} matchingRelevantChange=${matchingRelevantChange} counter=${user.profile_relevant_change_counter} counter_max=${user.profile_relevant_change_counter_max} snapshotNull=${user.profile_editing_snapshot == null}`)
 
   if (matchingRelevantChange) {
     if (user.profile_relevant_change_counter >= user.profile_relevant_change_counter_max) {
