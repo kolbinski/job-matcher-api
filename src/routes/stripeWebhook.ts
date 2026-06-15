@@ -45,7 +45,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const stripeCustomerId = obj.customer ?? null
       const sessionType = obj.metadata?.['type'] ?? null
 
-      if (sessionType === 'scan_package' || sessionType === 'cv_package' || sessionType === 'cl_package') {
+      if (sessionType === 'scan_package' || sessionType === 'cv_package' || sessionType === 'cl_package' || sessionType === 'profile_rematch_package') {
         const userId = obj.metadata?.['user_id']
         const amount = Number(obj.metadata?.['amount'] ?? '0')
         if (!userId) {
@@ -53,15 +53,27 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           return res.json({ received: true })
         }
 
-        const counterField =
-          sessionType === 'cv_package' ? 'cv_counter_max' :
-          sessionType === 'cl_package' ? 'cl_counter_max' :
-          'scan_page_counter_max'
+        if (sessionType === 'profile_rematch_package') {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              profile_relevant_change_counter_max: { increment: amount },
+              profile_relevant_change_pending: false,
+            },
+          })
+          console.log(`[stripe-webhook] profile_rematch_package: incremented profile_relevant_change_counter_max by ${amount} for user ${userId}`)
+        } else {
+          const counterField =
+            sessionType === 'cv_package' ? 'cv_counter_max' :
+            sessionType === 'cl_package' ? 'cl_counter_max' :
+            'scan_page_counter_max'
 
-        await prisma.user.update({
-          where: { id: userId },
-          data: { [counterField]: { increment: amount } },
-        })
+          await prisma.user.update({
+            where: { id: userId },
+            data: { [counterField]: { increment: amount } },
+          })
+          console.log(`[stripe-webhook] ${sessionType}: incremented ${counterField} by ${amount} for user ${userId}`)
+        }
 
         // customer field is null on mode='payment' events — retrieve session to expand it
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,7 +93,6 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           console.log(`[stripe-webhook] saved stripe_customer_id: ${packageCustomerId} for user: ${userId}`)
         }
 
-        console.log(`[stripe-webhook] ${sessionType}: incremented ${counterField} by ${amount} for user ${userId}`)
         return res.json({ received: true })
       }
 

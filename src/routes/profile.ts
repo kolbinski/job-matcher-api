@@ -136,10 +136,42 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
   const userId = req.jwt!.user_id!
 
-  await prisma.user.update({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    data: { profile_synced_at: new Date(), profile_editing_snapshot: Prisma.JsonNull },
+    select: {
+      profile: true,
+      profile_editing_snapshot: true,
+      profile_relevant_change_counter: true,
+      profile_relevant_change_counter_max: true,
+    },
   })
+  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+
+  const matchingRelevantChange = compareMatchingFields(user.profile_editing_snapshot, user.profile)
+
+  if (matchingRelevantChange) {
+    if (user.profile_relevant_change_counter >= user.profile_relevant_change_counter_max) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { profile_relevant_change_pending: true },
+      })
+      return res.status(402).json({ error: 'PROFILE_REMATCH_LIMIT_REACHED' })
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        profile_relevant_change_counter: { increment: 1 },
+        profile_relevant_change_pending: false,
+        profile_synced_at: new Date(),
+        profile_editing_snapshot: Prisma.JsonNull,
+      },
+    })
+  } else {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profile_synced_at: new Date(), profile_editing_snapshot: Prisma.JsonNull },
+    })
+  }
 
   console.log(`[trigger-sync] Deleting stale offers for user ${userId}`)
 

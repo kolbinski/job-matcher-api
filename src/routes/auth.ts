@@ -92,13 +92,14 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       update: {},
     })
 
-    const limits = freePlan.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number }
+    const limits = freePlan.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number }
     await prisma.user.update({
       where: { id: user.id },
       data: {
         cv_counter_max: limits.max_cv ?? 0,
         cl_counter_max: limits.max_cl ?? 0,
         scan_page_counter_max: limits.max_scan_page ?? 0,
+        profile_relevant_change_counter_max: limits.profile_relevant_change_max ?? 0,
       },
     })
   }

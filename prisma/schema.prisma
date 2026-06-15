@@ -64,6 +64,9 @@ model User {
   cv_counter_max                      Int       @default(0)
   cl_counter                          Int       @default(0)
   cl_counter_max                      Int       @default(0)
+  profile_relevant_change_counter     Int       @default(0)
+  profile_relevant_change_counter_max Int       @default(0)
+  profile_relevant_change_pending     Boolean   @default(false)
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]
