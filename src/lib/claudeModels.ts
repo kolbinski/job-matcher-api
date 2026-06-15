@@ -1,22 +1,23 @@
 import { prisma } from './prisma'
 
-const DEFAULTS = {
-  prepare_profile:  'claude-sonnet-4-6',
-  review_profile:   'claude-sonnet-4-6',
-  cv_cl_generation: 'claude-sonnet-4-6',
-  matching:         'claude-sonnet-4-6',
-  scan_page_model:  'claude-sonnet-4-6',
-} as const
-
-type ClaudeModelKey = keyof typeof DEFAULTS
+export type ClaudeModelKey =
+  | 'prepare_profile'
+  | 'review_profile'
+  | 'cv_generation'
+  | 'cl_generation'
+  | 'matching'
+  | 'scan_page_model'
 
 export async function getClaudeModel(key: ClaudeModelKey): Promise<string> {
-  try {
-    const setting = await prisma.settings.findUnique({ where: { key: 'claude_models' } })
-    if (!setting) return DEFAULTS[key]
-    const models = JSON.parse(setting.value) as Record<string, string>
-    return models[key] ?? DEFAULTS[key]
-  } catch {
-    return DEFAULTS[key]
+  const setting = await prisma.settings.findUnique({ where: { key: 'claude_models' } })
+  if (setting) {
+    let models: Record<string, string>
+    try {
+      models = JSON.parse(setting.value) as Record<string, string>
+    } catch {
+      throw new Error(`settings.claude_models contains invalid JSON — fix the value in DB.`)
+    }
+    if (models[key]) return models[key]
   }
+  throw new Error(`Claude model not configured for key: '${key}'. Add it to settings.claude_models in DB.`)
 }

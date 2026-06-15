@@ -287,7 +287,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       ]);
     const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
     const start = (page - 1) * pageSize;
-    console.log('[user-offers] multi-status pagination:', { page, pageSize, start });
     const effectivePlan =
       subscription?.plan ??
       (role === 'client'
@@ -298,7 +297,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       max_level_up: number | null;
     } | null;
 
-    console.log('[user-offers] effectivePlan:', effectivePlan?.name ?? 'null', 'limits:', JSON.stringify(limits));
 
     if (role === 'client' && effectivePlan?.name === 'free') {
       const userWithSnapshot = await prisma.user.findUnique({
@@ -306,7 +304,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         select: { free_plan_snapshot: true },
       });
       if (userWithSnapshot?.free_plan_snapshot != null) {
-        console.log('[user-offers] returning free plan snapshot');
         const snap = userWithSnapshot.free_plan_snapshot as {
           count?: number;
           apply_now?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
@@ -361,7 +358,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           : {}),
       };
 
-      console.log(`[user-offers] querying bucket=${bucketStatus} user_id=${clientId} where=`, JSON.stringify(bucketWhere));
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
         include: {
@@ -374,7 +370,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         },
         orderBy: sortBy === 'salary_delta' ? { salary_delta: 'desc' } : { claude_score: 'desc' },
       });
-      console.log(`[user-offers] bucket=${bucketStatus} prisma returned ${rows.length} rows`);
 
       // Dedup
       const seen = new Map<string, (typeof rows)[number]>();
@@ -477,10 +472,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         }
       }
 
-      console.log(`[user-offers] bucket=${bucketStatus} rows=${rows.length} deduped=${result.length} finalMapped=${count} planLimited=${offers.length} page=${page} pageSize=${pageSize} start=${start}`);
       const pagedOffers = offers.slice(start, start + pageSize);
       const has_more = offers.length > start + pageSize;
-      console.log(`[user-offers] bucket=${bucketStatus} pagedOffers=${pagedOffers.length} has_more=${has_more}`);
 
       buckets[bucketStatus] = { status: bucketStatus, count, has_more, offers: pagedOffers };
     }

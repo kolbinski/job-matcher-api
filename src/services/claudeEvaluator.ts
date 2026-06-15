@@ -123,9 +123,7 @@ async function _evaluateOffers(
 
     const { input_tokens, output_tokens } = response.usage;
     const response_ms = Date.now() - claudeStart;
-    console.log(
-      `[claudeEvaluator] Response received in ${response_ms}ms | tokens: ${input_tokens} in / ${output_tokens} out`,
-    );
+
 
     const toolUseBlock = response.content.find(b => b.type === 'tool_use') as
       | Anthropic.ToolUseBlock
@@ -141,10 +139,7 @@ async function _evaluateOffers(
 
     const parsed = toolInput.evaluations;
 
-    console.log(
-      '[claudeEvaluator] Parsed evaluations:',
-      Array.isArray(parsed) ? parsed.length : 'not an array',
-    );
+
 
     if (!Array.isArray(parsed) || parsed.length === 0) {
       console.error('[claudeEvaluator] evaluations is not a non-empty array');

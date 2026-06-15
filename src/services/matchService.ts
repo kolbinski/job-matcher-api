@@ -102,7 +102,6 @@ export async function runMatchForUser(
 
   // ── 4. Load active offers with skill pre-filter ────────────────────────────
   const candidateTechs = [...norm.techs];
-  console.log('[preFilter] candidateTechs:', candidateTechs);
   const skillFilter =
     candidateTechs.length > 0
       ? {
@@ -176,23 +175,7 @@ export async function runMatchForUser(
     });
   }
 
-  console.log(`[preFilter] workplace: rejected ${rejectCounts.workplace}`);
-  console.log(
-    `[preFilter] employment_type: rejected ${rejectCounts.employment_type}`,
-  );
-  console.log(`[preFilter] salary: rejected ${rejectCounts.salary}`);
-  console.log(`[preFilter] seniority: rejected ${rejectCounts.seniority}`);
-  console.log(`[preFilter] language: rejected ${rejectCounts.language}`);
-  console.log(`[preFilter] red_flags: rejected ${rejectCounts.red_flags}`);
-  console.log(`[preFilter] city: rejected ${rejectCounts.city}`);
-  console.log(`[preFilter] skill_excluded: ${skillExcluded.length}`);
-  console.log(
-    '[preFilter] skill_excluded for user:',
-    userId,
-    'candidateTechs:',
-    candidateTechs,
-  );
-  console.log(`[preFilter] total passed: ${pairs.length} → sending to Claude`);
+
 
   // ── 6b. Write pre_filter_rejected rows immediately ────────────────────────
   // Inserting before Claude so seenIds on the next sync excludes these offers,

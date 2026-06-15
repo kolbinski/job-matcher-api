@@ -3,6 +3,7 @@ import path from 'path';
 import slugify from 'slugify';
 import type { CandidateProfile } from '../types/profile';
 import { env } from '../lib/env';
+import { getClaudeModel } from '../lib/claudeModels';
 import { prisma } from '../lib/prisma';
 
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html');
@@ -346,8 +347,9 @@ export async function generateCV(
   jobTitle?: string,
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
-  model = 'claude-sonnet-4-6',
+  model?: string,
 ): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
+  const resolvedModel = model ?? await getClaudeModel('cv_generation')
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -428,7 +430,7 @@ Rules:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model,
+      model: resolvedModel,
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     }),

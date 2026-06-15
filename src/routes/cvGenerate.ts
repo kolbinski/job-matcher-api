@@ -55,7 +55,7 @@ async function runGeneration(
 
   await prisma.userOffer.update({ where: { id: userOfferId }, data: { cv_status: 'generating' } })
 
-  const cvModel = await getClaudeModel('cv_cl_generation')
+  const cvModel = await getClaudeModel('cv_generation')
 
   try {
     const { html, filename, usage } = await generateCV(profileParsed.data, offerText, cvLanguage, jobTitle, companyName, user, cvModel)

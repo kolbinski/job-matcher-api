@@ -55,7 +55,7 @@ async function runGeneration(
 
   await prisma.userOffer.update({ where: { id: userOfferId }, data: { cl_status: 'generating' } })
 
-  const clModel = await getClaudeModel('cv_cl_generation')
+  const clModel = await getClaudeModel('cl_generation')
 
   try {
     const { html, filename, usage } = await generateCoverLetter(profileParsed.data, offerText, clLanguage, jobTitle, companyName, user, clModel)
