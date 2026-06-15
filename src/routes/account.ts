@@ -19,6 +19,50 @@ const AgentBodySchema = z.object({
   client_id: z.string().uuid(),
 })
 
+const AccountSettingsUpdateSchema = z.object({
+  timezone: z.string().optional(),
+  preferred_currency: z.string().optional(),
+})
+
+accountRouter.get('/settings', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: user_id! },
+    select: { timezone: true, preferred_currency: true },
+  })
+  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+
+  return res.json({ timezone: user.timezone, preferred_currency: user.preferred_currency })
+})
+
+accountRouter.patch('/settings', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const parsed = AccountSettingsUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
+  }
+
+  const { timezone, preferred_currency } = parsed.data
+  const updated = await prisma.user.update({
+    where: { id: user_id! },
+    data: {
+      ...(timezone !== undefined ? { timezone } : {}),
+      ...(preferred_currency !== undefined ? { preferred_currency } : {}),
+    },
+    select: { timezone: true, preferred_currency: true },
+  })
+
+  return res.json({ timezone: updated.timezone, preferred_currency: updated.preferred_currency })
+})
+
 const BillingUpdateSchema = z.object({
   name: z.string().optional(),
   line1: z.string().optional(),
