@@ -57,7 +57,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           await prisma.user.update({
             where: { id: userId },
             data: {
-              profile_relevant_change_counter_max: { increment: amount },
+              profile_relevant_change_counter_max: { increment: amount + 1 },
               profile_relevant_change_pending: false,
             },
           })
