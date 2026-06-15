@@ -140,6 +140,10 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
     targetEmail = user.email
   }
 
+  // Pre-step: Prevent the scheduler from re-queueing and signal any in-flight sync to abort
+  await prisma.user.update({ where: { id: targetUserId }, data: { profile_ready: false, sync_started_at: null } })
+  await new Promise<void>(resolve => setTimeout(resolve, 500))
+
   // Step 1: Batch-delete user_offer_statuses (via raw SQL to support LIMIT)
   while (true) {
     const affected = await prisma.$executeRaw`

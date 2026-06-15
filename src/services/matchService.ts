@@ -263,6 +263,12 @@ export async function runMatchForUser(
               console.log(`[match] Batch ${batchNum}: sync superseded, skipping insert`)
               return
             }
+          } else {
+            const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+            if (!userExists) {
+              console.log(`[match] Batch ${batchNum}: user no longer exists, aborting insert`)
+              return
+            }
           }
           const writeResult = await prisma.userOffer.createMany({ data: validBatchRows, skipDuplicates: true })
           newlyInserted += writeResult.count
