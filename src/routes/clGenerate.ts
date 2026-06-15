@@ -73,8 +73,7 @@ async function runGeneration(
     }
     const pdfBuffer = Buffer.from(await gotenbergRes.arrayBuffer())
 
-    const emailFolder = (user.email ?? '').replace(/@/g, '_at_').replace(/\./g, '_').replace(/\+/g, '_')
-    const storagePath = `cls/${emailFolder}/${filename}`
+    const storagePath = `cls/${user.id}/${filename}`
     const supabase = getSupabase()
     const { error: uploadError } = await supabase.storage
       .from('homo-digital')

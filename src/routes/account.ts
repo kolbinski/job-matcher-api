@@ -220,19 +220,18 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
 
   // Step 4: Delete CV and CL files from Supabase Storage (best-effort — don't block account deletion)
   try {
-    const sanitizedEmail = targetEmail.replace(/@/g, '_at_').replace(/\./g, '_').replace(/\+/g, '_')
     const supabase = getSupabase()
     const [{ data: cvFiles }, { data: clFiles }] = await Promise.all([
-      supabase.storage.from('homo-digital').list(`cvs/${sanitizedEmail}`),
-      supabase.storage.from('homo-digital').list(`cls/${sanitizedEmail}`),
+      supabase.storage.from('homo-digital').list(`cvs/${targetUserId}`),
+      supabase.storage.from('homo-digital').list(`cls/${targetUserId}`),
     ])
     const pathsToDelete = [
-      ...(cvFiles ?? []).map(f => `cvs/${sanitizedEmail}/${f.name}`),
-      ...(clFiles ?? []).map(f => `cls/${sanitizedEmail}/${f.name}`),
+      ...(cvFiles ?? []).map(f => `cvs/${targetUserId}/${f.name}`),
+      ...(clFiles ?? []).map(f => `cls/${targetUserId}/${f.name}`),
     ]
     if (pathsToDelete.length > 0) {
       const { error } = await supabase.storage.from('homo-digital').remove(pathsToDelete)
-      if (error) console.error(`[delete-account] Storage deletion failed for ${sanitizedEmail}:`, error)
+      if (error) console.error(`[delete-account] Storage deletion failed for ${targetUserId}:`, error)
     }
   } catch (err) {
     console.error('[delete-account] Storage cleanup error:', err)
