@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/integration/**'],
+    globalSetup: 'tests/globalSetup.ts',
     setupFiles: ['tests/setup.ts'],
     testTimeout: 60_000,
     hookTimeout: 30_000,
