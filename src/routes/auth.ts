@@ -10,6 +10,21 @@ import { getSupabase } from '../lib/supabase'
 
 export const authRouter = Router()
 
+function getDefaultCurrency(tz: string): string {
+  if (tz?.startsWith('Europe/')) {
+    if (tz === 'Europe/Warsaw') return 'PLN'
+    if (tz === 'Europe/London') return 'GBP'
+    if (['Europe/Zurich', 'Europe/Geneva'].includes(tz)) return 'CHF'
+    if (['Europe/Oslo'].includes(tz)) return 'NOK'
+    if (['Europe/Stockholm'].includes(tz)) return 'SEK'
+    if (['Europe/Copenhagen'].includes(tz)) return 'DKK'
+    return 'EUR'
+  }
+  if (tz?.startsWith('America/')) return 'USD'
+  if (tz?.startsWith('Australia/')) return 'AUD'
+  return 'USD'
+}
+
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -58,6 +73,7 @@ authRouter.post('/login', async (req, res) => {
 
 authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
   const { email } = req.supabase_user!
+  const timezone = typeof req.body?.timezone === 'string' ? (req.body.timezone as string) : undefined
 
   const token = req.headers.authorization!.slice(7)
   const { data: { user: supabaseUser } } = await getSupabase().auth.getUser(token)
@@ -65,6 +81,9 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
 
   const freePlan = await prisma.plan.findUnique({ where: { name: 'free' } })
   const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number } | undefined
+
+  const defaultTimezone = timezone ?? 'America/New_York'
+  const defaultCurrency = getDefaultCurrency(defaultTimezone)
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -76,6 +95,8 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       cl_counter_max: freeLimits?.max_cl ?? 0,
       scan_page_counter_max: freeLimits?.max_scan_page ?? 0,
       profile_relevant_change_counter_max: freeLimits?.profile_relevant_change_max ?? 0,
+      timezone: defaultTimezone,
+      preferred_currency: defaultCurrency,
     },
     update: {
       email,
