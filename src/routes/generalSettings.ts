@@ -32,9 +32,10 @@ generalSettingsRouter.get('/', async (_req, res) => {
 
   const stripe = new Stripe(env.STRIPE_SECRET_KEY)
 
-  const [plan, priceIdsSetting] = await Promise.all([
+  const [plan, priceIdsSetting, allPlans] = await Promise.all([
     prisma.plan.findUnique({ where: { name: 'pro' }, select: { stripe_price_id: true } }),
     prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
+    prisma.plan.findMany({ select: { name: true, limits: true } }).catch(() => null),
   ])
 
   const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
@@ -53,6 +54,9 @@ generalSettingsRouter.get('/', async (_req, res) => {
   parsed.scan_package_price = formatStripePrice(scanStripePrice)
   parsed.cv_package_price = formatStripePrice(cvStripePrice)
   parsed.cl_package_price = formatStripePrice(clStripePrice)
+  parsed.plans = allPlans
+    ? Object.fromEntries(allPlans.map(p => [p.name, p.limits]))
+    : null
 
   res.json(parsed)
 })
