@@ -79,7 +79,13 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
   const { data: { user: supabaseUser } } = await getSupabase().auth.getUser(token)
   const photoUrl = (supabaseUser?.user_metadata?.['avatar_url'] as string | undefined) ?? null
 
-  const freePlan = await prisma.plan.findUnique({ where: { name: 'free' } })
+  const [freePlan, existingUser] = await Promise.all([
+    prisma.plan.findUnique({ where: { name: 'free' } }),
+    prisma.user.findUnique({
+      where: { email },
+      select: { cv_counter_max: true, cl_counter_max: true, scan_page_counter_max: true, profile_relevant_change_counter_max: true },
+    }),
+  ])
   const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number } | undefined
   console.log('[social-login] freePlan:', freePlan, 'freeLimits:', freeLimits)
 
@@ -102,6 +108,10 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     update: {
       email,
       ...(photoUrl ? { photo_url: photoUrl } : {}),
+      ...(existingUser?.cv_counter_max === 0 ? { cv_counter_max: freeLimits?.max_cv ?? 0 } : {}),
+      ...(existingUser?.cl_counter_max === 0 ? { cl_counter_max: freeLimits?.max_cl ?? 0 } : {}),
+      ...(existingUser?.scan_page_counter_max === 0 ? { scan_page_counter_max: freeLimits?.max_scan_page ?? 0 } : {}),
+      ...(existingUser?.profile_relevant_change_counter_max === 0 ? { profile_relevant_change_counter_max: freeLimits?.profile_relevant_change_max ?? 0 } : {}),
     },
     select: { id: true, cv_counter_max: true, cl_counter_max: true, scan_page_counter_max: true, profile_relevant_change_counter_max: true },
   })
