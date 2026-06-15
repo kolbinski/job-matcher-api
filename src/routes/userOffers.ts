@@ -407,6 +407,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           : {}),
       };
 
+      console.log(`[user-offers] querying bucket=${bucketStatus} user_id=${clientId} where=`, JSON.stringify(bucketWhere));
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
         include: {
@@ -419,6 +420,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         },
         orderBy: { updated_at: 'desc' },
       });
+      console.log(`[user-offers] bucket=${bucketStatus} prisma returned ${rows.length} rows`);
 
       // Dedup
       const seen = new Map<string, (typeof rows)[number]>();
