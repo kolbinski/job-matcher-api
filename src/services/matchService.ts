@@ -21,8 +21,8 @@ import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
-const DEV_CLAUDE_MAX_BATCHES = 1;
-const DEV_CLAUDE_BATCH_SIZE = 2;
+const DEV_CLAUDE_MAX_BATCHES = 0; // 0 = disabled, use all batches
+const DEV_CLAUDE_BATCH_SIZE = 0;  // 0 = disabled, use value from settings
 
 export async function runMatchForUser(
   userId: string,
@@ -57,11 +57,13 @@ export async function runMatchForUser(
       'INVALID_PROFILE',
       'No profile configured for this user',
     );
-  const claudeBatchSize = DEV_CLAUDE_BATCH_SIZE;
-  console.log(
-    `[match] DEV limits active: max_batches=${DEV_CLAUDE_MAX_BATCHES} batch_size=${DEV_CLAUDE_BATCH_SIZE}`,
-  );
-  void claudeBatchSizeSetting;
+  const settingsBatchSize = parseInt(claudeBatchSizeSetting?.value ?? '10', 10) || 10;
+  const claudeBatchSize = DEV_CLAUDE_BATCH_SIZE > 0 ? DEV_CLAUDE_BATCH_SIZE : settingsBatchSize;
+  if (DEV_CLAUDE_MAX_BATCHES > 0 || DEV_CLAUDE_BATCH_SIZE > 0) {
+    console.log(
+      `[match] DEV limits active: max_batches=${DEV_CLAUDE_MAX_BATCHES} batch_size=${DEV_CLAUDE_BATCH_SIZE}`,
+    );
+  }
 
   const profileParseResult = CandidateProfileSchema.safeParse(dbUser.profile);
   if (!profileParseResult.success) {
@@ -274,8 +276,10 @@ export async function runMatchForUser(
     for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
       allBatches.push(filteredPairs.slice(i, i + claudeBatchSize));
     }
-    const batchesToProcess = allBatches.slice(0, DEV_CLAUDE_MAX_BATCHES);
-    if (batchesToProcess.length < allBatches.length) {
+    const batchesToProcess = DEV_CLAUDE_MAX_BATCHES > 0
+      ? allBatches.slice(0, DEV_CLAUDE_MAX_BATCHES)
+      : allBatches;
+    if (DEV_CLAUDE_MAX_BATCHES > 0 && batchesToProcess.length < allBatches.length) {
       console.log(
         `[match] CLAUDE_MAX_BATCHES limit applied: processing ${batchesToProcess.length} of ${allBatches.length} batches`,
       );
