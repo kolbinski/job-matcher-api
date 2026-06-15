@@ -63,12 +63,19 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
   const { data: { user: supabaseUser } } = await getSupabase().auth.getUser(token)
   const photoUrl = (supabaseUser?.user_metadata?.['avatar_url'] as string | undefined) ?? null
 
+  const freePlan = await prisma.plan.findUnique({ where: { name: 'free' } })
+  const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number } | undefined
+
   const user = await prisma.user.upsert({
     where: { email },
     create: {
       email,
       jobmatcher_api_key: `jm_live_${crypto.randomBytes(16).toString('hex')}`,
       photo_url: photoUrl,
+      cv_counter_max: freeLimits?.max_cv ?? 0,
+      cl_counter_max: freeLimits?.max_cl ?? 0,
+      scan_page_counter_max: freeLimits?.max_scan_page ?? 0,
+      profile_relevant_change_counter_max: freeLimits?.profile_relevant_change_max ?? 0,
     },
     update: {
       email,
@@ -77,7 +84,6 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     select: { id: true },
   })
 
-  const freePlan = await prisma.plan.findUnique({ where: { name: 'free' } })
   if (freePlan) {
     await prisma.subscription.upsert({
       where: { user_id: user.id },
@@ -90,17 +96,6 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
         current_period_end: null,
       },
       update: {},
-    })
-
-    const limits = freePlan.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number }
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        cv_counter_max: limits.max_cv ?? 0,
-        cl_counter_max: limits.max_cl ?? 0,
-        scan_page_counter_max: limits.max_scan_page ?? 0,
-        profile_relevant_change_counter_max: limits.profile_relevant_change_max ?? 0,
-      },
     })
   }
 
