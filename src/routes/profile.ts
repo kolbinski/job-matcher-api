@@ -113,7 +113,6 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
     data: {
       ...(profile !== undefined ? { profile: profile as Prisma.InputJsonValue } : {}),
       ...(profile_ready !== undefined ? { profile_ready } : {}),
-      profile_synced_at: null,
       ...snapshotUpdate,
     },
     select: { profile: true, profile_ready: true },
@@ -123,10 +122,6 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
   const matching_relevant_change = profile_ready === true
     ? compareMatchingFields(snapshotForComparison, updated.profile)
     : undefined
-
-  await prisma.userOffer.deleteMany({
-    where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
-  })
 
   res.json(matching_relevant_change !== undefined
     ? { ...updated, matching_relevant_change }
