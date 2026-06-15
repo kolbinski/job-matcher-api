@@ -129,12 +129,19 @@ profileRouter.patch('/', validateJwt, async (req, res) => {
   )
 })
 
+const TriggerSyncBodySchema = z.object({
+  force_relevant_change: z.boolean().optional(),
+})
+
 profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   if (req.jwt!.role !== 'client') {
     throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
   }
 
   const userId = req.jwt!.user_id!
+
+  const bodyParsed = TriggerSyncBodySchema.safeParse(req.body)
+  const forceRelevantChange = bodyParsed.success ? (bodyParsed.data.force_relevant_change ?? false) : false
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -147,8 +154,8 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   })
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
 
-  const matchingRelevantChange = compareMatchingFields(user.profile_editing_snapshot, user.profile)
-  console.log(`[trigger-sync] userId=${userId} matchingRelevantChange=${matchingRelevantChange} counter=${user.profile_relevant_change_counter} counter_max=${user.profile_relevant_change_counter_max} snapshotNull=${user.profile_editing_snapshot == null}`)
+  const matchingRelevantChange = forceRelevantChange || compareMatchingFields(user.profile_editing_snapshot, user.profile)
+  console.log(`[trigger-sync] userId=${userId} matchingRelevantChange=${matchingRelevantChange} forceRelevantChange=${forceRelevantChange} counter=${user.profile_relevant_change_counter} counter_max=${user.profile_relevant_change_counter_max} snapshotNull=${user.profile_editing_snapshot == null}`)
 
   if (matchingRelevantChange) {
     if (user.profile_relevant_change_counter >= user.profile_relevant_change_counter_max) {
