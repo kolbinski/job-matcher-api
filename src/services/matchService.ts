@@ -22,8 +22,8 @@ import { calculateCost } from '../lib/aiCost';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
-const DEV_CLAUDE_MAX_BATCHES = 0; // 0 = disabled, use all batches
-const DEV_CLAUDE_BATCH_SIZE = 0;  // 0 = disabled, use value from settings
+const DEV_CLAUDE_MAX_BATCHES = 1; // 0 = disabled, use all batches
+const DEV_CLAUDE_BATCH_SIZE = 50; // 0 = disabled, use value from settings
 
 export async function runMatchForUser(
   userId: string,
@@ -44,22 +44,25 @@ export async function runMatchForUser(
   const syncStartedAt = opts?.syncStartedAt;
 
   // ── 1. Load profile + settings ────────────────────────────────────────────
-  const [dbUser, claudeBatchSizeSetting, exchangeRatesSetting] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { profile: true, email: true, preferred_currency: true },
-    }),
-    prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
-    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
-  ]);
+  const [dbUser, claudeBatchSizeSetting, exchangeRatesSetting] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { profile: true, email: true, preferred_currency: true },
+      }),
+      prisma.settings.findUnique({ where: { key: 'claude_batch_size' } }),
+      prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+    ]);
   if (!dbUser?.profile)
     throw new AppError(
       422,
       'INVALID_PROFILE',
       'No profile configured for this user',
     );
-  const settingsBatchSize = parseInt(claudeBatchSizeSetting?.value ?? '10', 10) || 10;
-  const claudeBatchSize = DEV_CLAUDE_BATCH_SIZE > 0 ? DEV_CLAUDE_BATCH_SIZE : settingsBatchSize;
+  const settingsBatchSize =
+    parseInt(claudeBatchSizeSetting?.value ?? '10', 10) || 10;
+  const claudeBatchSize =
+    DEV_CLAUDE_BATCH_SIZE > 0 ? DEV_CLAUDE_BATCH_SIZE : settingsBatchSize;
   if (DEV_CLAUDE_MAX_BATCHES > 0 || DEV_CLAUDE_BATCH_SIZE > 0) {
     console.log(
       `[match] DEV limits active: max_batches=${DEV_CLAUDE_MAX_BATCHES} batch_size=${DEV_CLAUDE_BATCH_SIZE}`,
@@ -76,11 +79,15 @@ export async function runMatchForUser(
   }
   const profile = profileParseResult.data;
 
-  const preferredCurrency = dbUser.preferred_currency ?? 'USD'
-  const salaryPrefs = (profile.preferences?.salary ?? []) as Array<{ type: string; currency: string; min: number }>
+  const preferredCurrency = dbUser.preferred_currency ?? 'USD';
+  const salaryPrefs = (profile.preferences?.salary ?? []) as Array<{
+    type: string;
+    currency: string;
+    min: number;
+  }>;
   const exchangeRates: Record<string, number> = exchangeRatesSetting
     ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
-    : {}
+    : {};
 
   const isTestUser =
     dbUser.email?.endsWith('@jobmatcher-test.invalid') ?? false;
@@ -176,8 +183,6 @@ export async function runMatchForUser(
     });
   }
 
-
-
   // ── 6b. Write pre_filter_rejected rows immediately ────────────────────────
   // Inserting before Claude so seenIds on the next sync excludes these offers,
   // preventing re-evaluation of already-rejected offers.
@@ -260,10 +265,14 @@ export async function runMatchForUser(
     for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
       allBatches.push(filteredPairs.slice(i, i + claudeBatchSize));
     }
-    const batchesToProcess = DEV_CLAUDE_MAX_BATCHES > 0
-      ? allBatches.slice(0, DEV_CLAUDE_MAX_BATCHES)
-      : allBatches;
-    if (DEV_CLAUDE_MAX_BATCHES > 0 && batchesToProcess.length < allBatches.length) {
+    const batchesToProcess =
+      DEV_CLAUDE_MAX_BATCHES > 0
+        ? allBatches.slice(0, DEV_CLAUDE_MAX_BATCHES)
+        : allBatches;
+    if (
+      DEV_CLAUDE_MAX_BATCHES > 0 &&
+      batchesToProcess.length < allBatches.length
+    ) {
       console.log(
         `[match] CLAUDE_MAX_BATCHES limit applied: processing ${batchesToProcess.length} of ${allBatches.length} batches`,
       );
@@ -328,11 +337,13 @@ export async function runMatchForUser(
           const isPendingApply =
             p.offer.recommended === true && p.offer.role_fit !== null;
           const salaryResult = calculateUserOfferSalary(
-            Array.isArray(p.original.employment_types) ? p.original.employment_types : [],
+            Array.isArray(p.original.employment_types)
+              ? p.original.employment_types
+              : [],
             preferredCurrency,
             salaryPrefs,
             exchangeRates,
-          )
+          );
           return {
             user_id: userId,
             offer_id: p.original.id,
@@ -454,18 +465,24 @@ export async function runMatchForUser(
         .catch(err =>
           console.error('[match] Failed to log api_call for batch:', err),
         );
-      calculateCost(batchResults.model, batchResults.input_tokens, batchResults.output_tokens)
-        .then(cost => prisma.aiUsage.create({
-          data: {
-            user_id: userId,
-            email: dbUser.email ?? null,
-            type: 'matching',
-            model: batchResults.model,
-            input_tokens: batchResults.input_tokens,
-            output_tokens: batchResults.output_tokens,
-            cost,
-          },
-        }))
+      calculateCost(
+        batchResults.model,
+        batchResults.input_tokens,
+        batchResults.output_tokens,
+      )
+        .then(cost =>
+          prisma.aiUsage.create({
+            data: {
+              user_id: userId,
+              email: dbUser.email ?? null,
+              type: 'matching',
+              model: batchResults.model,
+              input_tokens: batchResults.input_tokens,
+              output_tokens: batchResults.output_tokens,
+              cost,
+            },
+          }),
+        )
         .catch(err => console.error('[ai_usage] insert failed:', err));
     };
 
