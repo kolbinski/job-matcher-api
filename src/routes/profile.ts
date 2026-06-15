@@ -143,7 +143,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { profile_synced_at: new Date() },
+    data: { profile_synced_at: new Date(), profile_editing_snapshot: Prisma.JsonNull },
   })
 
   console.log(`[trigger-sync] Deleting stale offers for user ${userId}`)
