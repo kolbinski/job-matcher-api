@@ -186,6 +186,27 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
   });
 });
 
+userOffersRouter.patch('/:id/role-fit', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+  const { id } = req.params as { id: string }
+  const roleFit = req.body?.claude_role_fit
+  if (typeof roleFit !== 'string' || !roleFit.trim()) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'claude_role_fit must be a non-empty string' })
+  }
+
+  const userOffer = await prisma.userOffer.findFirst({ where: { id, user_id: user_id! } })
+  if (!userOffer) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer not found or does not belong to you' })
+  }
+
+  await prisma.userOffer.update({ where: { id }, data: { claude_role_fit: roleFit } })
+
+  return res.json({ success: true })
+})
+
 userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
   const { id } = req.params as { id: string };
   const parsed = StatusBodySchema.safeParse(req.body);
