@@ -80,6 +80,7 @@ export async function runMatchForUser(
     type: string;
     currency: string;
     min: number;
+    unit?: string;
   }>;
   const exchangeRates: Record<string, number> = exchangeRatesSetting
     ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
