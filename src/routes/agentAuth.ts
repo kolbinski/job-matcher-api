@@ -8,7 +8,8 @@ import { AppError } from '../lib/errors'
 
 export const agentAuthRouter = Router()
 
-const FALLBACK_RATES: Record<string, number> = { USD: 3.85, EUR: 4.25, GBP: 5.10, CHF: 4.40 }
+// USD-based fallback rates: how many units of each currency per 1 USD
+const FALLBACK_RATES: Record<string, number> = { USD: 1, PLN: 3.90, EUR: 0.92, GBP: 0.79, CHF: 0.90, CZK: 23.5, UAH: 41.5, DKK: 6.88, SEK: 10.5, NOK: 10.6 }
 
 async function refreshExchangeRates(): Promise<void> {
   const updatedAt = await prisma.settings.findUnique({ where: { key: 'exchange_rates_updated_at' } })
@@ -18,16 +19,38 @@ async function refreshExchangeRates(): Promise<void> {
 
   if (!stale) return
 
-  const rates: Record<string, number> = { ...FALLBACK_RATES }
+  // Read currencies list from general_settings
+  const generalSetting = await prisma.settings.findUnique({ where: { key: 'general_settings' } })
+  let currencies: string[] = Object.keys(FALLBACK_RATES)
   try {
-    const resp = await fetch('https://open.er-api.com/v6/latest/PLN')
+    if (generalSetting) {
+      const gs = JSON.parse(generalSetting.value) as { currencies?: string[] }
+      if (Array.isArray(gs.currencies) && gs.currencies.length > 0) {
+        currencies = gs.currencies.map(c => c.toUpperCase())
+      }
+    }
+  } catch {
+    console.warn('[agentAuth] failed to parse general_settings currencies, using fallback list')
+  }
+
+  // Start with USD = 1 as base, fill remaining from fallbacks
+  const rates: Record<string, number> = { USD: 1 }
+  for (const cur of currencies) {
+    if (cur !== 'USD') rates[cur] = FALLBACK_RATES[cur] ?? 1
+  }
+
+  try {
+    const resp = await fetch('https://open.er-api.com/v6/latest/USD')
     if (resp.ok) {
       const data = (await resp.json()) as { result: string; rates: Record<string, number> }
       if (data.result === 'success') {
-        for (const [cur, fallback] of Object.entries(FALLBACK_RATES)) {
+        for (const cur of currencies) {
           const apiRate = data.rates[cur]
-          rates[cur] = apiRate && apiRate > 0 ? Math.round((1 / apiRate) * 10000) / 10000 : fallback
+          if (apiRate && apiRate > 0) {
+            rates[cur] = Math.round(apiRate * 10000) / 10000
+          }
         }
+        rates['USD'] = 1
       }
     }
   } catch (err) {
