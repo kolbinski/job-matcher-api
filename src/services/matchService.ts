@@ -76,12 +76,12 @@ export async function runMatchForUser(
   const profile = profileParseResult.data;
 
   const preferredCurrency = dbUser.preferred_currency ?? 'USD';
-  const salaryPrefs = (profile.preferences?.salary ?? []) as Array<{
+  const salaryPrefs = ((profile.preferences?.salary ?? []) as Array<{
     type: string;
     currency: string;
     min: number;
     unit?: string;
-  }>;
+  }>).map(p => ({ type: p.type, currency: p.currency, min: p.min, unit: p.unit }))
   const exchangeRates: Record<string, number> = exchangeRatesSetting
     ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
     : {};
