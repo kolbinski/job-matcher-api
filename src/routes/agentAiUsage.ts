@@ -5,8 +5,17 @@ import { validateJwt } from '../middleware/validateJwt'
 export const agentAiUsageRouter = Router()
 
 agentAiUsageRouter.get('/ai-usage', validateJwt, async (req, res) => {
-  if (req.jwt!.role !== 'agent') {
-    return res.status(403).json({ error: 'FORBIDDEN', message: 'Agent access only' })
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Client JWT required' })
+  }
+
+  const adminUser = await prisma.user.findUnique({
+    where: { id: user_id! },
+    select: { is_admin: true },
+  })
+  if (!adminUser?.is_admin) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access only' })
   }
 
   const startOfMonth = new Date()
