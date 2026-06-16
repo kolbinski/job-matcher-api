@@ -375,6 +375,17 @@ function buildHtml(r: ReviewResponse): string {
 }
 
 onboardingRouter.post('/review-profile', validateJwt, async (req, res) => {
+  const reviewUserId = req.jwt!.user_id;
+  if (reviewUserId) {
+    const reviewer = await prisma.user.findUnique({
+      where: { id: reviewUserId },
+      select: { review_by_ai_counter: true, review_by_ai_counter_max: true },
+    });
+    if (reviewer && reviewer.review_by_ai_counter_max > 0 && reviewer.review_by_ai_counter >= reviewer.review_by_ai_counter_max) {
+      return res.status(402).json({ error: 'REVIEW_LIMIT_REACHED', message: 'Review by AI limit reached' });
+    }
+  }
+
   const reviewProfileModel = await getClaudeModel('review_profile');
 
   const parsed = ReviewBodySchema.safeParse(req.body);
@@ -450,7 +461,6 @@ RULES:
     );
   }
 
-  const reviewUserId = req.jwt!.user_id;
   if (reviewUserId) {
     prisma.apiCall.create({
       data: {
@@ -481,6 +491,13 @@ RULES:
         });
       })
       .catch(err => console.error('[ai_usage] insert failed:', err));
+  }
+
+  if (reviewUserId) {
+    prisma.user.update({
+      where: { id: reviewUserId },
+      data: { review_by_ai_counter: { increment: 1 } },
+    }).catch(err => console.error('[review-profile] Failed to increment review_by_ai_counter:', err));
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

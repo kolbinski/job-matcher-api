@@ -25,7 +25,7 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     }),
     prisma.user.findUnique({
       where: { id: user_id! },
-      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true, scan_page_counter: true, scan_page_counter_max: true, profile_relevant_change_counter: true, profile_relevant_change_counter_max: true, profile_relevant_change_pending: true, is_admin: true },
+      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true, scan_page_counter: true, scan_page_counter_max: true, profile_relevant_change_counter: true, profile_relevant_change_counter_max: true, profile_relevant_change_pending: true, review_by_ai_counter: true, review_by_ai_counter_max: true, is_admin: true },
     }),
   ])
 
@@ -46,6 +46,8 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     profile_relevant_change_counter: user?.profile_relevant_change_counter ?? 0,
     profile_relevant_change_counter_max: user?.profile_relevant_change_counter_max ?? 0,
     profile_relevant_change_pending: user?.profile_relevant_change_pending ?? false,
+    review_by_ai_counter: user?.review_by_ai_counter ?? 0,
+    review_by_ai_counter_max: user?.review_by_ai_counter_max ?? 0,
     is_admin: user?.is_admin ?? false,
   })
 })
@@ -248,6 +250,45 @@ subscriptionRouter.post('/profile-rematch-checkout', validateJwt, async (req, re
     billing_address_collection: 'required',
     tax_id_collection: { enabled: true },
     payment_intent_data: { description: 'Homo Digital 10 Profile Re-match Package' },
+    ...(user?.stripe_customer_id
+      ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
+      : { customer_email: user?.email, customer_creation: 'always' }),
+  })
+
+  return res.json({ url: session.url })
+})
+
+subscriptionRouter.post('/review-package-checkout', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+  const userId = user_id!
+
+  const [priceIdsSetting, generalSetting, user] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: 'stripe_price_ids' } }),
+    prisma.settings.findUnique({ where: { key: 'general_settings' } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { stripe_customer_id: true, email: true } }),
+  ])
+
+  const priceIds = JSON.parse(priceIdsSetting?.value ?? '{}') as Record<string, string>
+  const reviewPackagePriceId = priceIds['profile_review_package_price_id']
+  if (!reviewPackagePriceId) {
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'profile_review_package_price_id not configured' })
+  }
+
+  const generalSettings = JSON.parse(generalSetting?.value ?? '{}') as Record<string, unknown>
+  const amount = Number(generalSettings['profile_review_package_amount'] ?? 0)
+
+  const session = await getStripe().checkout.sessions.create({
+    mode: 'payment',
+    line_items: [{ price: reviewPackagePriceId, quantity: 1 }],
+    metadata: { type: 'review_package', user_id: userId, amount: String(amount) },
+    success_url: 'https://homodigital.io?upgrade=review_package',
+    cancel_url: 'https://homodigital.io?upgrade=cancelled',
+    billing_address_collection: 'required',
+    tax_id_collection: { enabled: true },
+    payment_intent_data: { description: 'Homo Digital 10 Profile Reviews Package' },
     ...(user?.stripe_customer_id
       ? { customer: user.stripe_customer_id, customer_update: { address: 'auto', name: 'auto' } }
       : { customer_email: user?.email, customer_creation: 'always' }),

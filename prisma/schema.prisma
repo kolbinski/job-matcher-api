@@ -67,6 +67,8 @@ model User {
   profile_relevant_change_counter     Int       @default(0)
   profile_relevant_change_counter_max Int       @default(0)
   profile_relevant_change_pending     Boolean   @default(false)
+  review_by_ai_counter                Int       @default(0)
+  review_by_ai_counter_max            Int       @default(0)
   is_admin                            Boolean   @default(false)
   timezone                            String?
   preferred_currency                  String?

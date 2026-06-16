@@ -103,6 +103,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       cl_counter_max: freeLimits?.max_cl ?? 0,
       scan_page_counter_max: freeLimits?.max_scan_page ?? 0,
       profile_relevant_change_counter_max: freeLimits?.profile_relevant_change_max ?? 0,
+      review_by_ai_counter_max: (freeLimits as Record<string, unknown> | undefined)?.['max_review_by_ai'] as number ?? 0,
       timezone: defaultTimezone,
       preferred_currency: defaultCurrency,
     },

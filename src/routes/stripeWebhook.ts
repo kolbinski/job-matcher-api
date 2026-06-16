@@ -45,7 +45,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       const stripeCustomerId = obj.customer ?? null
       const sessionType = obj.metadata?.['type'] ?? null
 
-      if (sessionType === 'scan_package' || sessionType === 'cv_package' || sessionType === 'cl_package' || sessionType === 'profile_rematch_package') {
+      if (sessionType === 'scan_package' || sessionType === 'cv_package' || sessionType === 'cl_package' || sessionType === 'profile_rematch_package' || sessionType === 'review_package') {
         const userId = obj.metadata?.['user_id']
         const amount = Number(obj.metadata?.['amount'] ?? '0')
         if (!userId) {
@@ -62,6 +62,12 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
             },
           })
           console.log(`[stripe-webhook] profile_rematch_package: incremented profile_relevant_change_counter_max by ${amount} for user ${userId}`)
+        } else if (sessionType === 'review_package') {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { review_by_ai_counter_max: { increment: amount } },
+          })
+          console.log(`[stripe-webhook] review_package: incremented review_by_ai_counter_max by ${amount} for user ${userId}`)
         } else {
           const counterField =
             sessionType === 'cv_package' ? 'cv_counter_max' :
@@ -140,8 +146,8 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
         },
       })
 
-      const proLimits = proPlan.limits as { max_scan_page?: number; max_cv?: number; max_cl?: number }
-      const freeLimits = (freePlan?.limits ?? {}) as { max_scan_page?: number; max_cv?: number; max_cl?: number }
+      const proLimits = proPlan.limits as { max_scan_page?: number; max_cv?: number; max_cl?: number; max_review_by_ai?: number }
+      const freeLimits = (freePlan?.limits ?? {}) as { max_scan_page?: number; max_cv?: number; max_cl?: number; max_review_by_ai?: number }
 
       await prisma.user.update({
         where: { id: userId },
@@ -150,6 +156,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
           scan_page_counter_max: { increment: (proLimits.max_scan_page ?? 0) - (freeLimits.max_scan_page ?? 0) },
           cv_counter_max: { increment: (proLimits.max_cv ?? 0) - (freeLimits.max_cv ?? 0) },
           cl_counter_max: { increment: (proLimits.max_cl ?? 0) - (freeLimits.max_cl ?? 0) },
+          review_by_ai_counter_max: { increment: (proLimits.max_review_by_ai ?? 0) - (freeLimits.max_review_by_ai ?? 0) },
         },
       })
 
