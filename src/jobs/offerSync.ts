@@ -51,32 +51,23 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
 
 async function upsertPage(
   offers: NormalizedOffer[],
-  existingSlugs: Set<string>,
   fetchedAt: Date,
 ): Promise<{ inserted: number; updated: number; insertedSlugs: string[] }> {
-  const toInsert = offers.filter(o => !existingSlugs.has(o.slug));
-  const toUpdate = offers.filter(o => existingSlugs.has(o.slug));
-
-  for (const batch of chunk(toInsert, BATCH_SIZE)) {
-    await prisma.offer.createMany({
-      data: batch.map(o => toUpsertData(o, fetchedAt)),
-      skipDuplicates: true,
-    });
-  }
-
-  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+  for (const batch of chunk(offers, BATCH_SIZE)) {
     for (const offer of batch) {
-      await prisma.offer.update({
+      const data = toUpsertData(offer, fetchedAt);
+      await prisma.offer.upsert({
         where: { slug: offer.slug },
-        data: toUpsertData(offer, fetchedAt),
+        create: data,
+        update: data,
       });
     }
   }
 
   return {
-    inserted: toInsert.length,
-    updated: toUpdate.length,
-    insertedSlugs: toInsert.map(o => o.slug),
+    inserted: offers.length,
+    updated: 0,
+    insertedSlugs: offers.map(o => o.slug),
   };
 }
 
@@ -98,7 +89,6 @@ type SourceSyncResult = {
 };
 
 async function syncJustJoin(
-  existingSlugs: Set<string>,
   fetchedAt: Date,
   maxPages: number,
 ): Promise<SourceSyncResult> {
@@ -135,12 +125,7 @@ async function syncJustJoin(
 
     if (offers.length === 0) break;
 
-    const { inserted, updated, insertedSlugs } = await upsertPage(
-      offers,
-      existingSlugs,
-      fetchedAt,
-    );
-    for (const slug of insertedSlugs) existingSlugs.add(slug);
+    const { inserted, updated } = await upsertPage(offers, fetchedAt);
     const pageMs = Date.now() - pageStart;
 
     for (const o of offers) {
@@ -172,7 +157,6 @@ async function syncJustJoin(
 }
 
 async function syncNfj(
-  existingSlugs: Set<string>,
   fetchedAt: Date,
   maxPages: number,
 ): Promise<SourceSyncResult> {
@@ -198,12 +182,7 @@ async function syncNfj(
 
     if (offers.length === 0) break;
 
-    const { inserted, updated, insertedSlugs } = await upsertPage(
-      offers,
-      existingSlugs,
-      fetchedAt,
-    );
-    for (const slug of insertedSlugs) existingSlugs.add(slug);
+    const { inserted, updated } = await upsertPage(offers, fetchedAt);
     const pageMs = Date.now() - pageStart;
 
     for (const o of offers) {
@@ -247,22 +226,20 @@ export async function syncOffers(
 }> {
   const fetchedAt = new Date();
 
-  const [maxPagesRow, nfjMaxPagesRow, existingSlugsRaw] = await Promise.all([
+  const [maxPagesRow, nfjMaxPagesRow] = await Promise.all([
     prisma.settings.findUnique({ where: { key: 'justjoin_max_pages' } }),
     prisma.settings.findUnique({ where: { key: 'nfj_max_pages' } }),
-    prisma.offer.findMany({ select: { slug: true } }),
   ]);
   const maxPages = parseInt(maxPagesRow?.value ?? '3', 10);
   const nfjMaxPages = parseInt(nfjMaxPagesRow?.value ?? '3', 10);
-  const existingSlugs = new Set(existingSlugsRaw.map(o => o.slug));
 
   console.log(
     `[offerSync] Starting sync — justjoin max_pages=${maxPages}, nfj max_pages=${nfjMaxPages}`,
   );
 
   const [jjResult, nfjResult] = await Promise.all([
-    syncJustJoin(existingSlugs, fetchedAt, maxPages),
-    syncNfj(existingSlugs, fetchedAt, nfjMaxPages),
+    syncJustJoin(fetchedAt, maxPages),
+    syncNfj(fetchedAt, nfjMaxPages),
   ]);
 
   await Promise.all([
