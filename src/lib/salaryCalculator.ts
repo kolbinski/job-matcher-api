@@ -61,7 +61,9 @@ export function calculateUserOfferSalary(
   }
 
   function prefMinInPrefCur(pref: SalaryPref): number {
+    console.log('[salaryCalc] prefMinInPrefCur:', { min: pref.min, unit: pref.unit, currency: pref.currency })
     const monthlyMin = toMonthly(pref.min, pref.unit)
+    console.log('[salaryCalc] monthlyMin:', monthlyMin)
     if (pref.currency.toUpperCase() === prefCur) return monthlyMin
     const prefCurrRate = getRate(exchangeRates, pref.currency)
     return monthlyMin * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
