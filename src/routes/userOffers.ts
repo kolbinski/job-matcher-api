@@ -20,6 +20,8 @@ const QuerySchema = z.object({
   generated_cv: z.enum(['true', 'false']).optional(),
   generated_cl: z.enum(['true', 'false']).optional(),
   sort_by: z.enum(['score', 'salary_delta']).optional(),
+  known_apply_count: z.coerce.number().int().min(0).optional(),
+  known_level_up_count: z.coerce.number().int().min(0).optional(),
 });
 
 interface ClientProfile {
@@ -230,6 +232,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     generated_cv,
     generated_cl,
     sort_by: sortBy,
+    known_apply_count: knownApplyCount,
+    known_level_up_count: knownLevelUpCount,
   } = parsed.data;
   const page = pageParam ?? 1;
   const minScore = minScoreParam ?? 0;
@@ -489,6 +493,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     const namedBuckets = Object.fromEntries(
       Object.entries(buckets).map(([k, v]) => [bucketKeyMap[k] ?? k, v]),
     )
+
+    if (knownApplyCount !== undefined && namedBuckets['apply_now'] && knownApplyCount === namedBuckets['apply_now'].count) {
+      namedBuckets['apply_now'] = { ...namedBuckets['apply_now'], offers: [] };
+    }
+    if (knownLevelUpCount !== undefined && namedBuckets['level_up'] && knownLevelUpCount === namedBuckets['level_up'].count) {
+      namedBuckets['level_up'] = { ...namedBuckets['level_up'], offers: [] };
+    }
+
     return res.json({ count: totalCount, ...namedBuckets });
   }
 
