@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { validateJwt } from '../middleware/validateJwt';
 import { dedupKey } from '../utils/deduplicateOffers';
+import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 
 export const userOffersRouter = Router();
 
@@ -85,7 +86,14 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
     });
   }
 
-  const offer = await prisma.offer.findFirst({ where: { url } });
+  const [offer, dbUser, exchangeRatesSetting] = await Promise.all([
+    prisma.offer.findFirst({ where: { url } }),
+    prisma.user.findUnique({
+      where: { id: user_id! },
+      select: { preferred_currency: true, profile: true },
+    }),
+    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+  ]);
   if (!offer) return res.json({ user_offer: null });
 
   const uo = await prisma.userOffer.findFirst({
@@ -115,6 +123,35 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
   });
   if (!uo) return res.json({ user_offer: null });
 
+  const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
+  const exchangeRates: Record<string, number> = exchangeRatesSetting
+    ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
+    : {};
+  const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }> } } | null;
+  const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
+    type: p.type,
+    currency: p.currency,
+    min: p.min,
+    unit: p.unit,
+  }));
+
+  const salaryResult = calculateUserOfferSalary(
+    Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
+    preferredCurrency,
+    salaryPrefs,
+    exchangeRates,
+  );
+
+  const raw_salaries = Array.isArray(uo.offer.employment_types)
+    ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
+        from: et['fromPerUnit'] ?? et['from'] ?? null,
+        to: et['toPerUnit'] ?? et['to'] ?? null,
+        currency: et['currency'] ?? null,
+        unit: et['unit'] ?? null,
+        type: et['type'] ?? null,
+      }))
+    : [];
+
   return res.json({
     user_offer: {
       user_offer_id: uo.id,
@@ -130,20 +167,10 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
       applied_at: uo.status_history[0]?.created_at ?? null,
-      salary: Array.isArray(uo.offer.employment_types)
-        ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(
-            et => ({
-              min: typeof et['from'] === 'number' ? et['from'] : 0,
-              max: typeof et['to'] === 'number' ? et['to'] : 0,
-              currency:
-                typeof et['currency'] === 'string' ? et['currency'] : 'USD',
-              type: typeof et['type'] === 'string' ? et['type'] : 'permanent',
-              unit: typeof et['unit'] === 'string' ? et['unit'] : 'month',
-              delta: 0,
-              delta_normalized: 0,
-            }),
-          )
+      salary: salaryResult
+        ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
         : [],
+      raw_salaries,
       source: uo.offer.source,
       city: uo.offer.city ?? null,
       work_model: uo.offer.workplace_type ?? null,
