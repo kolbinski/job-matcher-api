@@ -105,6 +105,7 @@ const SalaryPreferenceSchema = z.object({
   type: z.enum(['contract', 'permanent']),
   currency: z.string(),
   min: z.number().nonnegative(),
+  unit: z.enum(['hour', 'day', 'month', 'year']).optional(),
 })
 
 const PreferencesSchema = z.object({
