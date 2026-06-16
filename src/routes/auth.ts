@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma'
 import { env } from '../lib/env'
 import { validateSupabaseJwt } from '../middleware/validateSupabaseJwt'
 import { getSupabase } from '../lib/supabase'
+import { updateExchangeRates } from '../lib/exchangeRates'
 
 export const authRouter = Router()
 
@@ -136,6 +137,8 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       update: {},
     })
   }
+
+  updateExchangeRates().catch(err => console.error('[social-login] exchange rate refresh error:', err))
 
   const jmToken = jwt.sign(
     { role: 'client', user_id: user.id, email },
