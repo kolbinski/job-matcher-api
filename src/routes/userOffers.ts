@@ -424,8 +424,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         salary_delta: uo.salary_delta,
         raw_salaries: Array.isArray(uo.offer.employment_types)
           ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
-              from: et['from'] ?? null,
-              to: et['to'] ?? null,
+              from: et['fromPerUnit'] ?? et['from'] ?? null,
+              to: et['toPerUnit'] ?? et['to'] ?? null,
               currency: et['currency'] ?? null,
               unit: et['unit'] ?? null,
               type: et['type'] ?? null,
@@ -624,8 +624,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     salary_delta: uo.salary_delta,
     raw_salaries: Array.isArray(uo.offer.employment_types)
       ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
-          from: et['from'] ?? null,
-          to: et['to'] ?? null,
+          from: et['fromPerUnit'] ?? et['from'] ?? null,
+          to: et['toPerUnit'] ?? et['to'] ?? null,
           currency: et['currency'] ?? null,
           unit: et['unit'] ?? null,
           type: et['type'] ?? null,
