@@ -47,43 +47,76 @@ export function calculateUserOfferSalary(
   if (types.length === 0) return null
 
   const prefCur = preferredCurrency.toUpperCase()
+  const prefRate = getRate(exchangeRates, prefCur)
 
+  function convertEntry(entry: EmploymentTypeEntry): { salaryMin: number; salaryMax: number } | null {
+    if (entry.from == null || entry.to == null) return null
+    const entryRate = getRate(exchangeRates, entry.currency ?? '')
+    const factor = entryRate === 0 ? 1 : prefRate / entryRate
+    return {
+      salaryMin: toMonthly(entry.from, entry.unit) * factor,
+      salaryMax: toMonthly(entry.to, entry.unit) * factor,
+    }
+  }
+
+  function prefMinInPrefCur(pref: SalaryPref): number {
+    if (pref.currency.toUpperCase() === prefCur) return pref.min
+    const prefCurrRate = getRate(exchangeRates, pref.currency)
+    return pref.min * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
+  }
+
+  // Primary: match employment_type entries against user pref types (contract/permanent)
+  interface Candidate {
+    entry: EmploymentTypeEntry
+    salaryMin: number
+    salaryMax: number
+    delta: number
+  }
+
+  const candidates: Candidate[] = []
+  for (const entry of types) {
+    const entryType = (entry.type ?? '').toLowerCase()
+    const matchingPref = salaryPrefs.find(p => p.type.toLowerCase() === entryType)
+    if (!matchingPref) continue
+    const converted = convertEntry(entry)
+    if (!converted) continue
+    const delta = converted.salaryMax - prefMinInPrefCur(matchingPref)
+    candidates.push({ entry, ...converted, delta })
+  }
+
+  if (candidates.length > 0) {
+    const winner = candidates.reduce((best, c) => c.delta > best.delta ? c : best)
+    return {
+      salary_min: Math.round(winner.salaryMin),
+      salary_max: Math.round(winner.salaryMax),
+      salary_currency: preferredCurrency,
+      salary_delta: Math.round(winner.delta),
+      salary_type: winner.entry.type ?? null,
+    }
+  }
+
+  // Fallback: no type match — pick by currency priority (preferred → USD → first)
   const entry =
     types.find(t => t.currency?.toUpperCase() === prefCur) ??
     types.find(t => t.currency?.toUpperCase() === 'USD') ??
     types[0]
 
-  if (!entry || entry.from == null || entry.to == null) return null
-
-  const fromMonthly = toMonthly(entry.from, entry.unit)
-  const toMonthly_ = toMonthly(entry.to, entry.unit)
-
-  const entryRate = getRate(exchangeRates, entry.currency ?? '')
-  const prefRate = getRate(exchangeRates, prefCur)
-  const factor = entryRate === 0 ? 1 : prefRate / entryRate
-
-  const salaryMin = fromMonthly * factor
-  const salaryMax = toMonthly_ * factor
+  if (!entry) return null
+  const converted = convertEntry(entry)
+  if (!converted) return null
 
   const entryType = (entry.type ?? '').toLowerCase()
   const pref =
-    salaryPrefs.find(
-      p => p.currency.toUpperCase() === prefCur && p.type.toLowerCase() === entryType,
-    ) ??
+    salaryPrefs.find(p => p.currency.toUpperCase() === prefCur && p.type.toLowerCase() === entryType) ??
     salaryPrefs.find(p => p.currency.toUpperCase() === prefCur) ??
     salaryPrefs[0]
-
-  let prefMin = pref?.min ?? 0
-  if (pref && pref.currency.toUpperCase() !== prefCur) {
-    const prefCurrRate = getRate(exchangeRates, pref.currency)
-    prefMin = prefMin * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
-  }
+  const prefMin = pref ? prefMinInPrefCur(pref) : 0
 
   return {
-    salary_min: Math.round(salaryMin),
-    salary_max: Math.round(salaryMax),
+    salary_min: Math.round(converted.salaryMin),
+    salary_max: Math.round(converted.salaryMax),
     salary_currency: preferredCurrency,
-    salary_delta: Math.round(salaryMax - prefMin),
+    salary_delta: Math.round(converted.salaryMax - prefMin),
     salary_type: entry.type ?? null,
   }
 }
