@@ -399,7 +399,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
             take: 1,
           },
         },
-        orderBy: sortBy === 'salary_delta' ? { salary_delta: 'desc' } : { claude_score: 'desc' },
+        orderBy: sortBy === 'salary_delta'
+          ? [{ salary_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+          : [{ claude_score: 'desc' }],
       });
 
       // Dedup
@@ -503,6 +505,21 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         }
       }
 
+      offers = [...offers].sort((a, b) => {
+        if (sortBy === 'salary_delta') {
+          const da = a.salary_delta
+          const db = b.salary_delta
+          if (da !== db) {
+            if (da === null) return 1
+            if (db === null) return -1
+            return db - da
+          }
+        }
+        const scoreDiff = (b.claude_score ?? 0) - (a.claude_score ?? 0)
+        if (scoreDiff !== 0) return scoreDiff
+        return (a.work_model === 'remote' ? 0 : 1) - (b.work_model === 'remote' ? 0 : 1)
+      })
+
       const pagedOffers = offers.slice(start, start + pageSize);
       const has_more = offers.length > start + pageSize;
 
@@ -601,7 +618,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         take: 1,
       },
     },
-    orderBy: sortBy === 'salary_delta' ? { salary_delta: 'desc' } : { claude_score: 'desc' },
+    orderBy: sortBy === 'salary_delta'
+      ? [{ salary_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+      : [{ claude_score: 'desc' }],
   });
 
   const [{ learningGoals }, pageSizeSetting] = await Promise.all([
@@ -753,7 +772,20 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     );
   }
 
-  result.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
+  filtered = [...filtered].sort((a, b) => {
+    if (sortBy === 'salary_delta') {
+      const da = a.salary_delta
+      const db = b.salary_delta
+      if (da !== db) {
+        if (da === null) return 1
+        if (db === null) return -1
+        return db - da
+      }
+    }
+    const scoreDiff = (b.claude_score ?? 0) - (a.claude_score ?? 0)
+    if (scoreDiff !== 0) return scoreDiff
+    return (a.work_model === 'remote' ? 0 : 1) - (b.work_model === 'remote' ? 0 : 1)
+  })
 
   const pagedOffers = filtered.slice(start, start + pageSize);
   const has_more = filtered.length > start + pageSize;
