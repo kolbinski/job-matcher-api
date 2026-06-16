@@ -10,6 +10,7 @@ interface SalaryPref {
   type: string
   currency: string
   min: number
+  unit?: string
 }
 
 interface SalaryResult {
@@ -60,9 +61,10 @@ export function calculateUserOfferSalary(
   }
 
   function prefMinInPrefCur(pref: SalaryPref): number {
-    if (pref.currency.toUpperCase() === prefCur) return pref.min
+    const monthlyMin = toMonthly(pref.min, pref.unit)
+    if (pref.currency.toUpperCase() === prefCur) return monthlyMin
     const prefCurrRate = getRate(exchangeRates, pref.currency)
-    return pref.min * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
+    return monthlyMin * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
   }
 
   // Primary: match employment_type entries against user pref types (contract/permanent)

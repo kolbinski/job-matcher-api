@@ -5,6 +5,8 @@ import type { Offer } from '@prisma/client'
 export interface EmploymentTypeEntry {
   from?: number
   to?: number
+  fromPerUnit?: number
+  toPerUnit?: number
   currency?: string
   type?: string
   unit?: string

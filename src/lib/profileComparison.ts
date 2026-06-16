@@ -64,6 +64,11 @@ function extractOwnProjectSkills(profile: unknown): string {
   return stableStringify(projects.flatMap(p => p.skills ?? []))
 }
 
+function extractSalaryPrefUnits(profile: unknown): string {
+  const salary = (getField(profile, ['preferences', 'salary']) as Array<{ unit?: unknown }> | null | undefined) ?? []
+  return stableStringify(salary.map(s => s.unit ?? null))
+}
+
 // Returns true if any matching-relevant field differs between the two profiles.
 // Returns false if oldProfile is null (no snapshot — treat as no change).
 export function compareMatchingFields(oldProfile: unknown, newProfile: unknown): boolean {
@@ -78,6 +83,7 @@ export function compareMatchingFields(oldProfile: unknown, newProfile: unknown):
     extractWorkExpProjectSkills(oldProfile) !== extractWorkExpProjectSkills(newProfile) ||
     extractWorkExpTitles(oldProfile) !== extractWorkExpTitles(newProfile) ||
     extractCertificationNames(oldProfile) !== extractCertificationNames(newProfile) ||
-    extractOwnProjectSkills(oldProfile) !== extractOwnProjectSkills(newProfile)
+    extractOwnProjectSkills(oldProfile) !== extractOwnProjectSkills(newProfile) ||
+    extractSalaryPrefUnits(oldProfile) !== extractSalaryPrefUnits(newProfile)
   )
 }
