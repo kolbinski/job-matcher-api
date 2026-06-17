@@ -215,12 +215,12 @@ export async function runMatchForUser(
       );
     }
     const chunkSize = 100;
-    const userExistsBeforePreFilter = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!userExistsBeforePreFilter) {
-      console.log('[match] User no longer exists, stopping sync');
-      return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
-    }
     for (let i = 0; i < validPreFilterRows.length; i += chunkSize) {
+      const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!userExists) {
+        console.log('[match] Pre-filter chunk: user no longer exists, stopping sync');
+        return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
+      }
       const r = await prisma.userOffer.createMany({
         data: validPreFilterRows.slice(i, i + chunkSize),
         skipDuplicates: true,
