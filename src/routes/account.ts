@@ -199,8 +199,15 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
 
   // Step 2: Delete public.users row — CASCADE handles all FK-linked tables
   console.log(`[delete-account] Deleting public.users row for ${targetUserId}`)
-  await prisma.user.delete({ where: { id: targetUserId } })
-  console.log(`[delete-account] public.users row deleted — cascade complete`)
+  try {
+    await prisma.user.delete({ where: { id: targetUserId } })
+    console.log(`[delete-account] public.users row deleted — cascade complete`)
+  } catch (e: unknown) {
+    const msg = typeof e === 'object' && e !== null && 'message' in e ? (e as { message: string }).message : String(e)
+    const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code: string }).code : undefined
+    console.error('[delete-account] FAILED to delete public.users row:', msg, code)
+    throw e
+  }
 
   // Step 3: Delete CV and CL files from Supabase Storage (best-effort)
   try {
