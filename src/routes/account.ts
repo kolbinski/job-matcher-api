@@ -186,55 +186,23 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
 
   console.log(`[delete-account] Starting deletion for user_id=${targetUserId} email=${targetEmail}`)
 
-  // Pre-step: Prevent the scheduler from re-queueing and signal any in-flight sync to abort
-  console.log(`[delete-account] Pre-step: disabling profile_ready for ${targetUserId}`)
-  await prisma.user.update({ where: { id: targetUserId }, data: { profile_ready: false, sync_started_at: null } })
-  await new Promise<void>(resolve => setTimeout(resolve, 500))
-
-  // Step 1: Batch-delete user_offer_statuses (via raw SQL to support LIMIT)
-  console.log(`[delete-account] Step 1: deleting user_offer_statuses for ${targetUserId}`)
-  while (true) {
-    const affected = await prisma.$executeRaw`
-      DELETE FROM user_offer_statuses WHERE id IN (
-        SELECT uos.id FROM user_offer_statuses uos
-        JOIN user_offers uo ON uos.user_offer_id = uo.id
-        WHERE uo.user_id = ${targetUserId}
-        LIMIT 1000
-      )`
-    if (affected === 0) break
-    console.log(`[delete-account] Step 1: deleted ${affected} user_offer_statuses rows`)
+  // Step 1: Delete from Supabase auth (before public.users so JWT lookups still work)
+  const supabaseUid = await findSupabaseUserId(targetEmail)
+  if (supabaseUid) {
+    console.log(`[delete-account] Deleting auth.users entry supabaseUid=${supabaseUid}`)
+    const { error } = await getSupabase().auth.admin.deleteUser(supabaseUid)
+    if (error) console.error(`[delete-account] Supabase deleteUser failed for ${supabaseUid}:`, error)
+    else console.log(`[delete-account] auth.users entry deleted`)
+  } else {
+    console.log(`[delete-account] No Supabase auth user found for email=${targetEmail} — skipping`)
   }
 
-  // Step 2: Batch-delete user_offers
-  console.log(`[delete-account] Step 2: deleting user_offers for ${targetUserId}`)
-  while (true) {
-    const affected = await prisma.$executeRaw`
-      DELETE FROM user_offers WHERE id IN (
-        SELECT id FROM user_offers WHERE user_id = ${targetUserId} LIMIT 1000
-      )`
-    if (affected === 0) break
-    console.log(`[delete-account] Step 2: deleted ${affected} user_offers rows`)
-  }
+  // Step 2: Delete public.users row — CASCADE handles all FK-linked tables
+  console.log(`[delete-account] Deleting public.users row for ${targetUserId}`)
+  await prisma.user.delete({ where: { id: targetUserId } })
+  console.log(`[delete-account] public.users row deleted — cascade complete`)
 
-  // Step 3: Delete remaining FK-constrained records (small counts — no batching needed)
-  console.log(`[delete-account] Step 3: deleting push_tokens for ${targetUserId}`)
-  await prisma.pushToken.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: deleting agent_clients for ${targetUserId}`)
-  await prisma.agentClient.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: deleting feedbacks for ${targetUserId}`)
-  await prisma.feedback.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: deleting user_syncs for ${targetUserId}`)
-  await prisma.userSync.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: deleting notification_locks for ${targetUserId}`)
-  await prisma.notificationLock.deleteMany({ where: { lock_key: { contains: targetUserId } } })
-  console.log(`[delete-account] Step 3: deleting api_calls for ${targetUserId}`)
-  await prisma.apiCall.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: deleting subscriptions for ${targetUserId}`)
-  await prisma.subscription.deleteMany({ where: { user_id: targetUserId } })
-  console.log(`[delete-account] Step 3: all FK-constrained records deleted for ${targetUserId}`)
-
-  // Step 4: Delete CV and CL files from Supabase Storage (best-effort — don't block account deletion)
-  console.log(`[delete-account] Step 4: deleting storage files for ${targetUserId}`)
+  // Step 3: Delete CV and CL files from Supabase Storage (best-effort)
   try {
     const supabase = getSupabase()
     const [{ data: cvFiles }, { data: clFiles }] = await Promise.all([
@@ -248,34 +216,10 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
     if (pathsToDelete.length > 0) {
       const { error } = await supabase.storage.from('homo-digital').remove(pathsToDelete)
       if (error) console.error(`[delete-account] Storage deletion failed for ${targetUserId}:`, error)
-      else console.log(`[delete-account] Step 4: deleted ${pathsToDelete.length} storage file(s)`)
-    } else {
-      console.log(`[delete-account] Step 4: no storage files found`)
+      else console.log(`[delete-account] Deleted ${pathsToDelete.length} storage file(s)`)
     }
   } catch (err) {
     console.error('[delete-account] Storage cleanup error:', err)
-  }
-
-  // Step 5: Delete the user row from public.users
-  console.log(`[delete-account] Step 5: deleting public.users row for ${targetUserId}`)
-  try {
-    await prisma.user.delete({ where: { id: targetUserId } })
-    console.log(`[delete-account] Step 5: public.users row deleted for ${targetUserId}`)
-  } catch (err) {
-    console.error(`[delete-account] Step 5 FAILED — could not delete public.users row for ${targetUserId}:`, err)
-    throw err
-  }
-
-  // Step 6: Delete from Supabase auth (best-effort — password-login users may have no Supabase entry)
-  console.log(`[delete-account] Step 6: looking up Supabase auth user for email=${targetEmail}`)
-  const supabaseUid = await findSupabaseUserId(targetEmail)
-  if (supabaseUid) {
-    console.log(`[delete-account] Step 6: deleting auth.users entry supabaseUid=${supabaseUid}`)
-    const { error } = await getSupabase().auth.admin.deleteUser(supabaseUid)
-    if (error) console.error(`[delete-account] Step 6 FAILED — Supabase deleteUser failed for ${supabaseUid}:`, error)
-    else console.log(`[delete-account] Step 6: auth.users entry deleted for ${supabaseUid}`)
-  } else {
-    console.log(`[delete-account] Step 6: no Supabase auth user found for email=${targetEmail} — skipping`)
   }
 
   console.log(`[delete-account] Done — account fully deleted for ${targetUserId}`)

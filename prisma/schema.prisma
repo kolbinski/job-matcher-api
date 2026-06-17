@@ -107,7 +107,7 @@ model Subscription {
   current_period_end     DateTime?
   created_at             DateTime  @default(now())
   updated_at             DateTime  @updatedAt
-  user                   User      @relation(fields: [user_id], references: [id])
+  user                   User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   plan                   Plan      @relation(fields: [plan_id], references: [id])
 
   @@map("subscriptions")
@@ -173,7 +173,7 @@ model UserOffer {
   salary_type              String?
   status_history           UserOfferStatus[]
   offer                    Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
-  user                     User              @relation(fields: [user_id], references: [id])
+  user                     User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, offer_id])
   @@map("user_offers")
@@ -212,7 +212,7 @@ model AgentClient {
   agent_id String
   user_id  String
   agent    Agent  @relation(fields: [agent_id], references: [id])
-  user     User   @relation(fields: [user_id], references: [id])
+  user     User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([agent_id, user_id])
   @@map("agent_clients")
@@ -231,7 +231,7 @@ model ApiCall {
   output_tokens  Int      @default(0)
   call_type      String?
   model          String?
-  user           User     @relation(fields: [user_id], references: [id])
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("api_calls")
 }
@@ -250,7 +250,7 @@ model UserSync {
   user_id    String
   report     Json
   created_at DateTime @default(now())
-  user       User     @relation(fields: [user_id], references: [id])
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("user_syncs")
 }
@@ -273,7 +273,7 @@ model PushToken {
   platform   String
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
-  user       User     @relation(fields: [user_id], references: [id])
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("push_tokens")
 }
