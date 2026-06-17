@@ -226,7 +226,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   )
 })
 
-const DismissSkillBodySchema = z.object({ skill_name: z.string().min(1) })
+const DismissSkillBodySchema = z.object({ name: z.string().min(1) })
 
 profileRouter.post('/dismiss-skill', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!
@@ -236,10 +236,10 @@ profileRouter.post('/dismiss-skill', validateJwt, async (req, res) => {
 
   const parsed = DismissSkillBodySchema.safeParse(req.body)
   if (!parsed.success) {
-    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'skill_name must be a non-empty string' })
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'name must be a non-empty string' })
   }
 
-  const { skill_name } = parsed.data
+  const { name } = parsed.data
   const user = await prisma.user.findUnique({
     where: { id: user_id! },
     select: { offer_skills: true },
@@ -248,7 +248,7 @@ profileRouter.post('/dismiss-skill', validateJwt, async (req, res) => {
   interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
   const skills = (user?.offer_skills ?? []) as unknown as OfferSkillEntry[]
   const updated = skills.map(s =>
-    s.name.toLowerCase() === skill_name.toLowerCase() ? { ...s, dismissed: true } : s,
+    s.name.toLowerCase() === name.toLowerCase() ? { ...s, dismissed: true } : s,
   )
 
   await prisma.user.update({
