@@ -276,6 +276,14 @@ export async function syncOffers(cleanupEnabled = true): Promise<{
     return { fetched: 0, inserted: 0, updated: 0, deleted: 0 };
   }
 
+  if (totalInserted > 0) {
+    const { count } = await prisma.user.updateMany({
+      where: { profile_ready: true, profile_synced_at: { not: null } },
+      data: { profile_synced_at: null },
+    });
+    console.log(`[offerSync] Reset profile_synced_at for ${count} users — new offers available`);
+  }
+
   if (hitPageLimit) {
     console.warn(
       `[offerSync] Partial scrape — skipping deletion to protect existing offers`,
