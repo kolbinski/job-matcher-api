@@ -34,26 +34,26 @@ profileRouter.get('/', validateJwt, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: clientId },
-      select: { profile: true, profile_ready: true },
+      select: { profile: true, profile_ready: true, offer_skills: true },
     })
 
     if (!user) {
       throw new AppError(404, 'NOT_FOUND', 'Client not found')
     }
 
-    return res.json(user)
+    return res.json({ ...user, offer_skills: user.offer_skills ?? [] })
   }
 
   const user = await prisma.user.findUnique({
     where: { id: req.jwt!.user_id! },
-    select: { profile: true, profile_ready: true },
+    select: { profile: true, profile_ready: true, offer_skills: true },
   })
 
   if (!user) {
     throw new AppError(401, 'UNAUTHORIZED', 'User not found')
   }
 
-  res.json(user)
+  res.json({ ...user, offer_skills: user.offer_skills ?? [] })
 })
 
 profileRouter.patch('/', validateJwt, async (req, res) => {

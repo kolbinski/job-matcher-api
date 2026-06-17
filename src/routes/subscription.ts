@@ -25,7 +25,7 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     }),
     prisma.user.findUnique({
       where: { id: user_id! },
-      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true, scan_page_counter: true, scan_page_counter_max: true, profile_relevant_change_counter: true, profile_relevant_change_counter_max: true, profile_relevant_change_pending: true, review_by_ai_counter: true, review_by_ai_counter_max: true, is_admin: true, offer_skills: true },
+      select: { cv_counter: true, cv_counter_max: true, cl_counter: true, cl_counter_max: true, scan_page_counter: true, scan_page_counter_max: true, profile_relevant_change_counter: true, profile_relevant_change_counter_max: true, profile_relevant_change_pending: true, review_by_ai_counter: true, review_by_ai_counter_max: true, is_admin: true },
     }),
   ])
 
@@ -49,7 +49,6 @@ subscriptionRouter.get('/status', validateJwt, async (req, res) => {
     review_by_ai_counter: user?.review_by_ai_counter ?? 0,
     review_by_ai_counter_max: user?.review_by_ai_counter_max ?? 0,
     is_admin: user?.is_admin ?? false,
-    offer_skills: (user?.offer_skills ?? []),
   })
 })
 
