@@ -216,9 +216,7 @@ async function syncNfj(
   };
 }
 
-export async function syncOffers(
-  cleanupEnabled = true,
-): Promise<{
+export async function syncOffers(cleanupEnabled = true): Promise<{
   fetched: number;
   inserted: number;
   updated: number;

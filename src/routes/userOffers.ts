@@ -495,6 +495,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         cv_url: uo.cv_url ?? null,
         cl_status: uo.cl_status ?? null,
         cl_url: uo.cl_url ?? null,
+        status: uo.status,
       }));
 
       const finalMapped = bucketStatus === 'ai_rejected'
@@ -720,6 +721,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     cv_url: uo.cv_url ?? null,
     cl_status: uo.cl_status ?? null,
     cl_url: uo.cl_url ?? null,
+    status: uo.status,
   }));
 
   const finalMapped = status === 'ai_rejected'

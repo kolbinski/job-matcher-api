@@ -361,6 +361,7 @@ type SnapshotUO = {
   cv_url: string | null
   cl_status: string | null
   cl_url: string | null
+  status: string
   offer: {
     title: string
     company_name: string
@@ -425,6 +426,7 @@ function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Reco
     cv_url: uo.cv_url ?? null,
     cl_status: uo.cl_status ?? null,
     cl_url: uo.cl_url ?? null,
+    status: uo.status,
   }
 }
 
