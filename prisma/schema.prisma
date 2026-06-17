@@ -72,6 +72,7 @@ model User {
   is_admin                            Boolean   @default(false)
   timezone                            String?
   preferred_currency                  String?
+  offer_skills                        Json?   @default("[]")
   agent_clients                       AgentClient[]
   api_calls                           ApiCall[]
   push_tokens                         PushToken[]

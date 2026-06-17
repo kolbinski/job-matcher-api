@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Offer } from '@prisma/client';
+import { Prisma, type Offer } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getClaudeModel } from '../lib/claudeModels';
 import { AppError } from '../lib/errors';
@@ -7,7 +7,7 @@ import { applyPreFilters } from './redFlagFilter';
 import { scoreOffer } from './scoring';
 import { evaluateOffers } from './claudeEvaluator';
 import { normalizeProfile } from './profileParser';
-import { CandidateProfileSchema } from '../types/profile';
+import { CandidateProfileSchema, type CandidateProfile } from '../types/profile';
 import type {
   MatchResponse,
   MatchedOffer,
@@ -492,6 +492,13 @@ export async function runMatchForUser(
     if (aiScoring) {
       filteredPairs.sort((a, b) => b.offer.score - a.offer.score);
     }
+
+    const pendingApplyOffers = filteredPairs
+      .filter(p => p.offer.recommended === true)
+      .map(p => p.original);
+    if (pendingApplyOffers.length > 0) {
+      await upsertOfferSkills(userId, profile, pendingApplyOffers);
+    }
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────
@@ -738,4 +745,95 @@ function applyPostScoreFilters(
       return false;
     return true;
   });
+}
+
+interface OfferSkill {
+  name: string;
+  count: number;
+  category_name: string;
+  dismissed: boolean;
+}
+
+async function upsertOfferSkills(
+  userId: string,
+  profile: CandidateProfile,
+  pendingApplyOffers: Offer[],
+): Promise<void> {
+  try {
+    const userSkills = new Set(
+      Object.values(profile.skills)
+        .flat()
+        .map(t => t.name.toLowerCase()),
+    );
+
+    // Map lowercase → original casing, deduped across all offers
+    const missingSkillsMap = new Map<string, string>();
+    for (const offer of pendingApplyOffers) {
+      for (const skill of [...offer.required_skills, ...offer.nice_to_have_skills]) {
+        const lower = skill.toLowerCase();
+        if (!userSkills.has(lower) && !missingSkillsMap.has(lower)) {
+          missingSkillsMap.set(lower, skill);
+        }
+      }
+    }
+
+    if (missingSkillsMap.size === 0) return;
+
+    // Count how many offers need each missing skill
+    const skillCounts = new Map<string, number>();
+    for (const offer of pendingApplyOffers) {
+      const offerSkillsLower = new Set([
+        ...offer.required_skills.map(s => s.toLowerCase()),
+        ...offer.nice_to_have_skills.map(s => s.toLowerCase()),
+      ]);
+      for (const lower of missingSkillsMap.keys()) {
+        if (offerSkillsLower.has(lower)) {
+          skillCounts.set(lower, (skillCounts.get(lower) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Lookup category for each missing skill
+    const categoryMap = new Map<string, string>();
+    for (const [lower, original] of missingSkillsMap) {
+      const row = await prisma.skill.findFirst({
+        where: { name: { equals: original, mode: 'insensitive' } },
+        include: { category: true },
+      });
+      categoryMap.set(lower, row?.category?.name ?? 'Other');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { offer_skills: true },
+    });
+
+    const currentSkills = (user?.offer_skills ?? []) as unknown as OfferSkill[];
+    const skillMap = new Map<string, OfferSkill>(
+      currentSkills.map(s => [s.name.toLowerCase(), s]),
+    );
+
+    for (const [lower, count] of skillCounts) {
+      const existing = skillMap.get(lower);
+      if (existing) {
+        if (!existing.dismissed) {
+          skillMap.set(lower, { ...existing, count: existing.count + count });
+        }
+      } else {
+        skillMap.set(lower, {
+          name: missingSkillsMap.get(lower) ?? lower,
+          count,
+          category_name: categoryMap.get(lower) ?? 'Other',
+          dismissed: false,
+        });
+      }
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { offer_skills: [...skillMap.values()] as unknown as Prisma.InputJsonValue },
+    });
+  } catch (err) {
+    console.error('[match] upsertOfferSkills failed:', err);
+  }
 }

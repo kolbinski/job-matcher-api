@@ -23,6 +23,7 @@ const QuerySchema = z.object({
   sort_by: z.enum(['score', 'salary_delta']).optional(),
   known_apply_count: z.coerce.number().int().min(0).optional(),
   known_level_up_count: z.coerce.number().int().min(0).optional(),
+  known_new_skills_count: z.coerce.number().int().min(0).optional(),
 });
 
 interface ClientProfile {
@@ -338,7 +339,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
         prisma.user.findUnique({
           where: { id: clientId },
-          select: { preferred_currency: true, profile: true },
+          select: { preferred_currency: true, profile: true, offer_skills: true },
         }),
         prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
       ]);
@@ -353,6 +354,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       min: p.min,
       unit: p.unit,
     }));
+    interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
+    const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
     const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
     const start = (page - 1) * pageSize;
     const effectivePlan =
@@ -382,6 +385,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         return res.json({
           ...snap,
           count: applyNowOffers.length + levelUpOffers.length,
+          new_skills_count,
           ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowOffers.length, offers: applyNowOffers } } : {}),
           ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpOffers.length, offers: levelUpOffers } } : {}),
         });
@@ -591,7 +595,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       namedBuckets['level_up'] = { ...namedBuckets['level_up'], offers: [] };
     }
 
-    return res.json({ count: totalCount, ...namedBuckets });
+    return res.json({ count: totalCount, new_skills_count, ...namedBuckets });
   }
 
   // ── Single-status path (backward compatible) ───────────────────────────────
@@ -674,7 +678,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
     prisma.user.findUnique({
       where: { id: clientId },
-      select: { preferred_currency: true, profile: true },
+      select: { preferred_currency: true, profile: true, offer_skills: true },
     }),
     prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ]);
@@ -689,6 +693,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     min: p.min,
     unit: p.unit,
   }));
+  interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
+  const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
   const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
   const start = (page - 1) * pageSize;
 
@@ -868,6 +874,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     apply_now_count,
     level_up_count,
     has_more,
+    new_skills_count,
     offers: pagedOffers,
   });
 });

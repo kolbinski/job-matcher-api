@@ -226,6 +226,39 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   )
 })
 
+const DismissSkillBodySchema = z.object({ skill_name: z.string().min(1) })
+
+profileRouter.post('/dismiss-skill', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const parsed = DismissSkillBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: 'skill_name must be a non-empty string' })
+  }
+
+  const { skill_name } = parsed.data
+  const user = await prisma.user.findUnique({
+    where: { id: user_id! },
+    select: { offer_skills: true },
+  })
+
+  interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
+  const skills = (user?.offer_skills ?? []) as unknown as OfferSkillEntry[]
+  const updated = skills.map(s =>
+    s.name.toLowerCase() === skill_name.toLowerCase() ? { ...s, dismissed: true } : s,
+  )
+
+  await prisma.user.update({
+    where: { id: user_id! },
+    data: { offer_skills: updated as unknown as Prisma.InputJsonValue },
+  })
+
+  return res.json({ success: true })
+})
+
 profileRouter.post('/cancel-edit', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!
   if (role !== 'client') {
