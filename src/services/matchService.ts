@@ -215,12 +215,26 @@ export async function runMatchForUser(
       );
     }
     const chunkSize = 100;
+    let userDeleted = false;
     for (let i = 0; i < validPreFilterRows.length; i += chunkSize) {
-      const r = await prisma.userOffer.createMany({
-        data: validPreFilterRows.slice(i, i + chunkSize),
-        skipDuplicates: true,
-      });
+      let r: { count: number };
+      try {
+        r = await prisma.userOffer.createMany({
+          data: validPreFilterRows.slice(i, i + chunkSize),
+          skipDuplicates: true,
+        });
+      } catch (e: unknown) {
+        if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'P2003') {
+          console.log('[match] User no longer exists, stopping sync');
+          userDeleted = true;
+          break;
+        }
+        throw e;
+      }
       newlyInserted += r.count;
+    }
+    if (userDeleted) {
+      return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
     }
     console.log(
       `[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`,
@@ -402,10 +416,19 @@ export async function runMatchForUser(
               return;
             }
           }
-          const writeResult = await prisma.userOffer.createMany({
-            data: validBatchRows,
-            skipDuplicates: true,
-          });
+          let writeResult: { count: number };
+          try {
+            writeResult = await prisma.userOffer.createMany({
+              data: validBatchRows,
+              skipDuplicates: true,
+            });
+          } catch (e: unknown) {
+            if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'P2003') {
+              console.log(`[match] Batch ${batchNum}: user no longer exists, stopping sync`);
+              return;
+            }
+            throw e;
+          }
           newlyInserted += writeResult.count;
           if (writeResult.count > 0) {
             aiScoring = true;
