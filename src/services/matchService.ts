@@ -221,11 +221,19 @@ export async function runMatchForUser(
         console.log('[match] Pre-filter chunk: user no longer exists, stopping sync');
         return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
       }
-      const r = await prisma.userOffer.createMany({
-        data: validPreFilterRows.slice(i, i + chunkSize),
-        skipDuplicates: true,
-      });
-      newlyInserted += r.count;
+      try {
+        const r = await prisma.userOffer.createMany({
+          data: validPreFilterRows.slice(i, i + chunkSize),
+          skipDuplicates: true,
+        });
+        newlyInserted += r.count;
+      } catch (e: unknown) {
+        if ((e as { code?: string }).code === 'P2003') {
+          console.log('[match] Pre-filter chunk: user deleted during insert, stopping gracefully');
+          return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
+        }
+        throw e;
+      }
     }
     console.log(
       `[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`,
@@ -410,43 +418,51 @@ export async function runMatchForUser(
             console.log(`[match] Batch ${batchNum}: user deleted during sync, skipping insert`);
             return;
           }
-          const writeResult = await prisma.userOffer.createMany({
-            data: validBatchRows,
-            skipDuplicates: true,
-          });
-          newlyInserted += writeResult.count;
-          if (writeResult.count > 0) {
-            aiScoring = true;
-            const inserted = await prisma.userOffer.findMany({
-              where: {
-                user_id: userId,
-                offer_id: { in: validBatchRows.map(r => r.offer_id) },
-                matched_at: now,
-              },
-              select: { id: true, status: true, claude_recommended: true },
+          try {
+            const writeResult = await prisma.userOffer.createMany({
+              data: validBatchRows,
+              skipDuplicates: true,
             });
-            await prisma.userOfferStatus.createMany({
-              data: inserted.map(r => ({
-                user_offer_id: r.id,
-                status: r.status,
-              })),
-            });
-            batchPendingApplyCount = inserted.filter(
-              r => r.status === 'pending_apply',
-            ).length;
-            const applyNowCount = inserted.filter(
-              r => r.claude_recommended === true,
-            ).length;
-            const levelUpCount = inserted.filter(
-              r => r.claude_recommended === false,
-            ).length;
-            console.log(
-              `[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply (${applyNowCount} apply now, ${levelUpCount} level up)`,
-            );
-          } else {
-            console.log(
-              `[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply`,
-            );
+            newlyInserted += writeResult.count;
+            if (writeResult.count > 0) {
+              aiScoring = true;
+              const inserted = await prisma.userOffer.findMany({
+                where: {
+                  user_id: userId,
+                  offer_id: { in: validBatchRows.map(r => r.offer_id) },
+                  matched_at: now,
+                },
+                select: { id: true, status: true, claude_recommended: true },
+              });
+              await prisma.userOfferStatus.createMany({
+                data: inserted.map(r => ({
+                  user_offer_id: r.id,
+                  status: r.status,
+                })),
+              });
+              batchPendingApplyCount = inserted.filter(
+                r => r.status === 'pending_apply',
+              ).length;
+              const applyNowCount = inserted.filter(
+                r => r.claude_recommended === true,
+              ).length;
+              const levelUpCount = inserted.filter(
+                r => r.claude_recommended === false,
+              ).length;
+              console.log(
+                `[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply (${applyNowCount} apply now, ${levelUpCount} level up)`,
+              );
+            } else {
+              console.log(
+                `[match] Batch ${batchNum}: inserted ${writeResult.count} rows — ${batchPendingApplyCount} pending_apply`,
+              );
+            }
+          } catch (e: unknown) {
+            if ((e as { code?: string }).code === 'P2003') {
+              console.log('[match] Batch: user deleted during insert, stopping gracefully');
+              return;
+            }
+            throw e;
           }
         }
       }
