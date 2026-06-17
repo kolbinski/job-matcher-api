@@ -55,6 +55,7 @@ export function calculateUserOfferSalary(
     const salaryMin = toMonthly(entry.from, entry.unit)
     const salaryMax = toMonthly(entry.to, entry.unit)
     const entryCur = (entry.currency ?? '').toUpperCase()
+    console.log('[salaryCalc] convertEntry:', { entryCur, prefCur, salaryMin, salaryMax, from: entry.from, to: entry.to, unit: entry.unit })
     if (entryCur === prefCur) return { salaryMin, salaryMax }
     const entryRate = getRate(exchangeRates, entryCur)
     return {
