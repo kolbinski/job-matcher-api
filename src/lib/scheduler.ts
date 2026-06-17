@@ -45,14 +45,13 @@ function utcDateString(): string {
 }
 
 async function acquireNotificationLock(lockKey: string): Promise<boolean> {
-  const existing = await prisma.notificationLock.findUnique({ where: { lock_key: lockKey } });
-  if (existing) return false;
-  await prisma.notificationLock.upsert({
-    where: { lock_key: lockKey },
-    create: { lock_key: lockKey },
-    update: {},
-  });
-  return true;
+  try {
+    await prisma.notificationLock.create({ data: { lock_key: lockKey } })
+    return true
+  } catch (e: unknown) {
+    if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'P2002') return false
+    throw e
+  }
 }
 
 async function cleanupOldLocks(): Promise<void> {

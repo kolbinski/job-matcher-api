@@ -256,11 +256,15 @@ export async function syncUserById(userId: string): Promise<void> {
     return;
   }
 
-  await prisma.notificationLock.upsert({
-    where: { lock_key: lockKey },
-    create: { lock_key: lockKey },
-    update: {},
-  });
+  try {
+    await prisma.notificationLock.create({ data: { lock_key: lockKey } })
+  } catch (e: unknown) {
+    if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'P2002') {
+      console.log(`[sync] User ${userId}: sync already in progress, skipping`)
+      return
+    }
+    throw e
+  }
 
   try {
     await _syncUserById(userId);
