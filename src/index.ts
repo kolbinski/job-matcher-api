@@ -8,7 +8,12 @@ const server = app.listen(env.PORT, () => {
 })
 
 if (env.NODE_ENV !== 'test') {
-  startScheduler().catch(err => console.error('[scheduler] Failed to start:', err))
+  prisma.notificationLock.deleteMany({ where: { lock_key: { startsWith: 'sync:' } } })
+    .then(() => console.log('[startup] Cleared stale sync locks'))
+    .catch(err => console.error('[startup] Failed to clear sync locks:', err))
+    .finally(() => {
+      startScheduler().catch(err => console.error('[scheduler] Failed to start:', err))
+    })
 }
 
 process.on('SIGTERM', () => {
