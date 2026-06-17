@@ -73,8 +73,15 @@ async function upsertPage(
 
 async function resetProfileSyncedAt(page: number, upsertCount: number): Promise<void> {
   if (upsertCount === 0) return;
+  const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
   const { count } = await prisma.user.updateMany({
-    where: { profile_ready: true, profile_synced_at: { not: null } },
+    where: {
+      profile_ready: true,
+      OR: [
+        { profile_synced_at: { not: null } },
+        { sync_started_at: { not: null, lt: staleThreshold } },
+      ],
+    },
     data: { profile_synced_at: null },
   });
   console.log(`[offerSync] Page ${page}: ${upsertCount} new offers — reset profile_synced_at for ${count} users`);

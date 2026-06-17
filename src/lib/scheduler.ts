@@ -1,5 +1,4 @@
 import cron from 'node-cron';
-import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { syncOffers } from '../jobs/offerSync';
 import { sendPushToClient, syncUserById } from '../services/syncService';
@@ -46,18 +45,14 @@ function utcDateString(): string {
 }
 
 async function acquireNotificationLock(lockKey: string): Promise<boolean> {
-  try {
-    await prisma.notificationLock.create({ data: { lock_key: lockKey } });
-    return true;
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2002'
-    ) {
-      return false;
-    }
-    throw err;
-  }
+  const existing = await prisma.notificationLock.findUnique({ where: { lock_key: lockKey } });
+  if (existing) return false;
+  await prisma.notificationLock.upsert({
+    where: { lock_key: lockKey },
+    create: { lock_key: lockKey },
+    update: {},
+  });
+  return true;
 }
 
 async function cleanupOldLocks(): Promise<void> {
