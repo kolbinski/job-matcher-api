@@ -399,17 +399,16 @@ export async function runMatchForUser(
               );
               return;
             }
-          } else {
-            const userExists = await prisma.user.findUnique({
-              where: { id: userId },
-              select: { id: true },
-            });
-            if (!userExists) {
-              console.log(
-                `[match] Batch ${batchNum}: user no longer exists, aborting insert`,
-              );
-              return;
-            }
+          }
+          // Unconditional final check — guards both branches against race conditions
+          // where user is deleted between the check above and the insert below.
+          const userStillExists = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+          });
+          if (!userStillExists) {
+            console.log(`[match] Batch ${batchNum}: user deleted during sync, skipping insert`);
+            return;
           }
           const writeResult = await prisma.userOffer.createMany({
             data: validBatchRows,
