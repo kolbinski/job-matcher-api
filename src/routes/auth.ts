@@ -88,8 +88,6 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     }),
   ])
   const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number } | undefined
-  console.log('[social-login] freePlan:', freePlan, 'freeLimits:', freeLimits)
-
   const defaultTimezone = timezone ?? 'America/New_York'
   const defaultCurrency = getDefaultCurrency(defaultTimezone)
 
@@ -117,13 +115,6 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
     },
     select: { id: true, cv_counter_max: true, cl_counter_max: true, scan_page_counter_max: true, profile_relevant_change_counter_max: true },
   })
-  console.log('[social-login] upserted user counter_max values:', {
-    cv_counter_max: user.cv_counter_max,
-    cl_counter_max: user.cl_counter_max,
-    scan_page_counter_max: user.scan_page_counter_max,
-    profile_relevant_change_counter_max: user.profile_relevant_change_counter_max,
-  })
-
   if (freePlan) {
     await prisma.subscription.upsert({
       where: { user_id: user.id },
