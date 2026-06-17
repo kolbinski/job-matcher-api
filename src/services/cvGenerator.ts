@@ -8,6 +8,25 @@ import { prisma } from '../lib/prisma';
 
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html');
 
+interface LangEntry {
+  code: string
+  name: string
+  gdpr?: string
+  best_regards?: string
+}
+
+const FALLBACK_GDPR_EN = 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).'
+
+async function getLanguageEntry(cvLanguage: string): Promise<LangEntry | undefined> {
+  const row = await prisma.settings.findUnique({ where: { key: 'general_settings' } })
+  if (!row) return undefined
+  const languages: LangEntry[] = (JSON.parse(row.value) as { languages?: LangEntry[] }).languages ?? []
+  const code = cvLanguage.toLowerCase()
+  return languages.find(l => l.code === code)
+    ?? languages.find(l => l.name.toLowerCase() === code)
+    ?? languages.find(l => l.code === 'en')
+}
+
 // ─── Date formatting ──────────────────────────────────────────────────────────
 
 const MONTHS_PL = [
@@ -513,12 +532,11 @@ Rules:
     }
   }
 
-  const gdprText = isPl
-    ? 'Wyrażam zgodę na przetwarzanie moich danych osobowych zawartych w niniejszym CV dla potrzeb niezbędnych do realizacji procesu rekrutacji, zgodnie z Rozporządzeniem Parlamentu Europejskiego i Rady (UE) 2016/679 (RODO).'
-    : 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).';
-  footerParts.push(`<div class="cert-item"  >${gdprText}</div>`);
+  const langEntry = await getLanguageEntry(cvLanguage);
+  const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN);
 
   html = html.replace('{{FOOTER_NOTES}}', footerParts.join('\n'));
+  html = html.replace('{{GDPR_CONSENT}}', gdprText);
   html = html.replace(/—/g, '-');
 
   return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } };

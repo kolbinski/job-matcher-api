@@ -6,6 +6,25 @@ import { env } from '../lib/env'
 import { getClaudeModel } from '../lib/claudeModels'
 import { prisma } from '../lib/prisma'
 
+interface LangEntry {
+  code: string
+  name: string
+  gdpr?: string
+  best_regards?: string
+}
+
+const FALLBACK_GDPR_EN = 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).'
+
+async function getLanguageEntry(cvLanguage: string): Promise<LangEntry | undefined> {
+  const row = await prisma.settings.findUnique({ where: { key: 'general_settings' } })
+  if (!row) return undefined
+  const languages: LangEntry[] = (JSON.parse(row.value) as { languages?: LangEntry[] }).languages ?? []
+  const code = cvLanguage.toLowerCase()
+  return languages.find(l => l.code === code)
+    ?? languages.find(l => l.name.toLowerCase() === code)
+    ?? languages.find(l => l.code === 'en')
+}
+
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cover_letter.html')
 
 const MONTHS_PL = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia']
@@ -156,10 +175,10 @@ Rules:
       footerParts.push(`<div class="cert-item" style="margin-bottom: 16px;">${agentLine}</div>`)
     }
   }
-  const gdprText = isPl
-    ? 'Wyrażam zgodę na przetwarzanie moich danych osobowych zawartych w niniejszym liście motywacyjnym dla potrzeb niezbędnych do realizacji procesu rekrutacji, zgodnie z Rozporządzeniem Parlamentu Europejskiego i Rady (UE) 2016/679 (RODO).'
-    : 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).'
-  footerParts.push(`<div class="cert-item">${gdprText}</div>`)
+
+  const langEntry = await getLanguageEntry(cvLanguage)
+  const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN)
+  const bestRegards = langEntry?.best_regards ?? 'Best regards,'
 
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8')
   let html = template
@@ -173,8 +192,9 @@ Rules:
     .replace('{{JOB_TITLE}}', esc(jobTitle ?? ''))
     .replace('{{COMPANY_NAME}}', esc(companyName ?? ''))
     .replace('{{BODY}}', body)
-    .replace('{{LABEL_REGARDS}}', isPl ? 'Z poważaniem,' : 'Best regards,')
+    .replace('{{BEST_REGARDS}}', bestRegards)
     .replace('{{FOOTER_NOTES}}', footerParts.join('\n'))
+    .replace('{{GDPR_CONSENT}}', gdprText)
 
   html = html.replace(/—/g, '-')
 
