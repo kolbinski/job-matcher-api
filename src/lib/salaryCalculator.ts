@@ -52,11 +52,14 @@ export function calculateUserOfferSalary(
 
   function convertEntry(entry: EmploymentTypeEntry): { salaryMin: number; salaryMax: number } | null {
     if (entry.from == null || entry.to == null) return null
+    const salaryMin = toMonthly(entry.from, entry.unit)
+    const salaryMax = toMonthly(entry.to, entry.unit)
     const entryCur = (entry.currency ?? '').toUpperCase()
-    const factor = entryCur === prefCur ? 1 : prefRate / getRate(exchangeRates, entryCur)
+    if (entryCur === prefCur) return { salaryMin, salaryMax }
+    const entryRate = getRate(exchangeRates, entryCur)
     return {
-      salaryMin: toMonthly(entry.from, entry.unit) * factor,
-      salaryMax: toMonthly(entry.to, entry.unit) * factor,
+      salaryMin: salaryMin * (prefRate / entryRate),
+      salaryMax: salaryMax * (prefRate / entryRate),
     }
   }
 
