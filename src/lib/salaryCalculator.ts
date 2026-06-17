@@ -91,7 +91,8 @@ export function calculateUserOfferSalary(
   }
 
   if (candidates.length > 0) {
-    const winner = candidates.reduce((best, c) => c.delta > best.delta ? c : best)
+    const prefCurCandidate = candidates.find(c => (c.entry.currency ?? '').toUpperCase() === prefCur)
+    const winner = prefCurCandidate ?? candidates.reduce((best, c) => c.delta > best.delta ? c : best)
     return {
       salary_min: Math.round(winner.salaryMin),
       salary_max: Math.round(winner.salaryMax),
