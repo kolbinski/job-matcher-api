@@ -11,6 +11,7 @@ const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html');
 interface LangEntry {
   code: string
   name: string
+  locale?: string
   gdpr?: string
   best_regards?: string
 }
@@ -29,43 +30,13 @@ async function getLanguageEntry(cvLanguage: string): Promise<LangEntry | undefin
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
 
-const MONTHS_PL = [
-  'Sty',
-  'Lut',
-  'Mar',
-  'Kwi',
-  'Maj',
-  'Cze',
-  'Lip',
-  'Sie',
-  'Wrz',
-  'Paź',
-  'Lis',
-  'Gru',
-];
-const MONTHS_EN = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-function fmtDate(raw: string | null | undefined, lang: string): string {
+function fmtDate(raw: string | null | undefined, lang: string, locale: string): string {
   const isPolish =
     lang.toLowerCase() === 'pl' || lang.toLowerCase().startsWith('pol');
   if (!raw) return isPolish ? 'obecnie' : 'present';
   const [year, mm] = raw.split('-');
-  const m = parseInt(mm ?? '1', 10);
-  const months = isPolish ? MONTHS_PL : MONTHS_EN;
-  return `${months[m - 1] ?? ''} ${year}`.trim();
+  const d = new Date(parseInt(year), parseInt(mm ?? '1', 10) - 1, 1);
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short' });
 }
 
 function fmtYear(raw: string | null | undefined): string {
@@ -169,6 +140,7 @@ function buildHtml(
   cv: CvContent,
   profile: CandidateProfile,
   cvLanguage: string,
+  locale: string,
 ): string {
   const langKey =
     cvLanguage.toLowerCase() === 'pl' ||
@@ -237,7 +209,7 @@ function buildHtml(
           <span>
             <span class="job-company-name">${esc(job.company)}</span>${metaHtml}
           </span>
-          <span class="job-dates">${fmtDate(job.date_from, cvLanguage)} – ${profileJob?.currently_working ? fmtDate(null, cvLanguage) : fmtDate(job.date_to, cvLanguage)}</span>
+          <span class="job-dates">${fmtDate(job.date_from, cvLanguage, locale)} – ${profileJob?.currently_working ? fmtDate(null, cvLanguage, locale) : fmtDate(job.date_to, cvLanguage, locale)}</span>
           <span class="job-title">${esc(job.title)}</span>
         </div>
         ${projHtml}
@@ -323,7 +295,7 @@ function buildHtml(
     ? `<h2>${labels.certifications}</h2>
   ${cv.certifications
     .map(c => {
-      const meta = [c.issuer, c.date ? fmtDate(c.date, cvLanguage) : null]
+      const meta = [c.issuer, c.date ? fmtDate(c.date, cvLanguage, locale) : null]
         .filter(Boolean)
         .map(s => esc(s!))
         .join(', ');
@@ -502,7 +474,10 @@ Rules:
   ].filter((p): p is string => p !== null && p.length > 0);
   const filename = filenameParts.join('-') + '.pdf';
 
-  let html = buildHtml(cv, profile, cvLanguage).replace(
+  const langEntry = await getLanguageEntry(cvLanguage);
+  const locale = langEntry?.locale ?? 'en-US';
+
+  let html = buildHtml(cv, profile, cvLanguage, locale).replace(
     '{{CV_TITLE}}',
     filename.replace('.pdf', ''),
   );
@@ -532,7 +507,6 @@ Rules:
     }
   }
 
-  const langEntry = await getLanguageEntry(cvLanguage);
   const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN);
 
   html = html.replace('{{FOOTER_NOTES}}', footerParts.join('\n'));

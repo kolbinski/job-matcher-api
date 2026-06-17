@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma'
 interface LangEntry {
   code: string
   name: string
+  locale?: string
   gdpr?: string
   best_regards?: string
 }
@@ -27,13 +28,8 @@ async function getLanguageEntry(cvLanguage: string): Promise<LangEntry | undefin
 
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cover_letter.html')
 
-const MONTHS_PL = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia']
-const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-function fmtCurrentDate(lang: string): string {
-  const now = new Date()
-  const isPl = lang.toLowerCase() === 'pl' || lang.toLowerCase().startsWith('pol')
-  return `${now.getDate()} ${isPl ? MONTHS_PL[now.getMonth()] : MONTHS_EN[now.getMonth()]} ${now.getFullYear()}`
+function fmtCurrentDate(locale: string): string {
+  return new Date().toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 function esc(s: string): string {
@@ -157,6 +153,11 @@ Rules:
   ].filter((p): p is string => p !== null && p.length > 0)
   const filename = filenameParts.join('-') + '.pdf'
 
+  const langEntry = await getLanguageEntry(cvLanguage)
+  const locale = langEntry?.locale ?? 'en-US'
+  const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN)
+  const bestRegards = langEntry?.best_regards ?? 'Best regards,'
+
   // Footer (agent info + GDPR)
   const footerParts: string[] = []
   if (user?.show_agent_info_in_cv) {
@@ -176,10 +177,6 @@ Rules:
     }
   }
 
-  const langEntry = await getLanguageEntry(cvLanguage)
-  const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN)
-  const bestRegards = langEntry?.best_regards ?? 'Best regards,'
-
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8')
   let html = template
     .replace('{{LANG}}', lang)
@@ -188,7 +185,7 @@ Rules:
     .replace('{{TARGET_ROLE}}', esc(jobTitle ?? ''))
     .replace('{{CONTACTS}}', contactsHtml)
     .replace('{{CITY}}', esc(basic_info.location?.city ?? ''))
-    .replace('{{DATE}}', fmtCurrentDate(cvLanguage))
+    .replace('{{DATE}}', fmtCurrentDate(locale))
     .replace('{{JOB_TITLE}}', esc(jobTitle ?? ''))
     .replace('{{COMPANY_NAME}}', esc(companyName ?? ''))
     .replace('{{BODY}}', body)
