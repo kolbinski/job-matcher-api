@@ -41,13 +41,15 @@ agentAiUsageRouter.get('/ai-usage', validateJwt, async (req, res) => {
       orderBy: { _sum: { cost: 'desc' } },
     }),
     prisma.aiUsage.groupBy({
-      by: ['user_id', 'email'],
+      by: ['email'],
       where: {
-        user_id: { not: null },
-        AND: [
-          { email: { not: { endsWith: '@jobmatcher-test.invalid' } } },
-          { email: { not: { contains: 'example.com' } } },
-        ],
+        email: {
+          not: null,
+          AND: [
+            { not: { endsWith: '@jobmatcher-test.invalid' } },
+            { not: { contains: 'example.com' } },
+          ],
+        },
       },
       _sum: { cost: true },
       orderBy: { _sum: { cost: 'desc' } },
@@ -55,11 +57,11 @@ agentAiUsageRouter.get('/ai-usage', validateJwt, async (req, res) => {
     }),
   ])
 
-  const topUserIds = byUser.map(r => r.user_id).filter(Boolean) as string[]
-  const byUserModel = topUserIds.length > 0
+  const topEmails = byUser.map(r => r.email).filter(Boolean) as string[]
+  const byUserModel = topEmails.length > 0
     ? await prisma.aiUsage.groupBy({
-        by: ['user_id', 'model'],
-        where: { user_id: { in: topUserIds } },
+        by: ['email', 'model'],
+        where: { email: { in: topEmails } },
         _count: { id: true },
         _sum: { input_tokens: true, output_tokens: true, cost: true },
         orderBy: { _sum: { cost: 'desc' } },
@@ -82,11 +84,10 @@ agentAiUsageRouter.get('/ai-usage', validateJwt, async (req, res) => {
       cost: r._sum.cost ?? 0,
     })),
     top_users: byUser.map(r => ({
-      user_id: r.user_id,
       email: r.email,
-      cost: r._sum.cost ?? 0,
+      total_cost: r._sum.cost ?? 0,
       by_model: byUserModel
-        .filter(m => m.user_id === r.user_id)
+        .filter(m => m.email === r.email)
         .map(m => ({
           model: m.model,
           count: m._count.id,
