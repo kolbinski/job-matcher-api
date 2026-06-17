@@ -837,6 +837,11 @@ async function upsertOfferSkills(
       }
     }
 
+    const userBeforeSkillsUpdate = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!userBeforeSkillsUpdate) {
+      console.log(`[match] upsertOfferSkills: User ${userId} deleted, skipping offer_skills write`);
+      return;
+    }
     await prisma.user.update({
       where: { id: userId },
       data: { offer_skills: [...skillMap.values()] as unknown as Prisma.InputJsonValue },

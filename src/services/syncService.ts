@@ -178,29 +178,34 @@ async function runJob(
 
       const dedupedResult = deduplicateMatchResult(result);
       const syncReport = buildSyncReport(dedupedResult, salaryPrefs, exchangeRates, maxLevelUp);
-      const userSync = await prisma.userSync.create({
-        data: {
-          user_id: user.id,
-          report: syncReport as unknown as Prisma.InputJsonValue,
-        },
-      });
-
-      // if (user.email) {
-      //   if (isTestUser(user.email)) {
-      //     console.log(`[sync] Skipping email for test user: ${user.email}`);
-      //   } else {
-      //     await sendMatchReport(agentEmail, agentName, user.email, email_report);
-      //     console.log(`[sync] Email sent to ${user.email}`);
-      //   }
-      // }
-
-      if (newOffersCount > 0 || stretchCount > 0) {
-        const agentFirstName = agent?.first_name ?? agentName;
-        const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${syncReport.worth_applying.length} are worth applying and ${syncReport.level_up.length} look promising for level up.`;
-        await sendPushToClient(user.id, 'Homo Digital', pushBody, {
-          type: 'sync_complete',
-          user_sync_id: userSync.id,
+      const userStillExists = await prisma.user.findUnique({ where: { id: user.id }, select: { id: true } });
+      if (!userStillExists) {
+        console.log(`[sync] User ${user.id} deleted during sync, skipping userSync write`);
+      } else {
+        const userSync = await prisma.userSync.create({
+          data: {
+            user_id: user.id,
+            report: syncReport as unknown as Prisma.InputJsonValue,
+          },
         });
+
+        // if (user.email) {
+        //   if (isTestUser(user.email)) {
+        //     console.log(`[sync] Skipping email for test user: ${user.email}`);
+        //   } else {
+        //     await sendMatchReport(agentEmail, agentName, user.email, email_report);
+        //     console.log(`[sync] Email sent to ${user.email}`);
+        //   }
+        // }
+
+        if (newOffersCount > 0 || stretchCount > 0) {
+          const agentFirstName = agent?.first_name ?? agentName;
+          const pushBody = `Your agent ${agentFirstName} scanned ${result.meta.total_offers_scanned} new offers. ${syncReport.worth_applying.length} are worth applying and ${syncReport.level_up.length} look promising for level up.`;
+          await sendPushToClient(user.id, 'Homo Digital', pushBody, {
+            type: 'sync_complete',
+            user_sync_id: userSync.id,
+          });
+        }
       }
 
       const up = user.profile as { basic_info?: { first_name?: string; last_name?: string } } | null
@@ -278,7 +283,10 @@ async function _syncUserById(userId: string): Promise<void> {
     where: { id: userId },
     select: { id: true, email: true, profile: true },
   });
-  if (!user) throw new Error(`syncUserById: user ${userId} not found`);
+  if (!user) {
+    console.log(`[sync] User ${userId} no longer exists, aborting sync`);
+    return;
+  }
   console.log('[sync] Running for user:', userId, 'email:', user.email);
 
   const agentClient = await prisma.agentClient.findFirst({
@@ -310,18 +318,14 @@ async function _syncUserById(userId: string): Promise<void> {
 
   const dedupedResult = deduplicateMatchResult(result);
   const syncReport = buildSyncReport(dedupedResult, salaryPrefs, exchangeRates, maxLevelUp);
-  let userSync: { id: string };
-  try {
-    userSync = await prisma.userSync.create({
-      data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
-    });
-  } catch (e: unknown) {
-    if ((e as { code?: string }).code === 'P2003') {
-      console.log(`[sync] user ${userId} no longer exists, stopping sync`);
-      return;
-    }
-    throw e;
+  const userBeforeSync = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!userBeforeSync) {
+    console.log(`[sync] User ${userId} deleted during sync, skipping userSync write`);
+    return;
   }
+  const userSync = await prisma.userSync.create({
+    data: { user_id: userId, report: syncReport as unknown as Prisma.InputJsonValue },
+  });
 
   const newOffersCount = result.meta.newly_inserted;
   const stretchCount = result.stretch_offers.length;
@@ -336,6 +340,11 @@ async function _syncUserById(userId: string): Promise<void> {
 
   console.log(`[sync] User ${userId}: ${newOffersCount} new, ${stretchCount} stretch, ${result.meta.total_offers_scanned} scanned`);
 
+  const userBeforeProfileSync = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!userBeforeProfileSync) {
+    console.log(`[sync] User ${userId} deleted during sync, skipping profile_synced_at write`);
+    return;
+  }
   await prisma.user.update({
     where: { id: userId },
     data: { profile_synced_at: new Date() },
@@ -490,6 +499,11 @@ export async function buildAndSaveFreePlanSnapshot(
     },
   }
 
+  const userBeforeSnapshot = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!userBeforeSnapshot) {
+    console.log(`[sync] User ${userId} deleted during sync, skipping free_plan_snapshot write`);
+    return;
+  }
   await prisma.user.update({
     where: { id: userId },
     data: { free_plan_snapshot: snapshot as unknown as Prisma.InputJsonValue },
