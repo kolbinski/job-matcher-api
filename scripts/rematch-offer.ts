@@ -35,6 +35,17 @@ async function main() {
   await syncUserById(userOffer.user_id)
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
   console.log(`Done in ${elapsed}s.`)
+
+  const newUserOffer = await prisma.userOffer.findFirst({
+    where: { offer_id: userOffer.offer_id, user_id: userOffer.user_id },
+    orderBy: { matched_at: 'desc' },
+  })
+
+  if (newUserOffer) {
+    console.log(`New user_offer id: ${newUserOffer.id}`)
+  } else {
+    console.log('No new user_offer created — offer may have been pre-filter rejected')
+  }
 }
 
 main()
