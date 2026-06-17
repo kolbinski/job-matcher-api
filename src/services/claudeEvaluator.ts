@@ -4,7 +4,7 @@ import type { CandidateProfile } from '../types/profile';
 
 const anthropic = new Anthropic();
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 300_000;
 
 const SYSTEM_PROMPT = `You are a senior tech recruiter evaluating job offers for you.
 
