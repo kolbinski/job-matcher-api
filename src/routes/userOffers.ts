@@ -326,7 +326,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   // ── Multi-status path ──────────────────────────────────────────────────────
   if (statuses.length > 1) {
-    const [{ learningGoals }, subscription, pageSizeSetting] =
+    const [{ learningGoals }, subscription, pageSizeSetting, dbUser, exchangeRatesSetting] =
       await Promise.all([
         loadClientProfile(clientId),
         role === 'client'
@@ -336,7 +336,23 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
             })
           : Promise.resolve(null),
         prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
+        prisma.user.findUnique({
+          where: { id: clientId },
+          select: { preferred_currency: true, profile: true },
+        }),
+        prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
       ]);
+    const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
+    const exchangeRates: Record<string, number> = exchangeRatesSetting
+      ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
+      : {};
+    const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }> } } | null;
+    const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
+      type: p.type,
+      currency: p.currency,
+      min: p.min,
+      unit: p.unit,
+    }));
     const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
     const start = (page - 1) * pageSize;
     const effectivePlan =
@@ -458,45 +474,53 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         }
       }
 
-      const mapped = result.map(uo => ({
-        user_offer_id: uo.id,
-        offer_id: uo.offer_id,
-        offer_title: uo.offer.title,
-        offer_company: uo.offer.company_name,
-        offer_url: uo.offer.url,
-        claude_score: uo.claude_score,
-        claude_role_fit: uo.claude_role_fit,
-        claude_matched_reasons: uo.claude_matched_reasons,
-        claude_missing_skills: uo.claude_missing_skills,
-        claude_recommended: uo.claude_recommended,
-        rejection_reason: uo.rejection_reason,
-        matched_at: uo.matched_at,
-        applied_at: uo.status_history[0]?.created_at ?? null,
-        salary: uo.salary_min != null
-          ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta!, type: uo.salary_type ?? '' }]
-          : [],
-        salary_delta: uo.salary_delta,
-        raw_salaries: Array.isArray(uo.offer.employment_types)
-          ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
-              from: et['fromPerUnit'] ?? et['from'] ?? null,
-              to: et['toPerUnit'] ?? et['to'] ?? null,
-              currency: et['currency'] ?? null,
-              unit: et['unit'] ?? null,
-              type: et['type'] ?? null,
-            }))
-          : [],
-        source: uo.offer.source,
-        city: uo.offer.city ?? null,
-        work_model: uo.offer.workplace_type ?? null,
-        required_skills: uo.offer.required_skills,
-        nice_to_have_skills: uo.offer.nice_to_have_skills,
-        cv_language: uo.cv_language,
-        cv_status: uo.cv_status ?? null,
-        cv_url: uo.cv_url ?? null,
-        cl_status: uo.cl_status ?? null,
-        cl_url: uo.cl_url ?? null,
-        status: uo.status,
-      }));
+      const mapped = result.map(uo => {
+        const salaryResult = calculateUserOfferSalary(
+          Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
+          preferredCurrency,
+          salaryPrefs,
+          exchangeRates,
+        );
+        return {
+          user_offer_id: uo.id,
+          offer_id: uo.offer_id,
+          offer_title: uo.offer.title,
+          offer_company: uo.offer.company_name,
+          offer_url: uo.offer.url,
+          claude_score: uo.claude_score,
+          claude_role_fit: uo.claude_role_fit,
+          claude_matched_reasons: uo.claude_matched_reasons,
+          claude_missing_skills: uo.claude_missing_skills,
+          claude_recommended: uo.claude_recommended,
+          rejection_reason: uo.rejection_reason,
+          matched_at: uo.matched_at,
+          applied_at: uo.status_history[0]?.created_at ?? null,
+          salary: salaryResult
+            ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
+            : [],
+          salary_delta: uo.salary_delta,
+          raw_salaries: Array.isArray(uo.offer.employment_types)
+            ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
+                from: et['fromPerUnit'] ?? et['from'] ?? null,
+                to: et['toPerUnit'] ?? et['to'] ?? null,
+                currency: et['currency'] ?? null,
+                unit: et['unit'] ?? null,
+                type: et['type'] ?? null,
+              }))
+            : [],
+          source: uo.offer.source,
+          city: uo.offer.city ?? null,
+          work_model: uo.offer.workplace_type ?? null,
+          required_skills: uo.offer.required_skills,
+          nice_to_have_skills: uo.offer.nice_to_have_skills,
+          cv_language: uo.cv_language,
+          cv_status: uo.cv_status ?? null,
+          cv_url: uo.cv_url ?? null,
+          cl_status: uo.cl_status ?? null,
+          cl_url: uo.cl_url ?? null,
+          status: uo.status,
+        };
+      });
 
       const finalMapped = bucketStatus === 'ai_rejected'
         ? mapped.filter(o => o.salary.length > 0)
@@ -645,10 +669,26 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       : [{ claude_score: 'desc' }],
   });
 
-  const [{ learningGoals }, pageSizeSetting] = await Promise.all([
+  const [{ learningGoals }, pageSizeSetting, dbUser, exchangeRatesSetting] = await Promise.all([
     loadClientProfile(clientId),
     prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
+    prisma.user.findUnique({
+      where: { id: clientId },
+      select: { preferred_currency: true, profile: true },
+    }),
+    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
   ]);
+  const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
+  const exchangeRates: Record<string, number> = exchangeRatesSetting
+    ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
+    : {};
+  const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }> } } | null;
+  const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
+    type: p.type,
+    currency: p.currency,
+    min: p.min,
+    unit: p.unit,
+  }));
   const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
   const start = (page - 1) * pageSize;
 
@@ -684,45 +724,53 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     }
   }
 
-  const mapped = result.map(uo => ({
-    user_offer_id: uo.id,
-    offer_id: uo.offer_id,
-    offer_title: uo.offer.title,
-    offer_company: uo.offer.company_name,
-    offer_url: uo.offer.url,
-    claude_score: uo.claude_score,
-    claude_role_fit: uo.claude_role_fit,
-    claude_matched_reasons: uo.claude_matched_reasons,
-    claude_missing_skills: uo.claude_missing_skills,
-    claude_recommended: uo.claude_recommended,
-    rejection_reason: uo.rejection_reason,
-    matched_at: uo.matched_at,
-    applied_at: uo.status_history[0]?.created_at ?? null,
-    salary: uo.salary_min != null
-      ? [{ min: uo.salary_min, max: uo.salary_max!, currency: uo.salary_currency!, delta: uo.salary_delta!, type: '' }]
-      : [],
-    salary_delta: uo.salary_delta,
-    raw_salaries: Array.isArray(uo.offer.employment_types)
-      ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
-          from: et['fromPerUnit'] ?? et['from'] ?? null,
-          to: et['toPerUnit'] ?? et['to'] ?? null,
-          currency: et['currency'] ?? null,
-          unit: et['unit'] ?? null,
-          type: et['type'] ?? null,
-        }))
-      : [],
-    source: uo.offer.source,
-    city: uo.offer.city ?? null,
-    work_model: uo.offer.workplace_type ?? null,
-    required_skills: uo.offer.required_skills,
-    nice_to_have_skills: uo.offer.nice_to_have_skills,
-    cv_language: uo.cv_language,
-    cv_status: uo.cv_status ?? null,
-    cv_url: uo.cv_url ?? null,
-    cl_status: uo.cl_status ?? null,
-    cl_url: uo.cl_url ?? null,
-    status: uo.status,
-  }));
+  const mapped = result.map(uo => {
+    const salaryResult = calculateUserOfferSalary(
+      Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
+      preferredCurrency,
+      salaryPrefs,
+      exchangeRates,
+    );
+    return {
+      user_offer_id: uo.id,
+      offer_id: uo.offer_id,
+      offer_title: uo.offer.title,
+      offer_company: uo.offer.company_name,
+      offer_url: uo.offer.url,
+      claude_score: uo.claude_score,
+      claude_role_fit: uo.claude_role_fit,
+      claude_matched_reasons: uo.claude_matched_reasons,
+      claude_missing_skills: uo.claude_missing_skills,
+      claude_recommended: uo.claude_recommended,
+      rejection_reason: uo.rejection_reason,
+      matched_at: uo.matched_at,
+      applied_at: uo.status_history[0]?.created_at ?? null,
+      salary: salaryResult
+        ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
+        : [],
+      salary_delta: uo.salary_delta,
+      raw_salaries: Array.isArray(uo.offer.employment_types)
+        ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
+            from: et['fromPerUnit'] ?? et['from'] ?? null,
+            to: et['toPerUnit'] ?? et['to'] ?? null,
+            currency: et['currency'] ?? null,
+            unit: et['unit'] ?? null,
+            type: et['type'] ?? null,
+          }))
+        : [],
+      source: uo.offer.source,
+      city: uo.offer.city ?? null,
+      work_model: uo.offer.workplace_type ?? null,
+      required_skills: uo.offer.required_skills,
+      nice_to_have_skills: uo.offer.nice_to_have_skills,
+      cv_language: uo.cv_language,
+      cv_status: uo.cv_status ?? null,
+      cv_url: uo.cv_url ?? null,
+      cl_status: uo.cl_status ?? null,
+      cl_url: uo.cl_url ?? null,
+      status: uo.status,
+    };
+  });
 
   const finalMapped = status === 'ai_rejected'
     ? mapped.filter(o => o.salary.length > 0)
