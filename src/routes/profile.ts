@@ -41,7 +41,7 @@ profileRouter.get('/', validateJwt, async (req, res) => {
       throw new AppError(404, 'NOT_FOUND', 'Client not found')
     }
 
-    return res.json({ ...user, offer_skills: user.offer_skills ?? [] })
+    return res.json({ ...user, offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed) })
   }
 
   const user = await prisma.user.findUnique({
@@ -53,7 +53,7 @@ profileRouter.get('/', validateJwt, async (req, res) => {
     throw new AppError(401, 'UNAUTHORIZED', 'User not found')
   }
 
-  res.json({ ...user, offer_skills: user.offer_skills ?? [] })
+  res.json({ ...user, offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed) })
 })
 
 profileRouter.patch('/', validateJwt, async (req, res) => {
