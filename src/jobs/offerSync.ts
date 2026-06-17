@@ -71,6 +71,15 @@ async function upsertPage(
   };
 }
 
+async function resetProfileSyncedAt(page: number, upsertCount: number): Promise<void> {
+  if (upsertCount === 0) return;
+  const { count } = await prisma.user.updateMany({
+    where: { profile_ready: true, profile_synced_at: { not: null } },
+    data: { profile_synced_at: null },
+  });
+  console.log(`[offerSync] Page ${page}: ${upsertCount} new offers — reset profile_synced_at for ${count} users`);
+}
+
 function logSkillBreakdown(skillCounts: Map<string, number>): void {
   const top = [...skillCounts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -142,6 +151,7 @@ async function syncJustJoin(
     console.log(
       `[offerScraper][justjoin] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
     );
+    await resetProfileSyncedAt(pageNum, inserted);
 
     if (nextCursor === null) break;
     from = nextCursor;
@@ -198,6 +208,7 @@ async function syncNfj(
     console.log(
       `[offerScraper][nofluffjobs] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
     );
+    await resetProfileSyncedAt(pageNum, inserted);
 
     if (pageNum === maxPages) {
       console.log(
@@ -274,14 +285,6 @@ export async function syncOffers(cleanupEnabled = true): Promise<{
   if (totalFetched === 0) {
     console.warn('[offerSync] No offers fetched — skipping deletion');
     return { fetched: 0, inserted: 0, updated: 0, deleted: 0 };
-  }
-
-  if (totalInserted > 0) {
-    const { count } = await prisma.user.updateMany({
-      where: { profile_ready: true, profile_synced_at: { not: null } },
-      data: { profile_synced_at: null },
-    });
-    console.log(`[offerSync] Reset profile_synced_at for ${count} users — new offers available`);
   }
 
   if (hitPageLimit) {
