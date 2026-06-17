@@ -389,7 +389,11 @@ export async function runMatchForUser(
               where: { id: userId },
               select: { sync_started_at: true },
             });
-            if (user?.sync_started_at?.getTime() !== syncStartedAt.getTime()) {
+            if (!user) {
+              console.log(`[match] Batch ${batchNum}: user no longer exists, stopping sync`);
+              return;
+            }
+            if (user.sync_started_at?.getTime() !== syncStartedAt.getTime()) {
               console.log(
                 `[match] Batch ${batchNum}: sync superseded, skipping insert`,
               );
