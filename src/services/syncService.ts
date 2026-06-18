@@ -480,19 +480,17 @@ export async function buildAndSaveFreePlanSnapshot(
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),
+    // level_up: not recommended (ai_rejected) + has missing skills + a computed
+    // salary delta. NOTE: ai_rejected rows written before this status rule used the
+    // old logic; they only get reclassified on the next re-sync (no migration).
     prisma.userOffer.findMany({
-      where: { user_id: userId, status: 'ai_rejected', offer: { employment_types: { not: [] as Prisma.InputJsonValue } } },
+      where: { user_id: userId, status: 'ai_rejected', claude_missing_skills: { isEmpty: false }, salary_delta: { not: null } },
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),
   ])
 
   const filteredLevelUp = allLevelUpRaw
-    .filter(uo => {
-      const types = uo.offer.employment_types as Array<{ from?: number | null; to?: number | null }> | null
-      if (!Array.isArray(types) || types.length === 0) return false
-      return types.some(et => (typeof et.from === 'number' && et.from > 0) || (typeof et.to === 'number' && et.to > 0))
-    })
     .filter(uo => learningGoals.length === 0 || uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
 
   const applyNowOffers = maxApplyNow != null ? allApplyNow.slice(0, maxApplyNow) : allApplyNow

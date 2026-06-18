@@ -352,8 +352,10 @@ export async function runMatchForUser(
       const batchRows = batch
         .filter(p => p.offer.recommended !== null && p.original.id != null)
         .map((p, idx) => {
+          // Status rules: recommended OR no missing skills → pending_apply;
+          // not recommended AND has missing skills → ai_rejected.
           const isPendingApply =
-            p.offer.recommended === true && p.offer.role_fit !== null;
+            p.offer.recommended === true || p.offer.missing_skills.length === 0;
           const salaryResult = calculateUserOfferSalary(
             Array.isArray(p.original.employment_types)
               ? p.original.employment_types

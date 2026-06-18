@@ -384,9 +384,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         const levelUpOffers = filterSnapshotOffers(snap.level_up?.offers ?? []);
         // Free users see snapshot-limited offers, but counts (and the blue dot) must
         // reflect real DB totals regardless of the snapshot.
+        // level_up offers are status 'ai_rejected' (with a salaried employment type) —
+        // see buildAndSaveFreePlanSnapshot. apply_now offers are status 'pending_apply'.
         const [applyNowCount, levelUpCount] = await Promise.all([
           prisma.userOffer.count({ where: { user_id: clientId, status: 'pending_apply', claude_recommended: true } }),
-          prisma.userOffer.count({ where: { user_id: clientId, status: 'pending_apply', claude_recommended: false } }),
+          prisma.userOffer.count({ where: { user_id: clientId, status: 'ai_rejected', offer: { employment_types: { not: [] as Prisma.InputJsonValue } } } }),
         ]);
         return res.json({
           ...snap,
@@ -420,14 +422,17 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     for (const bucketStatus of statuses) {
       const bucketOfferWhere = {
         ...(source && source !== 'all' ? { source } : {}),
-        ...(bucketStatus === 'ai_rejected'
-          ? { employment_types: { not: [] as Prisma.InputJsonValue } }
-          : {}),
       };
       const isScoreRelevant = bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected';
+      // level_up (ai_rejected) requires missing skills + a computed salary delta.
+      // NOTE: ai_rejected rows written before this rule used the old logic and only
+      // get reclassified on the next re-sync (no migration).
       const bucketWhere = {
         user_id: clientId,
         status: bucketStatus,
+        ...(bucketStatus === 'ai_rejected'
+          ? { claude_missing_skills: { isEmpty: false }, salary_delta: { not: null } }
+          : {}),
         ...(isScoreRelevant && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
         ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
         ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
@@ -472,16 +477,14 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
       let result = [...seen.values()];
 
-      // Auto-apply filters for ai_rejected bucket
-      if (bucketStatus === 'ai_rejected') {
-        result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
-        if (learningGoals.length > 0) {
-          result = result.filter(uo =>
-            uo.claude_missing_skills.some(sk =>
-              learningGoals.includes(sk.toLowerCase()),
-            ),
-          );
-        }
+      // ai_rejected salary + missing-skills filters now live in the query above;
+      // learning-goals personalization stays here.
+      if (bucketStatus === 'ai_rejected' && learningGoals.length > 0) {
+        result = result.filter(uo =>
+          uo.claude_missing_skills.some(sk =>
+            learningGoals.includes(sk.toLowerCase()),
+          ),
+        );
       }
 
       const mapped = result.map(uo => {
@@ -532,9 +535,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         };
       });
 
-      const finalMapped = bucketStatus === 'ai_rejected'
-        ? mapped.filter(o => o.salary.length > 0)
-        : mapped;
+      // salary gate is enforced in the query (salary_delta not null), so no extra
+      // request-time salary filter is needed here.
+      const finalMapped = mapped;
 
       const count = finalMapped.length;
       let offers: typeof finalMapped = finalMapped;
@@ -791,8 +794,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   const apply_now_count = finalMapped.filter(
     o => o.claude_recommended === true,
   ).length;
+  // level_up = has missing skills (new rule), not claude_recommended === false.
   const level_up_count = finalMapped.filter(
-    o => o.claude_recommended === false,
+    o => o.claude_missing_skills.length > 0,
   ).length;
 
   let filtered = finalMapped;
