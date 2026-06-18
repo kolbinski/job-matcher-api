@@ -34,26 +34,34 @@ profileRouter.get('/', validateJwt, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: clientId },
-      select: { profile: true, profile_ready: true, offer_skills: true },
+      select: { profile: true, profile_ready: true, profile_editing_snapshot: true, offer_skills: true },
     })
 
     if (!user) {
       throw new AppError(404, 'NOT_FOUND', 'Client not found')
     }
 
-    return res.json({ ...user, offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed) })
+    return res.json({
+      ...user,
+      profile_editing_snapshot: user.profile_editing_snapshot ?? null,
+      offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed),
+    })
   }
 
   const user = await prisma.user.findUnique({
     where: { id: req.jwt!.user_id! },
-    select: { profile: true, profile_ready: true, offer_skills: true },
+    select: { profile: true, profile_ready: true, profile_editing_snapshot: true, offer_skills: true },
   })
 
   if (!user) {
     throw new AppError(401, 'UNAUTHORIZED', 'User not found')
   }
 
-  res.json({ ...user, offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed) })
+  res.json({
+    ...user,
+    profile_editing_snapshot: user.profile_editing_snapshot ?? null,
+    offer_skills: ((user.offer_skills ?? []) as unknown as Array<{ dismissed: boolean }>).filter(s => !s.dismissed),
+  })
 })
 
 profileRouter.patch('/', validateJwt, async (req, res) => {
