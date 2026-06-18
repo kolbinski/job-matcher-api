@@ -191,7 +191,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
         SELECT uos.id FROM user_offer_statuses uos
         JOIN user_offers uo ON uos.user_offer_id = uo.id
         WHERE uo.user_id = ${userId}
-        AND uo.status IN ('pending_apply', 'ai_rejected')
+        AND uo.status IN ('pending_apply', 'ai_rejected', 'pre_filter_rejected')
         LIMIT 1000
       )`
     deleted = result
@@ -206,7 +206,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       WHERE id IN (
         SELECT id FROM user_offers
         WHERE user_id = ${userId}
-        AND status IN ('pending_apply', 'ai_rejected')
+        AND status IN ('pending_apply', 'ai_rejected', 'pre_filter_rejected')
         LIMIT 1000
       )`
     deleted = result

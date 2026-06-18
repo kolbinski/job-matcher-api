@@ -98,6 +98,10 @@ export async function runMatchForUser(
   const norm = normalizeProfile(profile);
 
   // ── 3. Exclude already-processed offers ───────────────────────────────────
+  // No status filter on purpose: every existing user_offer is excluded so Claude
+  // never re-evaluates it. trigger-sync deletes only pending_apply/ai_rejected/
+  // pre_filter_rejected before a re-match, so terminal-state offers (applied,
+  // accepted, offer_received) survive and stay in seenIds across re-matches.
   const seenIds = new Set(
     (
       await prisma.userOffer.findMany({
