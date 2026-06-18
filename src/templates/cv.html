@@ -99,6 +99,13 @@
         padding-left: 10px;
         border-left: 2px solid #d0d0d0;
       }
+      [dir='rtl'] .project {
+        margin: 0 12px 10px 0;
+        padding-right: 10px;
+        padding-left: 0;
+        border-right: 2px solid #d0d0d0;
+        border-left: none;
+      }
       .project-name {
         font-weight: 600;
         font-size: 12.5px;
@@ -244,7 +251,7 @@
       <header>
         <h1>{{FULL_NAME}}</h1>
         <div class="target-role">{{TARGET_ROLE}}</div>
-        <div class="contacts">{{CONTACTS}}</div>
+        <div class="contacts" dir="ltr">{{CONTACTS}}</div>
       </header>
 
       <h2>{{LABEL_SUMMARY}}</h2>

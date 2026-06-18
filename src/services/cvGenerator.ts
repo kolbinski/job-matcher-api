@@ -151,6 +151,7 @@ function buildHtml(
   labels: CvLabels,
   presentLabel: string,
   isRtl: boolean,
+  translateCategory: (name: string) => string,
 ): string {
 
   const {
@@ -185,8 +186,9 @@ function buildHtml(
     .map(job => {
       const projHtml = job.projects
         .map(p => {
-          const techsHtml = p.skills.length
-            ? `<div class="project-techs">${p.skills.map(t => esc(t)).join(' · ')}</div>`
+          const uniqueSkills = [...new Set(p.skills)];
+          const techsHtml = uniqueSkills.length
+            ? `<div class="project-techs">${uniqueSkills.map(t => esc(t)).join(' · ')}</div>`
             : '';
           const achieveHtml = p.highlighted_achievements.length
             ? `<ul class="project-achievements">${p.highlighted_achievements.map(a => `<li>${esc(a)}</li>`).join('')}</ul>`
@@ -262,7 +264,7 @@ function buildHtml(
     .map(
       ([cat, techs]) =>
         `<div class="skills-row">
-          <div class="skills-label">${esc(cat)}</div>
+          <div class="skills-label">${esc(translateCategory(cat))}</div>
           <div class="skills-pills">${techs.map(t => `<span class="pill">${esc(t.name)}</span>`).join('')}</div>
         </div>`,
     )
@@ -497,7 +499,15 @@ Rules:
   const isRtl = langEntry?.rtl ?? false;
   const textDirection = isRtl ? 'rtl' : 'ltr';
 
-  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl)
+  // Translate skill category headers (profile.skills is keyed by category name).
+  const categories = await prisma.skillCategory.findMany();
+  const translateCategory = (name: string): string => {
+    const cat = categories.find(c => c.name === name);
+    const t = cat?.translations as Record<string, string> | null | undefined;
+    return t?.[cvLanguage] ?? t?.['en'] ?? name;
+  };
+
+  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory)
     .replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
     .replace('{{TEXT_DIRECTION}}', textDirection);
 

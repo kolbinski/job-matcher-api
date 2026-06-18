@@ -9,12 +9,13 @@ datasource db {
 }
 
 model SkillCategory {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name       String    @unique
-  market     String    @default("IT")
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  sort_order Int       @default(999)
-  skills     Skill[]
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String    @unique
+  market       String    @default("IT")
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  sort_order   Int       @default(999)
+  translations Json?     @default("{}")
+  skills       Skill[]
 
   @@map("skill_categories")
 }
