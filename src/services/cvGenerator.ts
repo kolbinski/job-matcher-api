@@ -8,12 +8,24 @@ import { prisma } from '../lib/prisma';
 
 const TEMPLATE_PATH = path.resolve(process.cwd(), 'src/templates/cv.html');
 
+interface CvLabels {
+  summary: string
+  experience: string
+  own_projects: string
+  skills: string
+  highlighted: string
+  education: string
+  languages: string
+  certifications: string
+}
+
 interface LangEntry {
   code: string
   name: string
   locale?: string
   gdpr?: string
   best_regards?: string
+  cv_labels?: CvLabels
 }
 
 const FALLBACK_GDPR_EN = 'I hereby consent to the processing of my personal data included in this application for the purposes of the recruitment process, in accordance with the GDPR (Regulation (EU) 2016/679).'
@@ -110,24 +122,16 @@ function formatWorkModel(work_model?: string, location?: string): string {
 }
 
 // ─── Section labels ───────────────────────────────────────────────────────────
+// Labels are sourced per-language from general_settings.languages[].cv_labels.
+// This English map is the in-code fallback when a language entry has no cv_labels.
 
-const SECTION_LABELS = {
-  pl: {
-    summary: 'Podsumowanie',
-    experience: 'Doświadczenie',
-    own_projects: 'Projekty własne',
-    skills: 'Umiejętności',
-    highlighted: 'Kluczowe dla tej roli',
-    education: 'Wykształcenie',
-    languages: 'Języki',
-    certifications: 'Certyfikaty',
-  },
+const SECTION_LABELS: Record<'en', CvLabels> = {
   en: {
     summary: 'Summary',
     experience: 'Experience',
-    own_projects: 'Own projects',
+    own_projects: 'Own Projects',
     skills: 'Skills',
-    highlighted: 'Highlighted for this role',
+    highlighted: 'Highlighted for this Role',
     education: 'Education',
     languages: 'Languages',
     certifications: 'Certifications',
@@ -141,13 +145,8 @@ function buildHtml(
   profile: CandidateProfile,
   cvLanguage: string,
   locale: string,
+  labels: CvLabels,
 ): string {
-  const langKey =
-    cvLanguage.toLowerCase() === 'pl' ||
-    cvLanguage.toLowerCase().startsWith('pol')
-      ? 'pl'
-      : 'en';
-  const labels = SECTION_LABELS[langKey];
 
   const {
     basic_info,
@@ -341,6 +340,8 @@ export async function generateCV(
   model?: string,
 ): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
   const resolvedModel = model ?? await getClaudeModel('cv_generation')
+  const langEntry = await getLanguageEntry(cvLanguage);
+  const langName = langEntry?.name ?? cvLanguage;
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -361,6 +362,8 @@ export async function generateCV(
   };
 
   const prompt = `You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
+
+LANGUAGE: Generate ALL text content in ${langName} language. Translate the candidate's summary, work experience achievements, and any other descriptive text into ${langName}. Keep proper nouns (company names, technology names, product names) in their original form.
 
 CANDIDATE PROFILE:
 ${JSON.stringify(profileForClaude, null, 2)}
@@ -474,10 +477,10 @@ Rules:
   ].filter((p): p is string => p !== null && p.length > 0);
   const filename = filenameParts.join('-') + '.pdf';
 
-  const langEntry = await getLanguageEntry(cvLanguage);
   const locale = langEntry?.locale ?? 'en-US';
+  const labels = langEntry?.cv_labels ?? SECTION_LABELS['en'];
 
-  let html = buildHtml(cv, profile, cvLanguage, locale).replace(
+  let html = buildHtml(cv, profile, cvLanguage, locale, labels).replace(
     '{{CV_TITLE}}',
     filename.replace('.pdf', ''),
   );
