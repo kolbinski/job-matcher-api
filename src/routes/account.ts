@@ -136,6 +136,63 @@ accountRouter.patch('/billing', validateJwt, async (req, res) => {
   })
 })
 
+const DeleteReasonsSchema = z.object({
+  reasons: z.array(z.string()),
+})
+
+const DeleteFeedbackSchema = z.object({
+  feedback: z.string(),
+})
+
+// Find or create the user_deleted offboarding row for a user. There is no unique
+// constraint on user_id, so we look it up explicitly rather than upsert.
+async function findOrCreateUserDeleted(userId: string, email: string): Promise<string> {
+  const existing = await prisma.userDeleted.findFirst({ where: { user_id: userId } })
+  if (existing) return existing.id
+  const created = await prisma.userDeleted.create({ data: { user_id: userId, email } })
+  return created.id
+}
+
+accountRouter.post('/delete-reasons', validateJwt, async (req, res) => {
+  const { role, user_id, email } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const parsed = DeleteReasonsSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
+  }
+
+  const id = await findOrCreateUserDeleted(user_id!, email)
+  await prisma.userDeleted.update({
+    where: { id },
+    data: { delete_reasons: parsed.data.reasons },
+  })
+
+  return res.json({ success: true })
+})
+
+accountRouter.post('/delete-feedback', validateJwt, async (req, res) => {
+  const { role, user_id, email } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+
+  const parsed = DeleteFeedbackSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'INVALID_REQUEST', message: parsed.error.issues[0]?.message ?? 'Invalid body' })
+  }
+
+  const id = await findOrCreateUserDeleted(user_id!, email)
+  await prisma.userDeleted.update({
+    where: { id },
+    data: { feedback: parsed.data.feedback },
+  })
+
+  return res.json({ success: true })
+})
+
 async function findSupabaseUserId(email: string): Promise<string | null> {
   let page = 1
   const perPage = 1000

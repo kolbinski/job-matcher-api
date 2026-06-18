@@ -6,4 +6,5 @@ export const SETTINGS = [
   { key: 'fetch_offers_after_build', value: 'false' },
   { key: 'justjoin_max_pages',       value: '3' },
   { key: 'nfj_max_pages',            value: '3' },
+  { key: 'delete_reasons',           value: '["Found a job on my own","Found a job through Homo Digital","Too expensive","Not enough job matches","CV/CL quality not good enough","Missing features I need","Switching to a different service","Taking a break from job search","Privacy concerns","Technical issues","Other"]' },
 ] as const

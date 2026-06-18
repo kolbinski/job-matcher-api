@@ -313,3 +313,15 @@ model NotificationLock {
 
   @@map("notification_locks")
 }
+
+model UserDeleted {
+  id             String   @id @default(uuid())
+  user_id        String
+  email          String
+  delete_reasons String[] @default([])
+  feedback       String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@map("user_deleted")
+}
