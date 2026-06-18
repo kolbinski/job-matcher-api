@@ -156,6 +156,7 @@ function buildHtml(
   translateCategory: (name: string) => string,
   nativeLabel: string,
   translateLanguageName: (name: string) => string,
+  categoryOrder: string[],
 ): string {
 
   const {
@@ -263,8 +264,17 @@ function buildHtml(
   </div>`
     : '';
 
-  const categorySkillsHtml = Object.entries(technologies)
-    .filter(([, techs]) => techs.length > 0)
+  // Render categories in skill_categories.sort_order (categoryOrder). Skip empty
+  // or unknown categories. Append any profile categories not present in categoryOrder
+  // (defensive: a category without a DB row still renders, just last).
+  const orderedCats = [
+    ...categoryOrder,
+    ...Object.keys(technologies).filter(c => !categoryOrder.includes(c)),
+  ];
+  const categorySkillsHtml = orderedCats
+    .map(cat => [cat, technologies[cat]] as const)
+    .filter((entry): entry is readonly [string, NonNullable<(typeof entry)[1]>] =>
+      Array.isArray(entry[1]) && entry[1].length > 0)
     .map(
       ([cat, techs]) =>
         `<div class="skills-row">
@@ -522,7 +532,9 @@ Rules:
   const textDirection = isRtl ? 'rtl' : 'ltr';
 
   // Translate skill category headers (profile.skills is keyed by category name).
-  const categories = await prisma.skillCategory.findMany();
+  // Fetch in sort_order so skill sections render in the configured order.
+  const categories = await prisma.skillCategory.findMany({ orderBy: { sort_order: 'asc' } });
+  const categoryOrder = categories.map(c => c.name);
   const translateCategory = (name: string): string => {
     const cat = categories.find(c => c.name === name);
     const t = cat?.translations as Record<string, string> | null | undefined;
@@ -533,7 +545,7 @@ Rules:
   const languageNames = langEntry?.language_names ?? {};
   const translateLanguageName = (name: string): string => languageNames[name] ?? name;
 
-  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory, nativeLabel, translateLanguageName)
+  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory, nativeLabel, translateLanguageName, categoryOrder)
     .replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
     .replace('{{TEXT_DIRECTION}}', textDirection);
 
