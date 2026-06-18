@@ -64,6 +64,24 @@ profileRouter.get('/', validateJwt, async (req, res) => {
   })
 })
 
+// Lightweight check: does the current profile differ from the editing snapshot
+// in any matching-relevant field? Same comparison as trigger-sync, but read-only
+// (no DB writes, no matching).
+profileRouter.get('/has-relevant-changes', validateJwt, async (req, res) => {
+  if (req.jwt!.role !== 'client') {
+    throw new AppError(403, 'FORBIDDEN', 'Only client JWT is allowed')
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.jwt!.user_id! },
+    select: { profile: true, profile_editing_snapshot: true },
+  })
+  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+
+  const has_relevant_changes = compareMatchingFields(user.profile_editing_snapshot, user.profile)
+  return res.json({ has_relevant_changes })
+})
+
 profileRouter.patch('/', validateJwt, async (req, res) => {
   const parsed = BodySchema.safeParse(req.body)
   if (!parsed.success) {
