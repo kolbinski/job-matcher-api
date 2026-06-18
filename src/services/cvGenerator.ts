@@ -375,7 +375,9 @@ export async function generateCV(
     skills: profile.skills,
   };
 
-  const prompt = `CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in ${langName} (${langCode}). This is non-negotiable. Every sentence, every description, every achievement must be written in ${langName}. Do NOT use Polish, English, or any other language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to ${langName}.
+  const prompt = `CRITICAL: You must output ONLY valid ${langName} text. Never mix characters from other writing systems. Do not output Korean, Chinese, Japanese or any other script characters. If uncertain about a word, use a simpler ${langName} alternative. Any character that is not part of the ${langName} writing system must be removed.
+
+CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in ${langName} (${langCode}). This is non-negotiable. Every sentence, every description, every achievement must be written in ${langName}. Do NOT use Polish, English, or any other language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to ${langName}.
 
 You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
 
@@ -480,6 +482,17 @@ Rules:
       }
     });
   }
+
+  // Sort experience: currently-working jobs first, then by start date descending.
+  // currently_working lives on the profile job; fall back to a null date_to.
+  const isCurrent = (job: CvJob): boolean =>
+    profileWorkExp.find(pj => pj.company === job.company)?.currently_working ??
+    job.date_to === null;
+  cv.work_experience.sort((a, b) => {
+    if (isCurrent(a) && !isCurrent(b)) return -1;
+    if (!isCurrent(a) && isCurrent(b)) return 1;
+    return new Date(b.date_from).getTime() - new Date(a.date_from).getTime();
+  });
 
   const opts = { lower: true, strict: true };
   const slug = (s: string) => slugify(s, opts);
