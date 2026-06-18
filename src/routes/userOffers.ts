@@ -382,12 +382,18 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         };
         const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
         const levelUpOffers = filterSnapshotOffers(snap.level_up?.offers ?? []);
+        // Free users see snapshot-limited offers, but counts (and the blue dot) must
+        // reflect real DB totals regardless of the snapshot.
+        const [applyNowCount, levelUpCount] = await Promise.all([
+          prisma.userOffer.count({ where: { user_id: clientId, status: 'pending_apply', claude_recommended: true } }),
+          prisma.userOffer.count({ where: { user_id: clientId, status: 'pending_apply', claude_recommended: false } }),
+        ]);
         return res.json({
           ...snap,
-          count: applyNowOffers.length + levelUpOffers.length,
+          count: applyNowCount + levelUpCount,
           new_skills_count,
-          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowOffers.length, offers: applyNowOffers } } : {}),
-          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpOffers.length, offers: levelUpOffers } } : {}),
+          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowCount, offers: applyNowOffers } } : {}),
+          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpCount, offers: levelUpOffers } } : {}),
         });
       }
     }
