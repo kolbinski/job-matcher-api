@@ -25,6 +25,8 @@ interface LangEntry {
   locale?: string
   gdpr?: string
   best_regards?: string
+  present_label?: string
+  rtl?: boolean
   cv_labels?: CvLabels
 }
 
@@ -42,10 +44,12 @@ async function getLanguageEntry(cvLanguage: string): Promise<LangEntry | undefin
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
 
-function fmtDate(raw: string | null | undefined, lang: string, locale: string): string {
-  const isPolish =
-    lang.toLowerCase() === 'pl' || lang.toLowerCase().startsWith('pol');
-  if (!raw) return isPolish ? 'obecnie' : 'present';
+function fmtDate(
+  raw: string | null | undefined,
+  locale: string,
+  presentLabel: string,
+): string {
+  if (!raw) return presentLabel;
   const [year, mm] = raw.split('-');
   const d = new Date(parseInt(year), parseInt(mm ?? '1', 10) - 1, 1);
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'short' });
@@ -143,9 +147,10 @@ const SECTION_LABELS: Record<'en', CvLabels> = {
 function buildHtml(
   cv: CvContent,
   profile: CandidateProfile,
-  cvLanguage: string,
   locale: string,
   labels: CvLabels,
+  presentLabel: string,
+  isRtl: boolean,
 ): string {
 
   const {
@@ -154,6 +159,10 @@ function buildHtml(
     own_projects: profileProjects,
     skills: technologies,
   } = profile;
+
+  // In RTL documents, force dates left-to-right so month/year keep their order.
+  const wrapDate = (d: string): string =>
+    isRtl ? `<span dir="ltr">${d}</span>` : d;
 
   // Header contacts
   const contactParts = [
@@ -208,7 +217,7 @@ function buildHtml(
           <span>
             <span class="job-company-name">${esc(job.company)}</span>${metaHtml}
           </span>
-          <span class="job-dates">${fmtDate(job.date_from, cvLanguage, locale)} – ${profileJob?.currently_working ? fmtDate(null, cvLanguage, locale) : fmtDate(job.date_to, cvLanguage, locale)}</span>
+          <span class="job-dates">${wrapDate(fmtDate(job.date_from, locale, presentLabel))} – ${profileJob?.currently_working || !job.date_to ? presentLabel : wrapDate(fmtDate(job.date_to, locale, presentLabel))}</span>
           <span class="job-title">${esc(job.title)}</span>
         </div>
         ${projHtml}
@@ -294,9 +303,11 @@ function buildHtml(
     ? `<h2>${labels.certifications}</h2>
   ${cv.certifications
     .map(c => {
-      const meta = [c.issuer, c.date ? fmtDate(c.date, cvLanguage, locale) : null]
+      const meta = [
+        c.issuer ? esc(c.issuer) : null,
+        c.date ? wrapDate(fmtDate(c.date, locale, presentLabel)) : null,
+      ]
         .filter(Boolean)
-        .map(s => esc(s!))
         .join(', ');
       return `<div class="cert-item">
         <span class="cert-name">${esc(c.name)}</span>
@@ -342,6 +353,7 @@ export async function generateCV(
   const resolvedModel = model ?? await getClaudeModel('cv_generation')
   const langEntry = await getLanguageEntry(cvLanguage);
   const langName = langEntry?.name ?? cvLanguage;
+  const langCode = langEntry?.code ?? cvLanguage;
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -361,7 +373,9 @@ export async function generateCV(
     skills: profile.skills,
   };
 
-  const prompt = `You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
+  const prompt = `CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in ${langName} (${langCode}). This is non-negotiable. Every sentence, every description, every achievement must be written in ${langName}. Do NOT use Polish, English, or any other language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to ${langName}.
+
+You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
 
 LANGUAGE: Generate ALL text content in ${langName} language. Translate the candidate's summary, work experience achievements, and any other descriptive text into ${langName}. Keep proper nouns (company names, technology names, product names) in their original form.
 
@@ -479,11 +493,13 @@ Rules:
 
   const locale = langEntry?.locale ?? 'en-US';
   const labels = langEntry?.cv_labels ?? SECTION_LABELS['en'];
+  const presentLabel = langEntry?.present_label ?? 'present';
+  const isRtl = langEntry?.rtl ?? false;
+  const textDirection = isRtl ? 'rtl' : 'ltr';
 
-  let html = buildHtml(cv, profile, cvLanguage, locale, labels).replace(
-    '{{CV_TITLE}}',
-    filename.replace('.pdf', ''),
-  );
+  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl)
+    .replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
+    .replace('{{TEXT_DIRECTION}}', textDirection);
 
   // Agent info + GDPR footer
   const isPl =
