@@ -174,9 +174,25 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       profile_editing_snapshot: true,
       profile_relevant_change_counter: true,
       profile_relevant_change_counter_max: true,
+      sync_started_at: true,
     },
   })
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
+
+  // Prevent concurrent syncs: if a sync started less than 30 minutes ago, mark a
+  // pending re-match instead of starting a parallel destructive sync. The running
+  // sync picks up pending_rematch on completion and queues a fresh re-sync.
+  const syncInProgress = user.sync_started_at &&
+    (new Date().getTime() - new Date(user.sync_started_at).getTime()) < 30 * 60 * 1000
+
+  if (syncInProgress) {
+    console.log(`[trigger-sync] userId=${userId} sync already in progress, marking pending_rematch`)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pending_rematch: true },
+    })
+    return res.json({ success: true, pending: true })
+  }
 
   const matchingRelevantChange = forceRelevantChange || compareMatchingFields(user.profile_editing_snapshot, user.profile)
   console.log(`[trigger-sync] userId=${userId} matchingRelevantChange=${matchingRelevantChange} forceRelevantChange=${forceRelevantChange} counter=${user.profile_relevant_change_counter} counter_max=${user.profile_relevant_change_counter_max} snapshotNull=${user.profile_editing_snapshot == null}`)

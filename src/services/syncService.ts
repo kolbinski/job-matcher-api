@@ -351,6 +351,20 @@ async function _syncUserById(userId: string): Promise<void> {
   });
 
   await buildAndSaveFreePlanSnapshot(userId, salaryPrefs, exchangeRates, user.profile);
+
+  // If a re-match was requested while this sync was running, clear the flag and
+  // null out profile_synced_at so the cron picks the user up for a fresh re-sync.
+  const afterSync = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { pending_rematch: true },
+  });
+  if (afterSync?.pending_rematch === true) {
+    console.log('[sync] pending_rematch detected, queuing re-sync');
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pending_rematch: false, profile_synced_at: null },
+    });
+  }
 }
 
 const snapshotOfferSelect = {

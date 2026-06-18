@@ -249,12 +249,20 @@ export async function runMatchForUser(
       select: { id: true },
     });
     if (newPreFilter.length > 0) {
-      await prisma.userOfferStatus.createMany({
-        data: newPreFilter.map(r => ({
-          user_offer_id: r.id,
-          status: 'pre_filter_rejected',
-        })),
-      });
+      try {
+        await prisma.userOfferStatus.createMany({
+          data: newPreFilter.map(r => ({
+            user_offer_id: r.id,
+            status: 'pre_filter_rejected',
+          })),
+        });
+      } catch (e: unknown) {
+        if ((e as { code?: string }).code === 'P2003') {
+          console.log('[match] UserOfferStatus: user_offers deleted during sync, stopping gracefully');
+          return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
+        }
+        throw e;
+      }
     }
   }
 
