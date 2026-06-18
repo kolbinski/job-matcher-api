@@ -87,7 +87,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       select: { cv_counter_max: true, cl_counter_max: true, scan_page_counter_max: true, profile_relevant_change_counter_max: true },
     }),
   ])
-  const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number } | undefined
+  const freeLimits = freePlan?.limits as { max_cv?: number; max_cl?: number; max_scan_page?: number; profile_relevant_change_max?: number; max_review_by_ai?: number } | undefined
   const defaultTimezone = timezone ?? 'America/New_York'
   const defaultCurrency = getDefaultCurrency(defaultTimezone)
 
@@ -101,7 +101,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       cl_counter_max: freeLimits?.max_cl ?? 0,
       scan_page_counter_max: freeLimits?.max_scan_page ?? 0,
       profile_relevant_change_counter_max: freeLimits?.profile_relevant_change_max ?? 0,
-      review_by_ai_counter_max: (freeLimits as Record<string, unknown> | undefined)?.['max_review_by_ai'] as number ?? 0,
+      review_by_ai_counter_max: freeLimits?.max_review_by_ai ?? 0,
       timezone: defaultTimezone,
       preferred_currency: defaultCurrency,
     },
