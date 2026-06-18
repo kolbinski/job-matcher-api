@@ -27,6 +27,8 @@ interface LangEntry {
   best_regards?: string
   present_label?: string
   rtl?: boolean
+  native_label?: string
+  language_names?: Record<string, string>
   cv_labels?: CvLabels
 }
 
@@ -152,6 +154,8 @@ function buildHtml(
   presentLabel: string,
   isRtl: boolean,
   translateCategory: (name: string) => string,
+  nativeLabel: string,
+  translateLanguageName: (name: string) => string,
 ): string {
 
   const {
@@ -293,11 +297,15 @@ function buildHtml(
     })
     .join('\n');
 
-  // Languages
+  // Languages — translate the language name and replace the "native" level with its
+  // localized label; keep CEFR levels (C1, B2, …) as-is.
   const langsText = (basic_info.languages ?? [])
-    .map(l =>
-      esc(`${l.name.charAt(0).toUpperCase() + l.name.slice(1)} (${l.level})`),
-    )
+    .map(l => {
+      const translated = translateLanguageName(l.name);
+      const name = translated.charAt(0).toUpperCase() + translated.slice(1);
+      const level = l.level.toLowerCase() === 'native' ? nativeLabel : l.level;
+      return esc(`${name} (${level})`);
+    })
     .join(', ');
 
   // Certifications
@@ -509,6 +517,7 @@ Rules:
   const locale = langEntry?.locale ?? 'en-US';
   const labels = langEntry?.cv_labels ?? SECTION_LABELS['en'];
   const presentLabel = langEntry?.present_label ?? 'present';
+  const nativeLabel = langEntry?.native_label ?? 'native';
   const isRtl = langEntry?.rtl ?? false;
   const textDirection = isRtl ? 'rtl' : 'ltr';
 
@@ -520,7 +529,11 @@ Rules:
     return t?.[cvLanguage] ?? t?.['en'] ?? name;
   };
 
-  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory)
+  // Translate language names (e.g. "English") into the CV language.
+  const languageNames = langEntry?.language_names ?? {};
+  const translateLanguageName = (name: string): string => languageNames[name] ?? name;
+
+  let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory, nativeLabel, translateLanguageName)
     .replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
     .replace('{{TEXT_DIRECTION}}', textDirection);
 
