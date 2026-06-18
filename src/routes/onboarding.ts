@@ -120,18 +120,11 @@ onboardingRouter.post(
 
     const prepareProfileModel = await getClaudeModel('prepare_profile');
 
-    console.log(
-      `[prepare-profile] PDF buffer size: ${req.file.buffer.length} bytes`,
-    );
-
     let cvText: string;
     try {
       const parser = new PDFParse({ data: new Uint8Array(req.file.buffer) });
       const parsed = await parser.getText();
       cvText = parsed.text.trim();
-      console.log(
-        `[prepare-profile] PDF text extracted successfully, length: ${cvText.length} chars`,
-      );
     } catch (err) {
       console.error('[prepare-profile] pdf-parse error:', err);
       throw new AppError(
