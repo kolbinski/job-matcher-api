@@ -68,6 +68,21 @@ function cetTimeString(): string {
   return new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' });
 }
 
+async function runSyncLocked(cleanupEnabled: boolean): Promise<void> {
+  if (syncInProgress) {
+    console.log('[scheduler] Previous sync still running — skipping');
+    return;
+  }
+  syncInProgress = true;
+  try {
+    await syncOffers(cleanupEnabled);
+  } catch (err) {
+    console.error('[scheduler] Offer sync failed:', err);
+  } finally {
+    syncInProgress = false;
+  }
+}
+
 async function runSync(): Promise<void> {
   if (Date.now() - startupTime < STARTUP_GRACE_MS) {
     console.log(
@@ -75,22 +90,11 @@ async function runSync(): Promise<void> {
     );
     return;
   }
-  if (syncInProgress) {
-    console.log('[scheduler] Previous sync still running — skipping this tick');
-    return;
-  }
-  syncInProgress = true;
-  try {
-    const withinSchedule = await isWithinSchedule();
-    console.log(
-      `[scheduler] Starting sync at ${cetTimeString()} (cleanup: ${withinSchedule})`,
-    );
-    await syncOffers(withinSchedule);
-  } catch (err) {
-    console.error('[scheduler] Offer sync failed:', err);
-  } finally {
-    syncInProgress = false;
-  }
+  const withinSchedule = await isWithinSchedule();
+  console.log(
+    `[scheduler] Starting sync at ${cetTimeString()} (cleanup: ${withinSchedule})`,
+  );
+  await runSyncLocked(withinSchedule);
 }
 
 async function runHourlyNotifications(): Promise<void> {
@@ -329,8 +333,12 @@ export async function startScheduler(): Promise<void> {
     });
     console.log('[startup] reset sync state for all ready users');
 
-    await prisma.settings.update({ where: { key: 'drop_offers_after_build' }, data: { value: 'false' } });
-    console.log('[startup] drop_offers_after_build reset to false');
+    const remainingOffers = await prisma.offer.count();
+    if (remainingOffers > 0) {
+      console.error(`[startup] drop_offers_after_build: FAILED — ${remainingOffers} offers still remain in DB. Stopping startup.`);
+      process.exit(1);
+    }
+    console.log('[startup] drop_offers_after_build: verified offers table is empty — proceeding');
   }
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...');
@@ -349,7 +357,7 @@ export async function startScheduler(): Promise<void> {
       console.log(
         '[scheduler] Offers table empty — running sync immediately (no grace period)',
       );
-      syncOffers(false).catch(err =>
+      runSyncLocked(false).catch(err =>
         console.error('[scheduler] Initial sync failed:', err),
       );
     } else {
@@ -357,7 +365,7 @@ export async function startScheduler(): Promise<void> {
         console.log(
           '[scheduler] Grace period over — running initial sync (fetch_offers_after_build=true)',
         );
-        syncOffers(false).catch(err =>
+        runSyncLocked(false).catch(err =>
           console.error('[scheduler] Initial sync failed:', err),
         );
       }, STARTUP_GRACE_MS + 1_000);
