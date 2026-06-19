@@ -146,7 +146,7 @@ async function syncJustJoin(
   while (true) {
     if (pageNum >= maxPages) {
       console.log(
-        `[offerScraper][justjoin] Reached max_pages limit (${maxPages}) — stopping`,
+        `[offerSync][justjoin] Reached max_pages limit (${maxPages}) — stopping`,
       );
       hitPageLimit = true;
       break;
@@ -158,7 +158,7 @@ async function syncJustJoin(
           Math.random() * (PAGE_DELAY_MAX_MS - PAGE_DELAY_MIN_MS + 1),
         ) + PAGE_DELAY_MIN_MS;
       console.log(
-        `[offerScraper][justjoin] Waiting ${Math.round(delay / 1000)}s before next page...`,
+        `[offerSync][justjoin] Waiting ${Math.round(delay / 1000)}s before next page...`,
       );
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -183,7 +183,7 @@ async function syncJustJoin(
     pageNum++;
 
     console.log(
-      `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
+      `[offerSync][justjoin] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
     if (inserted > 0) {
       await prisma.offerFetch.create({
@@ -221,14 +221,14 @@ async function syncNfj(
         Math.floor(Math.random() * (NFJ_DELAY_MAX_MS - NFJ_DELAY_MIN_MS + 1)) +
         NFJ_DELAY_MIN_MS;
       console.log(
-        `[offerScraper][nofluffjobs] Waiting ${Math.round(delay / 1000)}s before next page...`,
+        `[offerSync][nofluffjobs] Waiting ${Math.round(delay / 1000)}s before next page...`,
       );
       await new Promise(resolve => setTimeout(resolve, delay));
     }
 
     const pageStart = Date.now();
     const { offers, rawCount } = await fetchNfjPage(pageNum);
-    console.log(`[offerScraper][nofluffjobs] Page ${pageNum}: API returned ${rawCount} raw offers`);
+    console.log(`[offerSync][nofluffjobs] Page ${pageNum}: API returned ${rawCount} raw offers`);
 
     if (offers.length === 0) break;
 
@@ -246,7 +246,7 @@ async function syncNfj(
     totalUpdated += updated;
 
     console.log(
-      `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
+      `[offerSync][nofluffjobs] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
     if (inserted > 0) {
       await prisma.offerFetch.create({
@@ -257,7 +257,7 @@ async function syncNfj(
 
     if (pageNum === maxPages) {
       console.log(
-        `[offerScraper][nofluffjobs] Reached max_pages limit (${maxPages}) — stopping`,
+        `[offerSync][nofluffjobs] Reached max_pages limit (${maxPages}) — stopping`,
       );
       hitPageLimit = true;
     }
