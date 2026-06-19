@@ -378,7 +378,7 @@ type SnapshotUO = {
   claude_score: number | null
   claude_role_fit: string | null
   claude_matched_reasons: Prisma.JsonValue
-  claude_missing_skills: string[]
+  missing_skills: string[]
   claude_recommended: boolean | null
   rejection_reason: string | null
   matched_at: Date
@@ -436,7 +436,7 @@ function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Reco
     claude_score: uo.claude_score,
     claude_role_fit: uo.claude_role_fit,
     claude_matched_reasons: uo.claude_matched_reasons,
-    claude_missing_skills: uo.claude_missing_skills,
+    missing_skills: uo.missing_skills,
     claude_recommended: uo.claude_recommended,
     rejection_reason: uo.rejection_reason,
     matched_at: uo.matched_at,
@@ -485,7 +485,7 @@ export async function buildAndSaveFreePlanSnapshot(
     // salary delta. NOTE: ai_rejected rows written before this status rule used the
     // old logic; they only get reclassified on the next re-sync (no migration).
     prisma.userOffer.findMany({
-      where: { user_id: userId, status: 'ai_rejected', claude_missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] },
+      where: { user_id: userId, status: 'ai_rejected', missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] },
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),
@@ -495,7 +495,7 @@ export async function buildAndSaveFreePlanSnapshot(
   const dedupedApplyNow = dedupeUserOffers(allApplyNow)
 
   const filteredLevelUp = allLevelUpRaw
-    .filter(uo => learningGoals.length === 0 || uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
+    .filter(uo => learningGoals.length === 0 || uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
   const dedupedLevelUp = dedupeUserOffers(filteredLevelUp)
 
   const applyNowOffers = maxApplyNow != null ? dedupedApplyNow.slice(0, maxApplyNow) : dedupedApplyNow

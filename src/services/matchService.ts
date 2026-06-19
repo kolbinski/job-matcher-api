@@ -198,7 +198,7 @@ export async function runMatchForUser(
       pros: string[];
       cons: string[];
     },
-    claude_missing_skills: [] as string[],
+    missing_skills: [] as string[],
     matched_at: now,
     updated_at: now,
   }));
@@ -311,14 +311,24 @@ export async function runMatchForUser(
       }
 
       // Apply evaluations to this batch's pairs in-place
+      const userSkillsLower = new Set(
+        Object.values(profile.skills).flat().map(s => s.name.toLowerCase()),
+      );
       const cvLanguageByIndex = new Map<number, 'pl' | 'en'>();
       for (const ev of batchResults.evaluations) {
         if (ev.offer_index < 0 || ev.offer_index >= batch.length) continue;
         const p = batch[ev.offer_index];
+        const offerForEval = batch[ev.offer_index]!.original;
+        const allOfferSkills = [
+          ...offerForEval.required_skills,
+          ...offerForEval.nice_to_have_skills,
+        ];
         p.offer.score = ev.score;
         p.offer.rank = ev.rank;
         p.offer.matched_reasons = ev.matched_reasons;
-        p.offer.missing_skills = ev.missing_skills;
+        p.offer.missing_skills = allOfferSkills.filter(
+          s => !userSkillsLower.has(s.toLowerCase()),
+        );
         p.offer.salary_comparison = ev.salary_comparison;
         p.offer.role_fit = ev.role_fit;
         p.offer.recommended = ev.recommended;
@@ -352,7 +362,7 @@ export async function runMatchForUser(
             claude_score: p.offer.score,
             claude_role_fit: p.offer.role_fit ?? null,
             claude_matched_reasons: p.offer.matched_reasons,
-            claude_missing_skills: p.offer.missing_skills,
+            missing_skills: p.offer.missing_skills,
             claude_recommended: p.offer.recommended,
             cv_language: cvLanguageByIndex.get(idx) ?? 'en',
             matched_at: now,
@@ -611,7 +621,7 @@ export async function buildStretchOffers(
 
   const filtered = rows
     .filter(row => {
-      const missing = row.claude_missing_skills.map(s => s.toLowerCase());
+      const missing = row.missing_skills.map(s => s.toLowerCase());
       if (missing.length === 0) return false;
       const overlapCount = learningGoals.filter(goal =>
         missing.includes(goal),
@@ -642,7 +652,7 @@ export async function buildStretchOffers(
         salary: extractSalary(offer),
         salaries: extractAllSalaries(offer),
         role_fit: row.claude_role_fit,
-        missing_skills: row.claude_missing_skills,
+        missing_skills: row.missing_skills,
         url: offer.url,
         city: offer.city ?? null,
         remote: offer.workplace_type === 'remote',

@@ -92,7 +92,7 @@ describe('stretch_offers — DB integration', () => {
           user_id: userId,
           offer_id: pythonOffer.id,
           status: 'ai_rejected',
-          claude_missing_skills: ['python', 'django'],  // overlaps with learning_skills_goals
+          missing_skills: ['python', 'django'],  // overlaps with learning_skills_goals
           claude_role_fit: 'Missing Python experience',
           claude_matched_reasons: [],
           matched_at: new Date(),
@@ -102,7 +102,7 @@ describe('stretch_offers — DB integration', () => {
           user_id: userId,
           offer_id: javaOffer.id,
           status: 'ai_rejected',
-          claude_missing_skills: ['java', 'spring'],    // no overlap with learning_skills_goals
+          missing_skills: ['java', 'spring'],    // no overlap with learning_skills_goals
           claude_role_fit: 'Missing Java experience',
           claude_matched_reasons: [],
           matched_at: new Date(),
@@ -121,7 +121,7 @@ describe('stretch_offers — DB integration', () => {
     await prisma.offer.deleteMany({ where: { slug: { in: [pythonOfferSlug, javaOfferSlug] } } })
   })
 
-  it('includes ai_rejected offer whose claude_missing_skills overlap with learning_skills_goals', async () => {
+  it('includes ai_rejected offer whose missing_skills overlap with learning_skills_goals', async () => {
     const res = await request(app)
       .post('/v1/match')
       .set('X-API-Key', apiKey)

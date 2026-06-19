@@ -31,7 +31,7 @@ interface PipelineOffer {
   claude_score: number | null
   claude_role_fit: string | null
   claude_matched_reasons: { pros: string[]; cons: string[] }
-  claude_missing_skills: string[]
+  missing_skills: string[]
   claude_recommended: boolean | null
   matched_at: string
 }
@@ -70,7 +70,7 @@ function toPipelineOffer(uo: {
   claude_score: number | null
   claude_role_fit: string | null
   claude_matched_reasons: Prisma.JsonValue
-  claude_missing_skills: string[]
+  missing_skills: string[]
   claude_recommended: boolean | null
   matched_at: Date
   offer: Offer
@@ -86,7 +86,7 @@ function toPipelineOffer(uo: {
     claude_score: uo.claude_score,
     claude_role_fit: uo.claude_role_fit,
     claude_matched_reasons: uo.claude_matched_reasons as { pros: string[]; cons: string[] },
-    claude_missing_skills: uo.claude_missing_skills,
+    missing_skills: uo.missing_skills,
     claude_recommended: uo.claude_recommended,
     matched_at: uo.matched_at.toISOString(),
   }

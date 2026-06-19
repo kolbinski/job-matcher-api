@@ -144,7 +144,7 @@ function mapUserOfferResponse(
     claude_score: number | null;
     claude_role_fit: string | null;
     claude_matched_reasons: unknown;
-    claude_missing_skills: string[];
+    missing_skills: string[];
     claude_recommended: boolean | null;
     cv_status: string | null;
     cv_url: string | null;
@@ -164,7 +164,7 @@ function mapUserOfferResponse(
     claude_score: userOffer.claude_score,
     claude_role_fit: userOffer.claude_role_fit,
     claude_matched_reasons: userOffer.claude_matched_reasons,
-    claude_missing_skills: userOffer.claude_missing_skills,
+    missing_skills: userOffer.missing_skills,
     claude_recommended: userOffer.claude_recommended,
     required_skills: offer.required_skills,
     nice_to_have_skills: offer.nice_to_have_skills,
@@ -399,6 +399,16 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
 
   const evaluation = matchResult.evaluations[0]!;
 
+  // Compute missing skills locally from offer vs profile
+  const userSkillsLower = new Set(
+    Object.values(profileParsed.data.skills).flat().map(s => s.name.toLowerCase()),
+  );
+  const allOfferSkills = [
+    ...offerForMatching.required_skills,
+    ...offerForMatching.nice_to_have_skills,
+  ];
+  const missingSkills = allOfferSkills.filter(s => !userSkillsLower.has(s.toLowerCase()));
+
   // Upsert user_offer
   const userOffer = await prisma.userOffer.upsert({
     where: {
@@ -411,7 +421,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       claude_score: evaluation.score,
       claude_role_fit: evaluation.role_fit,
       claude_matched_reasons: evaluation.matched_reasons,
-      claude_missing_skills: evaluation.missing_skills,
+      missing_skills: missingSkills,
       claude_recommended: evaluation.recommended,
     },
     update: {
@@ -419,7 +429,7 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       claude_score: evaluation.score,
       claude_role_fit: evaluation.role_fit,
       claude_matched_reasons: evaluation.matched_reasons,
-      claude_missing_skills: evaluation.missing_skills,
+      missing_skills: missingSkills,
       claude_recommended: evaluation.recommended,
     },
   });

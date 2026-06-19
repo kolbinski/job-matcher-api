@@ -163,7 +163,7 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       claude_score: uo.claude_score,
       claude_role_fit: uo.claude_role_fit,
       claude_matched_reasons: uo.claude_matched_reasons,
-      claude_missing_skills: uo.claude_missing_skills,
+      missing_skills: uo.missing_skills,
       claude_recommended: uo.claude_recommended,
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
@@ -435,7 +435,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         user_id: clientId,
         status: bucketStatus,
         ...(bucketStatus === 'ai_rejected'
-          ? { claude_missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }
+          ? { missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }
           : {}),
         // minScore applies to apply_now (pending_apply) only — level_up is not score-gated.
         ...(bucketStatus === 'pending_apply' && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
@@ -468,7 +468,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       // learning-goals personalization stays here.
       if (bucketStatus === 'ai_rejected' && learningGoals.length > 0) {
         result = result.filter(uo =>
-          uo.claude_missing_skills.some(sk =>
+          uo.missing_skills.some(sk =>
             learningGoals.includes(sk.toLowerCase()),
           ),
         );
@@ -490,7 +490,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           claude_score: uo.claude_score,
           claude_role_fit: uo.claude_role_fit,
           claude_matched_reasons: uo.claude_matched_reasons,
-          claude_missing_skills: uo.claude_missing_skills,
+          missing_skills: uo.missing_skills,
           claude_recommended: uo.claude_recommended,
           rejection_reason: uo.rejection_reason,
           matched_at: uo.matched_at,
@@ -617,7 +617,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     const rows = await prisma.userOffer.findMany({
       where,
       select: {
-        claude_missing_skills: true,
+        missing_skills: true,
         offer: { select: { employment_types: true } },
       },
     });
@@ -626,7 +626,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       const { learningGoals } = await loadClientProfile(clientId);
       if (learningGoals.length > 0) {
         filtered = filtered.filter(uo =>
-          uo.claude_missing_skills.some(sk =>
+          uo.missing_skills.some(sk =>
             learningGoals.includes(sk.toLowerCase()),
           ),
         );
@@ -702,7 +702,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
     if (has_learning_skills_goals === 'true' && learningGoals.length > 0) {
       result = result.filter(uo =>
-        uo.claude_missing_skills.some(sk =>
+        uo.missing_skills.some(sk =>
           learningGoals.includes(sk.toLowerCase()),
         ),
       );
@@ -725,7 +725,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       claude_score: uo.claude_score,
       claude_role_fit: uo.claude_role_fit,
       claude_matched_reasons: uo.claude_matched_reasons,
-      claude_missing_skills: uo.claude_missing_skills,
+      missing_skills: uo.missing_skills,
       claude_recommended: uo.claude_recommended,
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
@@ -767,7 +767,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   ).length;
   // level_up = has missing skills (new rule), not claude_recommended === false.
   const level_up_count = finalMapped.filter(
-    o => o.claude_missing_skills.length > 0,
+    o => o.missing_skills.length > 0,
   ).length;
 
   let filtered = finalMapped;

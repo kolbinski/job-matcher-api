@@ -61,12 +61,6 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
               },
               required: ['pros', 'cons'],
             },
-            missing_skills: {
-              type: 'array',
-              items: { type: 'string' },
-              description:
-                "Skills from the job's required or nice-to-have list that the candidate likely lacks. Use only skill names verbatim from the offer's listed skills — do not invent or infer skills not explicitly listed.",
-            },
             salary_comparison: {
               type: 'string',
               description: 'One phrase comparing offered salary to the target',
@@ -91,7 +85,6 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             'score',
             'rank',
             'matched_reasons',
-            'missing_skills',
             'salary_comparison',
             'role_fit',
             'recommended',
@@ -109,7 +102,6 @@ export interface ClaudeEvaluation {
   score: number;
   rank: number;
   matched_reasons: { pros: string[]; cons: string[] };
-  missing_skills: string[];
   salary_comparison: string;
   role_fit: string;
   recommended: boolean;
@@ -230,18 +222,6 @@ async function _evaluateOffers(
           rawResponse,
         );
         return null;
-      }
-      // Constrain missing_skills to the offer's listed skills (case-insensitive) —
-      // Claude must not invent skills not present in the offer.
-      const offer = offers[validated.offer_index];
-      if (offer) {
-        const allOfferSkills = [
-          ...offer.required_skills,
-          ...offer.nice_to_have_skills,
-        ].map(s => s.toLowerCase());
-        validated.missing_skills = validated.missing_skills.filter(s =>
-          allOfferSkills.includes(s.toLowerCase()),
-        );
       }
       results.push(validated);
     }
@@ -383,12 +363,6 @@ function validateEvaluation(
         }
       : { pros: [], cons: [] };
 
-  const missing_skills = Array.isArray(obj['missing_skills'])
-    ? (obj['missing_skills'] as unknown[]).filter(
-        (s): s is string => typeof s === 'string',
-      )
-    : [];
-
   const salary_comparison =
     typeof obj['salary_comparison'] === 'string'
       ? obj['salary_comparison']
@@ -407,7 +381,6 @@ function validateEvaluation(
     score,
     rank,
     matched_reasons,
-    missing_skills,
     salary_comparison,
     role_fit,
     recommended,

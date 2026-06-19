@@ -158,7 +158,7 @@ model UserOffer {
   claude_score             Int?
   claude_role_fit          String?
   claude_matched_reasons   Json
-  claude_missing_skills    String[]
+  missing_skills           String[]
   claude_recommended       Boolean?
   matched_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
