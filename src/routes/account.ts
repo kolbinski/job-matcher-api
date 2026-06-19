@@ -254,6 +254,15 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
     console.log(`[delete-account] No Supabase auth user found for email=${targetEmail} — skipping`)
   }
 
+  // Idempotency guard: delete-account can be invoked twice for the same user (client
+  // retry on a slow request — findSupabaseUserId paginates listUsers). If the user row
+  // is already gone, skip all remaining steps and return 200.
+  const stillExists = await prisma.user.findUnique({ where: { id: targetUserId }, select: { id: true } })
+  if (!stillExists) {
+    console.log(`[delete-account] user ${targetUserId} already deleted — skipping remaining steps`)
+    return res.status(200).json({ message: 'Account deleted' })
+  }
+
   // Step 2: Staged deletion of high-volume rows in batches of 1000 (same pattern as
   // trigger-sync cleanup) so deletion doesn't blow up on users with many offers.
   // Prisma deleteMany has no LIMIT, so use raw SQL with a LIMIT subquery.
@@ -293,10 +302,15 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
     await prisma.user.delete({ where: { id: targetUserId } })
     console.log(`[delete-account] public.users row deleted — cascade complete`)
   } catch (e: unknown) {
-    const msg = typeof e === 'object' && e !== null && 'message' in e ? (e as { message: string }).message : String(e)
     const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code: string }).code : undefined
-    console.error('[delete-account] FAILED to delete public.users row:', msg, code)
-    throw e
+    if (code === 'P2025') {
+      // Already deleted by a concurrent/duplicate request — treat as success.
+      console.log(`[delete-account] public.users row already deleted — skipping`)
+    } else {
+      const msg = typeof e === 'object' && e !== null && 'message' in e ? (e as { message: string }).message : String(e)
+      console.error('[delete-account] FAILED to delete public.users row:', msg, code)
+      throw e
+    }
   }
 
   // Step 3: Delete CV and CL files from Supabase Storage (best-effort)
