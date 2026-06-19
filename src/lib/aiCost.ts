@@ -1,23 +1,18 @@
 import { prisma } from './prisma'
 
-interface Pricing {
-  haiku_input: number
-  haiku_output: number
-  sonnet_input: number
-  sonnet_output: number
+type ModelPricing = { input: number; output: number }
+type PricingTable = Record<string, ModelPricing>
+
+const FALLBACK: PricingTable = {
+  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
+  'claude-opus-4-8': { input: 5.0, output: 25.0 },
 }
 
-const FALLBACK: Pricing = {
-  haiku_input: 1.0,
-  haiku_output: 5.0,
-  sonnet_input: 3.0,
-  sonnet_output: 15.0,
-}
-
-async function loadPricing(): Promise<Pricing> {
+async function loadPricing(): Promise<PricingTable> {
   try {
     const setting = await prisma.settings.findUnique({ where: { key: 'anthropic_pricing' } })
-    if (setting) return { ...FALLBACK, ...(JSON.parse(setting.value) as Partial<Pricing>) }
+    if (setting) return { ...FALLBACK, ...(JSON.parse(setting.value) as PricingTable) }
   } catch { /* use fallback */ }
   return FALLBACK
 }
@@ -27,10 +22,10 @@ export async function calculateCost(
   inputTokens: number,
   outputTokens: number,
 ): Promise<number> {
-  const p = await loadPricing()
-  const isHaiku = model.includes('haiku')
-  const inputRate = isHaiku ? p.haiku_input : p.sonnet_input
-  const outputRate = isHaiku ? p.haiku_output : p.sonnet_output
+  const pricing = await loadPricing()
+  const p = pricing[model]
+  const inputRate = p?.input ?? 0
+  const outputRate = p?.output ?? 0
   const cost = (inputTokens / 1_000_000) * inputRate + (outputTokens / 1_000_000) * outputRate
   return Math.round(cost * 1_000_000) / 1_000_000
 }
