@@ -185,6 +185,11 @@ async function syncJustJoin(
     console.log(
       `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
+    if (inserted > 0) {
+      await prisma.offerFetch.create({
+        data: { source: 'justjoin', new_inserts_count: inserted, fetched_at: fetchedAt },
+      });
+    }
     await resetProfileSyncedAt(pageNum, inserted);
 
     if (nextCursor === null) break;
@@ -242,6 +247,11 @@ async function syncNfj(
     console.log(
       `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
+    if (inserted > 0) {
+      await prisma.offerFetch.create({
+        data: { source: 'nofluffjobs', new_inserts_count: inserted, fetched_at: fetchedAt },
+      });
+    }
     await resetProfileSyncedAt(pageNum, inserted);
 
     if (pageNum === maxPages) {
@@ -289,19 +299,6 @@ export async function syncOffers(cleanupEnabled = true): Promise<{
   const [jjResult, nfjResult] = await Promise.all([
     syncJustJoin(fetchedAt, maxPages),
     syncNfj(fetchedAt, nfjMaxPages),
-  ]);
-
-  await Promise.all([
-    jjResult.inserted > 0
-      ? prisma.offerFetch.create({
-          data: { source: 'justjoin', new_inserts_count: jjResult.inserted, fetched_at: fetchedAt },
-        })
-      : Promise.resolve(),
-    nfjResult.inserted > 0
-      ? prisma.offerFetch.create({
-          data: { source: 'nofluffjobs', new_inserts_count: nfjResult.inserted, fetched_at: fetchedAt },
-        })
-      : Promise.resolve(),
   ]);
 
   const totalFetched = jjResult.fetched + nfjResult.fetched;
