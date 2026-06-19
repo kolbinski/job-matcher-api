@@ -252,7 +252,9 @@ async function buildExpressions(): Promise<string[]> {
 export async function startScheduler(): Promise<void> {
   const dropRow = await prisma.settings.findUnique({ where: { key: 'drop_offers_after_build' } });
   if (dropRow?.value === 'true') {
-    console.log('[startup] drop_offers_after_build=true — clearing offers and related data');
+    console.log('[startup] drop_offers_after_build=true — waiting 5s for previous process to finish');
+    await new Promise(r => setTimeout(r, 5000));
+    console.log('[startup] drop_offers_after_build: starting cleanup after grace period');
 
     let statusDeleted = 0;
     let batch: { count: bigint };
@@ -296,13 +298,21 @@ export async function startScheduler(): Promise<void> {
     });
     console.log('[startup] reset sync state for all ready users');
 
-    let remaining = await prisma.offer.count();
-    while (remaining > 0) {
-      console.log(`[startup] drop_offers_after_build: ${remaining} offers still remain — deleting again...`);
+    let attempts = 0;
+    while (attempts < 3) {
       await prisma.offer.deleteMany();
-      remaining = await prisma.offer.count();
+      const remaining = await prisma.offer.count();
+      if (remaining === 0) break;
+      attempts++;
+      console.log(`[startup] drop_offers_after_build: ${remaining} remain, attempt ${attempts}/3`);
+      await new Promise(r => setTimeout(r, 2000));
     }
-    console.log('[startup] drop_offers_after_build: verified offers table is empty — proceeding');
+    const finalRemaining = await prisma.offer.count();
+    if (finalRemaining > 0) {
+      console.warn(`[startup] drop_offers_after_build: ${finalRemaining} offers still remain after 3 attempts — continuing anyway`);
+    } else {
+      console.log('[startup] drop_offers_after_build: verified offers table is empty — proceeding');
+    }
   }
 
   const expressions = await buildExpressions();
