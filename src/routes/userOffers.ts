@@ -383,6 +383,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         };
         const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
         const levelUpOffers = filterSnapshotOffers(snap.level_up?.offers ?? []);
+        console.log('[snapshot] level_up raw offers count:', snap.level_up?.offers?.length)
+        console.log('[snapshot] level_up after filter:', levelUpOffers.length)
         // Free users see snapshot-limited offers, but counts (and the blue dot) must
         // reflect real DB totals regardless of the snapshot.
         // level_up offers are status 'ai_rejected' (with a salaried employment type) —
