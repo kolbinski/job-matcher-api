@@ -20,7 +20,7 @@ const mockFetchPage = vi.mocked(fetchPage)
 const mockFetchNfjPage = vi.mocked(fetchNfjPage)
 
 // Default: NFJ returns nothing — individual tests opt in by overriding this
-mockFetchNfjPage.mockResolvedValue({ offers: [] })
+mockFetchNfjPage.mockResolvedValue({ offers: [], rawCount: 0 })
 
 const TEST_SLUG_PREFIX = 'test-offersync-'
 

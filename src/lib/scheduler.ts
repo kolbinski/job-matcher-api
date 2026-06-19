@@ -250,43 +250,6 @@ async function buildExpressions(): Promise<string[]> {
 }
 
 export async function startScheduler(): Promise<void> {
-  const expressions = await buildExpressions();
-  console.log(
-    `[scheduler] Built expressions from settings: ${expressions.join(' | ')}`,
-  );
-
-  let scheduled = 0;
-  for (const expr of expressions) {
-    if (!cron.validate(expr)) {
-      console.error(
-        `[scheduler] Invalid cron expression: "${expr}" — skipping`,
-      );
-      continue;
-    }
-    cron.schedule(expr, runSync);
-    scheduled++;
-  }
-
-  if (scheduled === 0) {
-    throw new Error(
-      '[scheduler] No valid cron expressions — scheduler not started',
-    );
-  }
-
-  console.log(`[scheduler] Scheduled ${scheduled} expression(s)`);
-
-  cron.schedule('0 * * * *', runHourlyNotifications);
-  console.log('[scheduler] Hourly notification job registered (0 * * * *)');
-
-  cron.schedule('0 * * * *', runHourlySyncReports);
-  console.log('[scheduler] Hourly sync report job registered (0 * * * *)');
-
-  cron.schedule('*/15 * * * *', runProfileSyncQueue);
-  console.log('[scheduler] Profile sync queue registered (*/15 * * * *)');
-
-  cron.schedule('0 * * * *', runCategorizeSkills);
-  console.log('[scheduler] Skill categorizer registered (0 * * * *)');
-
   const dropRow = await prisma.settings.findUnique({ where: { key: 'drop_offers_after_build' } });
   if (dropRow?.value === 'true') {
     console.log('[startup] drop_offers_after_build=true — clearing offers and related data');
@@ -333,13 +296,51 @@ export async function startScheduler(): Promise<void> {
     });
     console.log('[startup] reset sync state for all ready users');
 
-    const remainingOffers = await prisma.offer.count();
-    if (remainingOffers > 0) {
-      console.error(`[startup] drop_offers_after_build: FAILED — ${remainingOffers} offers still remain in DB. Stopping startup.`);
-      process.exit(1);
+    let remaining = await prisma.offer.count();
+    while (remaining > 0) {
+      console.log(`[startup] drop_offers_after_build: ${remaining} offers still remain — deleting again...`);
+      await prisma.offer.deleteMany();
+      remaining = await prisma.offer.count();
     }
     console.log('[startup] drop_offers_after_build: verified offers table is empty — proceeding');
   }
+
+  const expressions = await buildExpressions();
+  console.log(
+    `[scheduler] Built expressions from settings: ${expressions.join(' | ')}`,
+  );
+
+  let scheduled = 0;
+  for (const expr of expressions) {
+    if (!cron.validate(expr)) {
+      console.error(
+        `[scheduler] Invalid cron expression: "${expr}" — skipping`,
+      );
+      continue;
+    }
+    cron.schedule(expr, runSync);
+    scheduled++;
+  }
+
+  if (scheduled === 0) {
+    throw new Error(
+      '[scheduler] No valid cron expressions — scheduler not started',
+    );
+  }
+
+  console.log(`[scheduler] Scheduled ${scheduled} expression(s)`);
+
+  cron.schedule('0 * * * *', runHourlyNotifications);
+  console.log('[scheduler] Hourly notification job registered (0 * * * *)');
+
+  cron.schedule('0 * * * *', runHourlySyncReports);
+  console.log('[scheduler] Hourly sync report job registered (0 * * * *)');
+
+  cron.schedule('*/15 * * * *', runProfileSyncQueue);
+  console.log('[scheduler] Profile sync queue registered (*/15 * * * *)');
+
+  cron.schedule('0 * * * *', runCategorizeSkills);
+  console.log('[scheduler] Skill categorizer registered (0 * * * *)');
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...');
   const fetchRow = await prisma.settings.findUnique({

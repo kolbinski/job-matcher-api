@@ -227,7 +227,8 @@ async function syncNfj(
     }
 
     const pageStart = Date.now();
-    const { offers } = await fetchNfjPage(pageNum);
+    const { offers, rawCount } = await fetchNfjPage(pageNum);
+    console.log(`[offerScraper][nofluffjobs] Page ${pageNum}: API returned ${rawCount} raw offers`);
 
     if (offers.length === 0) break;
 

@@ -107,7 +107,7 @@ export function normalizeNfjOffer(raw: NfjPosting): NormalizedOffer | null {
   }
 }
 
-export async function fetchNfjPage(pageNum: number): Promise<{ offers: NormalizedOffer[] }> {
+export async function fetchNfjPage(pageNum: number): Promise<{ offers: NormalizedOffer[]; rawCount: number }> {
   const params = new URLSearchParams({
     pageTo: String(pageNum),
     pageSize: String(NFJ_PAGE_SIZE),
@@ -127,14 +127,15 @@ export async function fetchNfjPage(pageNum: number): Promise<{ offers: Normalize
   const body = (await res.json()) as NfjApiResponse
 
   if (!Array.isArray(body.postings) || body.postings.length === 0) {
-    return { offers: [] }
+    return { offers: [], rawCount: 0 }
   }
 
+  const rawCount = body.postings.length
   const offers: NormalizedOffer[] = []
   for (const posting of body.postings) {
     const offer = normalizeNfjOffer(posting)
     if (offer) offers.push(offer)
   }
 
-  return { offers }
+  return { offers, rawCount }
 }
