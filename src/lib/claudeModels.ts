@@ -7,6 +7,7 @@ export type ClaudeModelKey =
   | 'cl_generation'
   | 'matching'
   | 'scan_page_model'
+  | 'skill_categorization'
 
 export async function getClaudeModel(key: ClaudeModelKey): Promise<string> {
   const setting = await prisma.settings.findUnique({ where: { key: 'claude_models' } })

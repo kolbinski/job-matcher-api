@@ -1,12 +1,14 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
 import { syncOffers } from '../jobs/offerSync';
+import { categorizeSkills } from '../jobs/categorizeSkills';
 import { sendPushToClient, syncUserById } from '../services/syncService';
 
 const STARTUP_GRACE_MS = 60 * 1000;
 const startupTime = Date.now();
 
 let syncInProgress = false;
+let categorizeInProgress = false;
 const syncingUserIds = new Set<string>();
 
 // Reads work_start_utc, work_end_utc, work_days from settings on every call
@@ -187,6 +189,21 @@ async function runHourlySyncReports(): Promise<void> {
   }
 }
 
+async function runCategorizeSkills(): Promise<void> {
+  if (categorizeInProgress) {
+    console.log('[skill-categorizer] Previous run still in progress — skipping this tick');
+    return;
+  }
+  categorizeInProgress = true;
+  try {
+    await categorizeSkills();
+  } catch (err) {
+    console.error('[skill-categorizer] Run failed:', err);
+  } finally {
+    categorizeInProgress = false;
+  }
+}
+
 async function runProfileSyncQueue(): Promise<void> {
   try {
     const users = await prisma.user.findMany({
@@ -261,6 +278,9 @@ export async function startScheduler(): Promise<void> {
 
   cron.schedule('*/15 * * * *', runProfileSyncQueue);
   console.log('[scheduler] Profile sync queue registered (*/15 * * * *)');
+
+  cron.schedule('*/15 * * * *', runCategorizeSkills);
+  console.log('[scheduler] Skill categorizer registered (*/15 * * * *)');
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...');
   const fetchRow = await prisma.settings.findUnique({

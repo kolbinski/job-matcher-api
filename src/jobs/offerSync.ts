@@ -61,6 +61,22 @@ async function upsertPage(
         create: data,
         update: data,
       });
+
+      // Upsert each offer skill into the skills table so newly-seen skills get
+      // picked up by the categorizeSkills cron. update:{} preserves existing data
+      // (name + category_id + was_categorized) on skills we've already classified.
+      const offerSkills = [
+        ...new Set([...offer.required_skills, ...offer.nice_to_have_skills]),
+      ].filter(Boolean);
+      await Promise.all(
+        offerSkills.map(skill =>
+          prisma.skill.upsert({
+            where: { name: skill },
+            create: { name: skill, was_categorized: false },
+            update: {},
+          }),
+        ),
+      );
     }
   }
 

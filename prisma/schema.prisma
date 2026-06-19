@@ -21,11 +21,12 @@ model SkillCategory {
 }
 
 model Skill {
-  id          String         @id @default(uuid())
-  name        String         @unique
-  created_at  DateTime       @default(now())
-  category_id String?        @db.Uuid
-  category    SkillCategory? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id              String         @id @default(uuid())
+  name            String         @unique
+  created_at      DateTime       @default(now())
+  category_id     String?        @db.Uuid
+  was_categorized Boolean        @default(false)
+  category        SkillCategory? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("skills")
 }
