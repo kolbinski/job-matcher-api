@@ -27,11 +27,15 @@ export function dedupKey(offer: DedupableOffer): string {
       if ((a.from ?? 0) !== (b.from ?? 0)) return (a.from ?? 0) - (b.from ?? 0)
       return (a.to ?? 0) - (b.to ?? 0)
     })
-  return JSON.stringify([
+  const key = JSON.stringify([
     offer.source, offer.title, offer.company_name,
     offer.experience_level, offer.workplace_type, offer.working_time,
     req, nth, ets, offer.city,
   ])
+  if (offer.title === 'Senior Frontend Developer' && offer.company_name?.toLowerCase() === 'scalo') {
+    console.log('[dedup] key for', offer.city, JSON.stringify(offer.employment_types), '→', key);
+  }
+  return key
 }
 
 export function deduplicateMatchResult(result: MatchResponse): MatchResponse {
