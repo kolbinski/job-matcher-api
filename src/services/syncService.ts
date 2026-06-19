@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
-import { deduplicateMatchResult } from '../utils/deduplicateOffers';
+import { deduplicateMatchResult, dedupeUserOffers } from '../utils/deduplicateOffers';
 // import { sendMatchReport } from './emailService';
 
 // const isTestUser = (email: string): boolean =>
@@ -370,6 +370,7 @@ async function _syncUserById(userId: string): Promise<void> {
 const snapshotOfferSelect = {
   title: true, company_name: true, url: true, employment_types: true,
   source: true, city: true, workplace_type: true, required_skills: true, nice_to_have_skills: true,
+  experience_level: true, working_time: true,
 } as const
 
 type SnapshotUO = {
@@ -490,22 +491,26 @@ export async function buildAndSaveFreePlanSnapshot(
     }),
   ])
 
+  // Dedup by offer fingerprint before counting/slicing, matching GET /v1/user-offers.
+  const dedupedApplyNow = dedupeUserOffers(allApplyNow)
+
   const filteredLevelUp = allLevelUpRaw
     .filter(uo => learningGoals.length === 0 || uo.claude_missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
+  const dedupedLevelUp = dedupeUserOffers(filteredLevelUp)
 
-  const applyNowOffers = maxApplyNow != null ? allApplyNow.slice(0, maxApplyNow) : allApplyNow
-  const levelUpOffers = maxLevelUp != null ? filteredLevelUp.slice(0, maxLevelUp) : filteredLevelUp
+  const applyNowOffers = maxApplyNow != null ? dedupedApplyNow.slice(0, maxApplyNow) : dedupedApplyNow
+  const levelUpOffers = maxLevelUp != null ? dedupedLevelUp.slice(0, maxLevelUp) : dedupedLevelUp
 
   const snapshot = {
     created_at: new Date().toISOString(),
-    count: allApplyNow.length + filteredLevelUp.length,
+    count: dedupedApplyNow.length + dedupedLevelUp.length,
     apply_now: {
-      count: allApplyNow.length,
+      count: dedupedApplyNow.length,
       status: 'pending_apply',
       offers: applyNowOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
     },
     level_up: {
-      count: filteredLevelUp.length,
+      count: dedupedLevelUp.length,
       status: 'ai_rejected',
       offers: levelUpOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
     },

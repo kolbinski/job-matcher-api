@@ -38,6 +38,33 @@ export function dedupKey(offer: DedupableOffer): string {
   return key
 }
 
+export interface DedupableUserOffer {
+  offer: DedupableOffer
+  claude_score: number | null
+  matched_at: Date
+}
+
+// Collapse user_offer rows that share an offer fingerprint, keeping the row with the
+// highest claude_score (tie-break: most recent matched_at). Shared by GET /v1/user-offers
+// (both paths) and buildAndSaveFreePlanSnapshot.
+export function dedupeUserOffers<T extends DedupableUserOffer>(rows: T[]): T[] {
+  const seen = new Map<string, T>()
+  for (const uo of rows) {
+    const key = dedupKey(uo.offer)
+    const prev = seen.get(key)
+    if (!prev) {
+      seen.set(key, uo)
+    } else {
+      const prevScore = prev.claude_score ?? -1
+      const newScore = uo.claude_score ?? -1
+      if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+        seen.set(key, uo)
+      }
+    }
+  }
+  return [...seen.values()]
+}
+
 export function deduplicateMatchResult(result: MatchResponse): MatchResponse {
   const seenMatched = new Map<string, MatchedOffer>()
   for (const o of result.matched) {

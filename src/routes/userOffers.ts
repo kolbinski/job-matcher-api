@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { validateJwt } from '../middleware/validateJwt';
-import { dedupKey } from '../utils/deduplicateOffers';
+import { dedupeUserOffers } from '../utils/deduplicateOffers';
 import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 
 export const userOffersRouter = Router();
@@ -456,26 +456,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           : [{ claude_score: 'desc' }],
       });
 
-      // Dedup
-      const seen = new Map<string, (typeof rows)[number]>();
-      for (const uo of rows) {
-        const key = dedupKey(uo.offer);
-        const prev = seen.get(key);
-        if (!prev) {
-          seen.set(key, uo);
-        } else {
-          const prevScore = prev.claude_score ?? -1;
-          const newScore = uo.claude_score ?? -1;
-          if (
-            newScore > prevScore ||
-            (newScore === prevScore && uo.matched_at > prev.matched_at)
-          ) {
-            seen.set(key, uo);
-          }
-        }
-      }
-
-      let result = [...seen.values()];
+      // Dedup: one row per offer fingerprint (highest claude_score, tie-break matched_at)
+      let result = dedupeUserOffers(rows);
 
       // ai_rejected salary + missing-skills filters now live in the query above;
       // learning-goals personalization stays here.
@@ -707,26 +689,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
   const start = (page - 1) * pageSize;
 
-  // Dedup: one row per unique offer fingerprint; prefer highest claude_score, then most recent matched_at
-  const seen = new Map<string, (typeof userOffers)[number]>();
-  for (const uo of userOffers) {
-    const key = dedupKey(uo.offer);
-    const prev = seen.get(key);
-    if (!prev) {
-      seen.set(key, uo);
-    } else {
-      const prevScore = prev.claude_score ?? -1;
-      const newScore = uo.claude_score ?? -1;
-      if (
-        newScore > prevScore ||
-        (newScore === prevScore && uo.matched_at > prev.matched_at)
-      ) {
-        seen.set(key, uo);
-      }
-    }
-  }
-
-  let result = [...seen.values()];
+  // Dedup: one row per offer fingerprint (highest claude_score, tie-break matched_at)
+  let result = dedupeUserOffers(userOffers);
 
   if (status === 'ai_rejected') {
     result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
