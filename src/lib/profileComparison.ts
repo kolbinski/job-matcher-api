@@ -1,4 +1,4 @@
-function getField(obj: unknown, path: string[]): unknown {
+export function getField(obj: unknown, path: string[]): unknown {
   let current: unknown = obj
   for (const key of path) {
     if (current == null || typeof current !== 'object') return undefined
@@ -7,7 +7,7 @@ function getField(obj: unknown, path: string[]): unknown {
   return current
 }
 
-function stableStringify(val: unknown): string {
+export function stableStringify(val: unknown): string {
   if (Array.isArray(val)) {
     return '[' + val.map(stableStringify).sort().join(',') + ']'
   }
@@ -24,6 +24,7 @@ function stableStringify(val: unknown): string {
 }
 
 const MATCHING_FIELDS: string[][] = [
+  // NOTE: keep NON_SALARY_MATCHING_FIELDS in sync when adding entries here
   ['skills'],
   ['preferences', 'salary'],
   ['preferences', 'work_model'],
@@ -37,6 +38,10 @@ const MATCHING_FIELDS: string[][] = [
   ['basic_info', 'location', 'country_code'],
   ['basic_info', 'location', 'max_distance_km'],
 ]
+
+const NON_SALARY_MATCHING_FIELDS = MATCHING_FIELDS.filter(
+  path => !(path.length === 2 && path[0] === 'preferences' && path[1] === 'salary'),
+)
 
 type WorkExp = { title?: unknown; projects?: Array<{ skills?: unknown[] }> }
 type OwnProject = { skills?: unknown[] }
@@ -84,5 +89,23 @@ export function compareMatchingFields(oldProfile: unknown, newProfile: unknown):
     extractCertificationNames(oldProfile) !== extractCertificationNames(newProfile) ||
     extractOwnProjectSkills(oldProfile) !== extractOwnProjectSkills(newProfile) ||
     extractSalaryPrefUnits(oldProfile) !== extractSalaryPrefUnits(newProfile)
+  )
+}
+
+// Same as compareMatchingFields but ignores preferences.salary (and extractSalaryPrefUnits).
+// Used to detect salary-only changes in trigger-sync.
+export function compareMatchingFieldsExcludingSalary(oldProfile: unknown, newProfile: unknown): boolean {
+  if (oldProfile == null) return false
+
+  const pathChanged = NON_SALARY_MATCHING_FIELDS.some(
+    path => stableStringify(getField(oldProfile, path)) !== stableStringify(getField(newProfile, path))
+  )
+  if (pathChanged) return true
+
+  return (
+    extractWorkExpProjectSkills(oldProfile) !== extractWorkExpProjectSkills(newProfile) ||
+    extractWorkExpTitles(oldProfile) !== extractWorkExpTitles(newProfile) ||
+    extractCertificationNames(oldProfile) !== extractCertificationNames(newProfile) ||
+    extractOwnProjectSkills(oldProfile) !== extractOwnProjectSkills(newProfile)
   )
 }

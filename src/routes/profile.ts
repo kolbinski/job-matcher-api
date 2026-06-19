@@ -3,9 +3,12 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
-import { syncUserById } from '../services/syncService'
+import { syncUserById, buildAndSaveFreePlanSnapshot } from '../services/syncService'
 import { AppError } from '../lib/errors'
-import { compareMatchingFields } from '../lib/profileComparison'
+import { compareMatchingFields, compareMatchingFieldsExcludingSalary, stableStringify, getField } from '../lib/profileComparison'
+import { calculateUserOfferSalary } from '../lib/salaryCalculator'
+import { applyPreFilters } from '../services/redFlagFilter'
+import { CandidateProfileSchema } from '../types/profile'
 
 export const profileRouter = Router()
 
@@ -175,6 +178,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       profile_relevant_change_counter: true,
       profile_relevant_change_counter_max: true,
       sync_started_at: true,
+      preferred_currency: true,
     },
   })
   if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found')
@@ -196,6 +200,168 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
   const matchingRelevantChange = forceRelevantChange || compareMatchingFields(user.profile_editing_snapshot, user.profile)
   console.log(`[trigger-sync] userId=${userId} matchingRelevantChange=${matchingRelevantChange} forceRelevantChange=${forceRelevantChange} counter=${user.profile_relevant_change_counter} counter_max=${user.profile_relevant_change_counter_max} snapshotNull=${user.profile_editing_snapshot == null}`)
+
+  // ── Salary-only detection ────────────────────────────────────────────────────
+  type SalaryPref = { type: string; currency: string; min: number; unit?: string }
+  let isSalaryOnlyChange = false
+  let salaryOnlyIncreased = false
+  let oldPrefs: SalaryPref[] = []
+  let newPrefs: SalaryPref[] = []
+
+  if (matchingRelevantChange && !forceRelevantChange && user.profile_editing_snapshot != null) {
+    const nonSalaryChange = compareMatchingFieldsExcludingSalary(user.profile_editing_snapshot, user.profile)
+    const salaryChanged =
+      stableStringify(getField(user.profile_editing_snapshot, ['preferences', 'salary'])) !==
+      stableStringify(getField(user.profile, ['preferences', 'salary']))
+    isSalaryOnlyChange = !nonSalaryChange && salaryChanged
+
+    if (isSalaryOnlyChange) {
+      oldPrefs = ((getField(user.profile_editing_snapshot, ['preferences', 'salary']) ?? []) as SalaryPref[])
+      newPrefs = ((getField(user.profile, ['preferences', 'salary']) ?? []) as SalaryPref[])
+      salaryOnlyIncreased = newPrefs.every(newPref => {
+        const oldPref = oldPrefs.find(p => p.type === newPref.type && p.currency === newPref.currency)
+        return !oldPref || newPref.min >= oldPref.min
+      })
+    }
+  }
+
+  // ── Helper: recalculate salary deltas for pending_apply/ai_rejected rows ─────
+  // Returns [keptCount, rejectedCount]. Used by both partial-sync branches.
+  async function recalculateSalaryDeltas(
+    salaryPrefs: SalaryPref[],
+    exchangeRates: Record<string, number>,
+    preferredCurrency: string,
+  ): Promise<[number, number]> {
+    const existingOffers = await prisma.userOffer.findMany({
+      where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
+      include: { offer: { select: { employment_types: true } } },
+    })
+    console.log(`[trigger-sync] fetched ${existingOffers.length} pending_apply/ai_rejected offers to recalculate`)
+
+    let keptCount = 0
+    let rejectedCount = 0
+
+    for (const uo of existingOffers) {
+      const salaryResult = calculateUserOfferSalary(
+        Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
+        preferredCurrency,
+        salaryPrefs,
+        exchangeRates,
+      )
+      const bestDelta = Math.max(
+        salaryResult?.contract?.delta ?? -Infinity,
+        salaryResult?.permanent?.delta ?? -Infinity,
+      )
+      const newContractDelta = salaryResult?.contract?.delta ?? null
+      console.log(
+        `[trigger-sync] offer ${uo.offer_id}: old_contract_delta=${uo.salary_contract_delta} new_contract_delta=${newContractDelta} → ${!salaryResult || bestDelta < 0 ? 'pre_filter_rejected' : 'kept'}`,
+      )
+
+      if (!salaryResult || bestDelta < 0) {
+        await prisma.userOffer.update({
+          where: { id: uo.id },
+          data: { status: 'pre_filter_rejected', salary_contract_delta: null, salary_permanent_delta: null },
+        })
+        rejectedCount++
+      } else {
+        await prisma.userOffer.update({
+          where: { id: uo.id },
+          data: {
+            salary_contract_delta: salaryResult.contract?.delta ?? null,
+            salary_permanent_delta: salaryResult.permanent?.delta ?? null,
+            salary_currency: salaryResult.salary_currency,
+          },
+        })
+        keptCount++
+      }
+    }
+    return [keptCount, rejectedCount]
+  }
+
+  // ── Step 3: salary-only increase — partial re-sync, no Claude ─────────────────
+  if (isSalaryOnlyChange && salaryOnlyIncreased) {
+    console.log('[trigger-sync] salary-only increase — partial re-sync (no Claude)')
+
+    const ratesSetting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
+    const exchangeRates: Record<string, number> = ratesSetting
+      ? (JSON.parse(ratesSetting.value) as Record<string, number>)
+      : {}
+    const preferredCurrency = user.preferred_currency ?? 'USD'
+
+    const [keptCount, rejectedCount] = await recalculateSalaryDeltas(newPrefs, exchangeRates, preferredCurrency)
+    console.log(`[trigger-sync] salary-only increase: kept ${keptCount} offers, rejected ${rejectedCount} offers`)
+
+    await buildAndSaveFreePlanSnapshot(userId, newPrefs, exchangeRates, user.profile)
+    console.log('[trigger-sync] salary-only increase: snapshot rebuilt')
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profile_synced_at: new Date(), sync_started_at: null, profile_editing_snapshot: Prisma.JsonNull },
+    })
+
+    return res.status(200).json({ success: true, partial: true })
+  }
+
+  // ── Step 4: salary-only decrease — partial re-sync, Claude for new qualifiers ─
+  if (isSalaryOnlyChange && !salaryOnlyIncreased) {
+    console.log('[trigger-sync] salary min decreased — partial re-sync with Claude for newly qualifying offers')
+    console.log(`[trigger-sync] old salary prefs: ${JSON.stringify(oldPrefs)}`)
+    console.log(`[trigger-sync] new salary prefs: ${JSON.stringify(newPrefs)}`)
+
+    const [ratesSetting, preFilterRejectedRows] = await Promise.all([
+      prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+      prisma.userOffer.findMany({
+        where: { user_id: userId, status: 'pre_filter_rejected' },
+        include: { offer: true },
+      }),
+    ])
+    const exchangeRates: Record<string, number> = ratesSetting
+      ? (JSON.parse(ratesSetting.value) as Record<string, number>)
+      : {}
+    const preferredCurrency = user.preferred_currency ?? 'USD'
+
+    // Find pre_filter_rejected offers that now pass all filters under the new profile
+    const profileParsed = CandidateProfileSchema.safeParse(user.profile)
+    const qualifyingIds: string[] = []
+    if (profileParsed.success) {
+      for (const uo of preFilterRejectedRows) {
+        if (applyPreFilters(profileParsed.data, uo.offer).pass) {
+          qualifyingIds.push(uo.id)
+        }
+      }
+    }
+    console.log(`[trigger-sync] salary decreased: found ${preFilterRejectedRows.length} pre_filter_rejected offers, ${qualifyingIds.length} now qualify for Claude`)
+
+    // Delete qualifying pre_filter_rejected rows — syncUserById picks them up as unseens
+    if (qualifyingIds.length > 0) {
+      await prisma.userOffer.deleteMany({ where: { id: { in: qualifyingIds } } })
+    }
+
+    // Recalculate deltas for existing pending_apply/ai_rejected
+    const [keptCount, rejectedCount] = await recalculateSalaryDeltas(newPrefs, exchangeRates, preferredCurrency)
+    console.log(`[trigger-sync] salary decreased: recalculated deltas for ${keptCount + rejectedCount} existing offers`)
+
+    await buildAndSaveFreePlanSnapshot(userId, newPrefs, exchangeRates, user.profile)
+    console.log('[trigger-sync] salary decreased: snapshot rebuilt')
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profile_synced_at: new Date(), profile_editing_snapshot: Prisma.JsonNull },
+    })
+
+    await prisma.notificationLock.deleteMany({
+      where: { lock_key: { startsWith: `sync:${userId}` } },
+    })
+
+    res.status(202).json({ success: true, partial: true })
+
+    // Background: Claude matching for newly qualifying offers (syncUserById sees
+    // them as unseens because their pre_filter_rejected rows were deleted above).
+    syncUserById(userId).catch(err =>
+      console.error(`[trigger-sync] Partial salary sync failed for user ${userId}:`, err),
+    )
+    return
+  }
 
   if (matchingRelevantChange) {
     if (user.profile_relevant_change_counter >= user.profile_relevant_change_counter_max) {
