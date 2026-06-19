@@ -12,7 +12,9 @@ Scoring rules — apply all four consistently:
 1. SALARY: Compare offer MAX salary to your minimum. If offer max >= your minimum, salary is acceptable — do not penalize it. Only mark salary as a concern if offer max < your minimum. If salary is not disclosed, treat it as neutral and never use it as a reason for recommended=false.
 2. CONTRACT TYPE: Your profile lists accepted contract types. Only flag contract type if the offer's type is not in your accepted list. If you accept permanent contracts, do not penalize permanent offers.
 3. SENIORITY: Do not penalize offers listed as "mid" level if your skills clearly match the requirements. Only flag seniority if the role explicitly requires fewer years of experience than you have, or uses the word "junior" in the title.
-4. FOCUS: Prioritise technical skill overlap, salary acceptability, and work model. These three factors should drive the recommended field.`;
+4. FOCUS: Prioritise technical skill overlap, salary acceptability, and work model. These three factors should drive the recommended field.
+
+CRITICAL: If the offer requires skills from a completely different domain than the candidate's current or target roles, set recommended=false regardless of score. Cross-domain mismatches (e.g. Java backend role for a Frontend Engineer, Python data engineering for a .NET developer, mobile framework for a web backend role) must always produce recommended=false.`;
 
 const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
   name: 'evaluate_offers',
@@ -72,7 +74,8 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             },
             recommended: {
               type: 'boolean',
-              description: 'True if candidate should apply',
+              description:
+                "True if candidate should apply. Return false if ANY required skill is completely outside the candidate's domain/expertise area (e.g. Java for a Frontend Engineer, Python for a .NET developer). Missing a required skill that is in the same domain (e.g. candidate knows React but offer requires Vue) can still be recommended=true. But cross-domain required skills (backend language for frontend role, mobile framework for backend role) must return recommended=false.",
             },
             offer_language: {
               type: 'string',
