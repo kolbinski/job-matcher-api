@@ -112,7 +112,7 @@ describe('workplace filter', () => {
 
 describe('employment type filter', () => {
   it('rejects offer with only permanent when candidate wants contract', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'permanent', from: 10000, to: 20000, currency: 'PLN' }] })
     const result = applyPreFilters(profile, offer)
     expect(result.pass).toBe(false)
@@ -120,42 +120,42 @@ describe('employment type filter', () => {
   })
 
   it('passes offer with contract when candidate wants contract', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'contract', from: 18000, to: 25000, currency: 'PLN' }] })
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
 
   it('passes offer with contract when candidate wants contract and permanent', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract', 'permanent'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }, { type: 'permanent', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'contract', from: 18000, to: 25000, currency: 'PLN' }] })
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
 
   it('passes offer with permanent when candidate wants contract and permanent', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract', 'permanent'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }, { type: 'permanent', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'permanent', from: 12000, to: 18000, currency: 'PLN' }] })
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
 
   it('passes offer with no employment_types declared (undisclosed)', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [] })
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
 
   it('passes offer with type "any" even when candidate wants contract', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({ employment_types: [{ type: 'any', currency: 'PLN' }] })
     const result = applyPreFilters(profile, offer)
     expect(result.rejectedByEmploymentType).toBe(false)
   })
 
   it('deduplicates repeated types in rejection reason', () => {
-    const profile = makeProfile({ preferences: { employment_type: ['contract'] } })
+    const profile = makeProfile({ preferences: { salary: [{ type: 'contract', currency: 'PLN', min: 1 }] } })
     const offer = makeOffer({
       employment_types: [
         { type: 'permanent', currency: 'PLN' },

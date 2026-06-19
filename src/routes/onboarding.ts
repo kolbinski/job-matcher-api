@@ -96,7 +96,6 @@ const PROFILE_SCHEMA = `{
     "target_role": ["string"],
     "company_type": ["string"],
     "company_type_excluded": ["string"],
-    "employment_type": ["contract | permanent"],
     "industries": ["string"],
     "markets": ["string"],
     "learning_skills_goals": ["string"],

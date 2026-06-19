@@ -254,7 +254,40 @@ accountRouter.delete('/', validateJwt, async (req, res) => {
     console.log(`[delete-account] No Supabase auth user found for email=${targetEmail} — skipping`)
   }
 
-  // Step 2: Delete public.users row — CASCADE handles all FK-linked tables
+  // Step 2: Staged deletion of high-volume rows in batches of 1000 (same pattern as
+  // trigger-sync cleanup) so deletion doesn't blow up on users with many offers.
+  // Prisma deleteMany has no LIMIT, so use raw SQL with a LIMIT subquery.
+  let deletedStatuses = 1
+  while (deletedStatuses > 0) {
+    deletedStatuses = await prisma.$executeRaw`
+      DELETE FROM user_offer_statuses
+      WHERE id IN (
+        SELECT uos.id FROM user_offer_statuses uos
+        JOIN user_offers uo ON uos.user_offer_id = uo.id
+        WHERE uo.user_id = ${targetUserId}
+        LIMIT 1000
+      )`
+    if (deletedStatuses > 0) console.log(`[delete-account] Deleted ${deletedStatuses} user_offer_statuses rows`)
+  }
+
+  let deletedOffers = 1
+  while (deletedOffers > 0) {
+    deletedOffers = await prisma.$executeRaw`
+      DELETE FROM user_offers
+      WHERE id IN (
+        SELECT id FROM user_offers WHERE user_id = ${targetUserId} LIMIT 1000
+      )`
+    if (deletedOffers > 0) console.log(`[delete-account] Deleted ${deletedOffers} user_offers rows`)
+  }
+
+  // Step 3: Delete remaining small related tables (single deleteMany each).
+  await prisma.agentClient.deleteMany({ where: { user_id: targetUserId } })
+  await prisma.subscription.deleteMany({ where: { user_id: targetUserId } })
+  await prisma.pushToken.deleteMany({ where: { user_id: targetUserId } })
+  await prisma.userSync.deleteMany({ where: { user_id: targetUserId } })
+  console.log(`[delete-account] Deleted small related tables for ${targetUserId}`)
+
+  // Step 4: Delete public.users row — CASCADE handles any remaining FK-linked tables
   console.log(`[delete-account] Deleting public.users row for ${targetUserId}`)
   try {
     await prisma.user.delete({ where: { id: targetUserId } })

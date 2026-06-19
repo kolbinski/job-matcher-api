@@ -63,7 +63,11 @@ export function applyPreFilters(profile: CandidateProfile, offer: Offer): PreFil
   }
 
   // ── 2. Employment type filter ──────────────────────────────────────────────
-  const acceptedTypes = (profile.preferences?.employment_type ?? []).map(t => t.toLowerCase())
+  // Accepted contract forms come from the candidate's salary preferences
+  // (preferences.salary[].type, e.g. 'contract'/'permanent').
+  const acceptedTypes = [...new Set(
+    (profile.preferences?.salary ?? []).map(s => s.type.toLowerCase())
+  )]
   if (acceptedTypes.length > 0) {
     const offerTypes = [...new Set(
       parseEmploymentTypes(offer)

@@ -27,7 +27,6 @@ const MATCHING_FIELDS: string[][] = [
   ['skills'],
   ['preferences', 'salary'],
   ['preferences', 'work_model'],
-  ['preferences', 'employment_type'],
   ['preferences', 'target_role'],
   ['preferences', 'company_type_excluded'],
   ['preferences', 'markets'],

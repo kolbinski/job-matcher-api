@@ -116,7 +116,6 @@ const PreferencesSchema = z.object({
   office_location_cities: z.array(z.string()).optional(),
   team_size: SalaryRangeSchema.optional(),
   industries: z.array(z.string()).optional(),
-  employment_type: z.array(z.string()).optional(),
   salary: z.array(SalaryPreferenceSchema).optional(),
   markets: z.array(z.string()).optional(),
   learning_skills_goals: z.array(z.string()).optional(),
