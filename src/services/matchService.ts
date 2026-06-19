@@ -353,7 +353,6 @@ export async function runMatchForUser(
             claude_role_fit: p.offer.role_fit ?? null,
             claude_matched_reasons: p.offer.matched_reasons,
             claude_missing_skills: p.offer.missing_skills,
-            claude_salary_comparison: p.offer.salary_comparison ?? null,
             claude_recommended: p.offer.recommended,
             cv_language: cvLanguageByIndex.get(idx) ?? 'en',
             matched_at: now,

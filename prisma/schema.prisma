@@ -159,7 +159,6 @@ model UserOffer {
   claude_role_fit          String?
   claude_matched_reasons   Json
   claude_missing_skills    String[]
-  claude_salary_comparison String?
   claude_recommended       Boolean?
   matched_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt

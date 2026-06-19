@@ -65,7 +65,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
               type: 'array',
               items: { type: 'string' },
               description:
-                'Skills in job requirements the candidate likely lacks',
+                "Skills from the job's required or nice-to-have list that the candidate likely lacks. Use only skill names verbatim from the offer's listed skills — do not invent or infer skills not explicitly listed.",
             },
             salary_comparison: {
               type: 'string',
@@ -231,6 +231,18 @@ async function _evaluateOffers(
         );
         return null;
       }
+      // Constrain missing_skills to the offer's listed skills (case-insensitive) —
+      // Claude must not invent skills not present in the offer.
+      const offer = offers[validated.offer_index];
+      if (offer) {
+        const allOfferSkills = [
+          ...offer.required_skills,
+          ...offer.nice_to_have_skills,
+        ].map(s => s.toLowerCase());
+        validated.missing_skills = validated.missing_skills.filter(s =>
+          allOfferSkills.includes(s.toLowerCase()),
+        );
+      }
       results.push(validated);
     }
     return {
@@ -323,6 +335,9 @@ function buildPrompt(profile: CandidateProfile, offers: Offer[]): string {
     lines.push(
       `Skills required: ${offer.required_skills.join(', ') || 'none listed'}`,
     );
+    if (offer.nice_to_have_skills.length > 0) {
+      lines.push(`Nice to have: ${offer.nice_to_have_skills.join(', ')}`);
+    }
     lines.push(`Level: ${offer.experience_level ?? 'not specified'}`);
     lines.push('');
   }

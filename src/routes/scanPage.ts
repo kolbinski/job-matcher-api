@@ -413,7 +413,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       claude_matched_reasons: evaluation.matched_reasons,
       claude_missing_skills: evaluation.missing_skills,
       claude_recommended: evaluation.recommended,
-      claude_salary_comparison: evaluation.salary_comparison,
     },
     update: {
       status: 'pending_apply',
@@ -422,7 +421,6 @@ scanPageRouter.post('/', validateJwt, async (req, res) => {
       claude_matched_reasons: evaluation.matched_reasons,
       claude_missing_skills: evaluation.missing_skills,
       claude_recommended: evaluation.recommended,
-      claude_salary_comparison: evaluation.salary_comparison,
     },
   });
 
