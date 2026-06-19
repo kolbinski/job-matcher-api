@@ -485,7 +485,7 @@ export async function buildAndSaveFreePlanSnapshot(
     // salary delta. NOTE: ai_rejected rows written before this status rule used the
     // old logic; they only get reclassified on the next re-sync (no migration).
     prisma.userOffer.findMany({
-      where: { user_id: userId, status: 'ai_rejected', claude_missing_skills: { isEmpty: false }, salary_delta: { not: null } },
+      where: { user_id: userId, status: 'ai_rejected', claude_missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] },
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),

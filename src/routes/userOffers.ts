@@ -168,9 +168,10 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
       applied_at: uo.status_history[0]?.created_at ?? null,
-      salary: salaryResult
-        ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
-        : [],
+      salary: [
+        ...(salaryResult?.contract ? [{ min: salaryResult.contract.min, max: salaryResult.contract.max, currency: salaryResult.salary_currency, delta: salaryResult.contract.delta, type: 'contract' }] : []),
+        ...(salaryResult?.permanent ? [{ min: salaryResult.permanent.min, max: salaryResult.permanent.max, currency: salaryResult.salary_currency, delta: salaryResult.permanent.delta, type: 'permanent' }] : []),
+      ],
       raw_salaries,
       source: uo.offer.source,
       city: uo.offer.city ?? null,
@@ -431,7 +432,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         user_id: clientId,
         status: bucketStatus,
         ...(bucketStatus === 'ai_rejected'
-          ? { claude_missing_skills: { isEmpty: false }, salary_delta: { not: null } }
+          ? { claude_missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }
           : {}),
         ...(isScoreRelevant && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
         ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
@@ -452,7 +453,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           },
         },
         orderBy: sortBy === 'salary_delta'
-          ? [{ salary_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+          ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
           : [{ claude_score: 'desc' }],
       });
 
@@ -490,10 +491,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           rejection_reason: uo.rejection_reason,
           matched_at: uo.matched_at,
           applied_at: uo.status_history[0]?.created_at ?? null,
-          salary: salaryResult
-            ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
-            : [],
-          salary_delta: uo.salary_delta,
+          salary: [
+            ...(salaryResult?.contract ? [{ min: salaryResult.contract.min, max: salaryResult.contract.max, currency: salaryResult.salary_currency, delta: salaryResult.contract.delta, type: 'contract' }] : []),
+            ...(salaryResult?.permanent ? [{ min: salaryResult.permanent.min, max: salaryResult.permanent.max, currency: salaryResult.salary_currency, delta: salaryResult.permanent.delta, type: 'permanent' }] : []),
+          ],
+          salary_delta: Math.max(salaryResult?.contract?.delta ?? -Infinity, salaryResult?.permanent?.delta ?? -Infinity),
           raw_salaries: Array.isArray(uo.offer.employment_types)
             ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
                 from: et['fromPerUnit'] ?? et['from'] ?? null,
@@ -660,7 +662,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       },
     },
     orderBy: sortBy === 'salary_delta'
-      ? [{ salary_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+      ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
       : [{ claude_score: 'desc' }],
   });
 
@@ -724,10 +726,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       rejection_reason: uo.rejection_reason,
       matched_at: uo.matched_at,
       applied_at: uo.status_history[0]?.created_at ?? null,
-      salary: salaryResult
-        ? [{ min: salaryResult.salary_min, max: salaryResult.salary_max, currency: salaryResult.salary_currency, delta: salaryResult.salary_delta, type: salaryResult.salary_type ?? '' }]
-        : [],
-      salary_delta: uo.salary_delta,
+      salary: [
+        ...(salaryResult?.contract ? [{ min: salaryResult.contract.min, max: salaryResult.contract.max, currency: salaryResult.salary_currency, delta: salaryResult.contract.delta, type: 'contract' }] : []),
+        ...(salaryResult?.permanent ? [{ min: salaryResult.permanent.min, max: salaryResult.permanent.max, currency: salaryResult.salary_currency, delta: salaryResult.permanent.delta, type: 'permanent' }] : []),
+      ],
+      salary_delta: Math.max(salaryResult?.contract?.delta ?? -Infinity, salaryResult?.permanent?.delta ?? -Infinity),
       raw_salaries: Array.isArray(uo.offer.employment_types)
         ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
             from: et['fromPerUnit'] ?? et['from'] ?? null,

@@ -380,11 +380,9 @@ export async function runMatchForUser(
             cv_language: cvLanguageByIndex.get(idx) ?? 'en',
             matched_at: now,
             updated_at: now,
-            salary_min: salaryResult?.salary_min ?? null,
-            salary_max: salaryResult?.salary_max ?? null,
             salary_currency: salaryResult?.salary_currency ?? null,
-            salary_delta: salaryResult?.salary_delta ?? null,
-            salary_type: salaryResult?.salary_type ?? null,
+            salary_contract_delta: salaryResult?.contract?.delta ?? null,
+            salary_permanent_delta: salaryResult?.permanent?.delta ?? null,
           };
         });
 

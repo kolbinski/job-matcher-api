@@ -13,12 +13,16 @@ interface SalaryPref {
   unit?: string
 }
 
+interface SalaryRange {
+  min: number
+  max: number
+  delta: number
+}
+
 interface SalaryResult {
-  salary_min: number
-  salary_max: number
+  contract?: SalaryRange
+  permanent?: SalaryRange
   salary_currency: string
-  salary_delta: number
-  salary_type: string | null
 }
 
 function toMonthly(value: number, unit: string | null | undefined): number {
@@ -70,59 +74,42 @@ if (entryCur === prefCur) return { salaryMin, salaryMax }
     return monthlyMin * (prefRate / (prefCurrRate === 0 ? 1 : prefCurrRate))
   }
 
-  // Primary: match employment_type entries against user pref types (contract/permanent)
-  interface Candidate {
-    entry: EmploymentTypeEntry
-    salaryMin: number
-    salaryMax: number
-    delta: number
-  }
+  // Build a range for a given pref type (contract/permanent) from matching
+  // employment_type entries: convert to monthly + preferred currency, then compute
+  // delta vs the matching salary pref. Prefer an entry already in the preferred
+  // currency, else the one with the highest converted max.
+  function buildRange(targetType: 'contract' | 'permanent'): SalaryRange | undefined {
+    const converted = types
+      .filter(t => (t.type ?? '').toLowerCase() === targetType)
+      .map(e => ({ entry: e, c: convertEntry(e) }))
+      .filter((x): x is { entry: EmploymentTypeEntry; c: { salaryMin: number; salaryMax: number } } => x.c !== null)
+    if (converted.length === 0) return undefined
 
-  const candidates: Candidate[] = []
-  for (const entry of types) {
-    const entryType = (entry.type ?? '').toLowerCase()
-    const matchingPref = salaryPrefs.find(p => p.type.toLowerCase() === entryType)
-    if (!matchingPref) continue
-    const converted = convertEntry(entry)
-    if (!converted) continue
-    const delta = converted.salaryMax - prefMinInPrefCur(matchingPref)
-    candidates.push({ entry, ...converted, delta })
-  }
+    const winner =
+      converted.find(x => (x.entry.currency ?? '').toUpperCase() === prefCur) ??
+      converted.reduce((best, x) => (x.c.salaryMax > best.c.salaryMax ? x : best))
 
-  if (candidates.length > 0) {
-    const prefCurCandidate = candidates.find(c => (c.entry.currency ?? '').toUpperCase() === prefCur)
-    const winner = prefCurCandidate ?? candidates.reduce((best, c) => c.delta > best.delta ? c : best)
+    const pref =
+      salaryPrefs.find(p => p.type.toLowerCase() === targetType && p.currency.toUpperCase() === prefCur) ??
+      salaryPrefs.find(p => p.type.toLowerCase() === targetType) ??
+      salaryPrefs.find(p => p.currency.toUpperCase() === prefCur) ??
+      salaryPrefs[0]
+    const prefMin = pref ? prefMinInPrefCur(pref) : 0
+
     return {
-      salary_min: Math.round(winner.salaryMin),
-      salary_max: Math.round(winner.salaryMax),
-      salary_currency: preferredCurrency,
-      salary_delta: Math.round(winner.delta),
-      salary_type: winner.entry.type ?? null,
+      min: Math.round(winner.c.salaryMin),
+      max: Math.round(winner.c.salaryMax),
+      delta: Math.round(winner.c.salaryMax - prefMin),
     }
   }
 
-  // Fallback: no type match — pick by currency priority (preferred → USD → first)
-  const entry =
-    types.find(t => t.currency?.toUpperCase() === prefCur) ??
-    types.find(t => t.currency?.toUpperCase() === 'USD') ??
-    types[0]
-
-  if (!entry) return null
-  const converted = convertEntry(entry)
-  if (!converted) return null
-
-  const entryType = (entry.type ?? '').toLowerCase()
-  const pref =
-    salaryPrefs.find(p => p.currency.toUpperCase() === prefCur && p.type.toLowerCase() === entryType) ??
-    salaryPrefs.find(p => p.currency.toUpperCase() === prefCur) ??
-    salaryPrefs[0]
-  const prefMin = pref ? prefMinInPrefCur(pref) : 0
+  const contract = buildRange('contract')
+  const permanent = buildRange('permanent')
+  if (!contract && !permanent) return null
 
   return {
-    salary_min: Math.round(converted.salaryMin),
-    salary_max: Math.round(converted.salaryMax),
+    ...(contract ? { contract } : {}),
+    ...(permanent ? { permanent } : {}),
     salary_currency: preferredCurrency,
-    salary_delta: Math.round(converted.salaryMax - prefMin),
-    salary_type: entry.type ?? null,
   }
 }

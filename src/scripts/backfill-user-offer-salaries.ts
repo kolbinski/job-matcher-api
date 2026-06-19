@@ -51,11 +51,9 @@ async function main() {
         await prisma.userOffer.update({
           where: { id: uo.id },
           data: {
-            salary_min: result?.salary_min ?? null,
-            salary_max: result?.salary_max ?? null,
             salary_currency: result?.salary_currency ?? null,
-            salary_delta: result?.salary_delta ?? null,
-            salary_type: result?.salary_type ?? null,
+            salary_contract_delta: result?.contract?.delta ?? null,
+            salary_permanent_delta: result?.permanent?.delta ?? null,
           },
         })
         totalUpdated++
