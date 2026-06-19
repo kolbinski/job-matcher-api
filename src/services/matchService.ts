@@ -240,30 +240,8 @@ export async function runMatchForUser(
     console.log(
       `[match] Saved ${validPreFilterRows.length} pre_filter_rejected rows`,
     );
-    const newPreFilter = await prisma.userOffer.findMany({
-      where: {
-        user_id: userId,
-        status: 'pre_filter_rejected',
-        matched_at: now,
-      },
-      select: { id: true },
-    });
-    if (newPreFilter.length > 0) {
-      try {
-        await prisma.userOfferStatus.createMany({
-          data: newPreFilter.map(r => ({
-            user_offer_id: r.id,
-            status: 'pre_filter_rejected',
-          })),
-        });
-      } catch (e: unknown) {
-        if ((e as { code?: string }).code === 'P2003') {
-          console.log('[match] UserOfferStatus: user_offers deleted during sync, stopping gracefully');
-          return { meta: { call_id: callId, generated_at: new Date().toISOString(), response_ms: Date.now() - startTime, total_offers_scanned: 0, newly_inserted: 0, matched_count: 0, unmatched_count: 0, ai_scoring: false, claude_evaluations_count: 0 }, matched: [], unmatched: [], stretch_offers: [] };
-        }
-        throw e;
-      }
-    }
+    // pre_filter_rejected status changes are not tracked in user_offer_statuses
+    // (nothing reads that table filtered by this status).
   }
 
   // ── 7. Sort + post-score filters ───────────────────────────────────────────
@@ -444,12 +422,9 @@ export async function runMatchForUser(
                 },
                 select: { id: true, status: true, claude_recommended: true },
               });
-              await prisma.userOfferStatus.createMany({
-                data: inserted.map(r => ({
-                  user_offer_id: r.id,
-                  status: r.status,
-                })),
-              });
+              // Match-time statuses (pending_apply / ai_rejected) are NOT tracked in
+              // user_offer_statuses — only user/agent action transitions are (written
+              // by the status-change endpoint). Nothing reads these statuses there.
               batchPendingApplyCount = inserted.filter(
                 r => r.status === 'pending_apply',
               ).length;
