@@ -829,11 +829,14 @@ async function upsertOfferSkills(
       }
     }
 
-    // Lookup category for each missing skill
+    // Lookup category for each missing skill. Only consider skills the categorizer
+    // cron has already classified (was_categorized=true). Compare on the lowercased
+    // name — the skills table stores lowercase names. Uncategorized / unknown skills
+    // resolve to 'Other' and are filtered out below (not added to offer_skills).
     const categoryMap = new Map<string, string>();
-    for (const [lower, original] of missingSkillsMap) {
+    for (const [lower] of missingSkillsMap) {
       const row = await prisma.skill.findFirst({
-        where: { name: { equals: original, mode: 'insensitive' } },
+        where: { name: { equals: lower, mode: 'insensitive' }, was_categorized: true },
         include: { category: true },
       });
       categoryMap.set(lower, row?.category?.name ?? 'Other');
@@ -856,10 +859,15 @@ async function upsertOfferSkills(
           skillMap.set(lower, { ...existing, count: existing.count + count });
         }
       } else {
+        const category = categoryMap.get(lower) ?? 'Other';
+        // Only add skills that have a real (categorized) category. Skills not yet
+        // classified by the categorizer cron resolve to 'Other' — skip them so they
+        // don't pollute offer_skills until they're categorized.
+        if (category === 'Other') continue;
         skillMap.set(lower, {
           name: missingSkillsMap.get(lower) ?? lower,
           count,
-          category_name: categoryMap.get(lower) ?? 'Other',
+          category_name: category,
           dismissed: false,
         });
       }
