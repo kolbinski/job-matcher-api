@@ -279,8 +279,8 @@ export async function startScheduler(): Promise<void> {
   cron.schedule('*/15 * * * *', runProfileSyncQueue);
   console.log('[scheduler] Profile sync queue registered (*/15 * * * *)');
 
-  cron.schedule('*/15 * * * *', runCategorizeSkills);
-  console.log('[scheduler] Skill categorizer registered (*/15 * * * *)');
+  cron.schedule('0 * * * *', runCategorizeSkills);
+  console.log('[scheduler] Skill categorizer registered (0 * * * *)');
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...');
   const fetchRow = await prisma.settings.findUnique({

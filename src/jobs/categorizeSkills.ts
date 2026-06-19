@@ -1,8 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { env } from '../lib/env';
 import { getClaudeModel } from '../lib/claudeModels';
+import { calculateCost } from '../lib/aiCost';
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 500;
 
 // Classify up to BATCH_SIZE uncategorized skills in a single Claude call, then map
 // each result back to a skill_category by name (case-insensitive). Skills the model
@@ -36,8 +37,9 @@ Reply ONLY with valid JSON object: { "skill name": "category name", ... }`;
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
+      // Large enough to fit a JSON map for a full 500-skill batch without truncating.
       model,
-      max_tokens: 4096,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     }),
     signal: AbortSignal.timeout(55_000),
@@ -49,7 +51,29 @@ Reply ONLY with valid JSON object: { "skill name": "category name", ... }`;
     return;
   }
 
-  const data = (await response.json()) as { content: Array<{ text: string }> };
+  const data = (await response.json()) as {
+    content: Array<{ text: string }>;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
+
+  // Record token usage. This is a system job — no user_id/email.
+  const usage = data.usage;
+  if (usage) {
+    calculateCost(model, usage.input_tokens, usage.output_tokens)
+      .then(cost =>
+        prisma.aiUsage.create({
+          data: {
+            type: 'skill_categorization',
+            model,
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            cost,
+          },
+        }),
+      )
+      .catch(err => console.error('[ai_usage] insert failed:', err));
+  }
+
   const raw = data.content[0].text.trim();
   const clean = raw
     .replace(/^```json\s*/i, '')
