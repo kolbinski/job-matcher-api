@@ -295,6 +295,13 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
     return arr;
   };
+  // level_up offers are not score-gated — minScore applies to apply_now only.
+  const filterSnapshotOffersLevelUp = (offers: unknown[]): unknown[] => {
+    let arr = offers as Array<Record<string, unknown>>;
+    if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
+    if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
+    return arr;
+  };
   const { role, agent_id, user_id } = req.jwt!;
 
   let clientId: string;
@@ -382,9 +389,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           level_up?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
         };
         const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
-        const levelUpOffers = filterSnapshotOffers(snap.level_up?.offers ?? []);
-        console.log('[snapshot] level_up raw offers count:', snap.level_up?.offers?.length)
-        console.log('[snapshot] level_up after filter:', levelUpOffers.length)
+        const levelUpOffers = filterSnapshotOffersLevelUp(snap.level_up?.offers ?? []);
         // Free users see snapshot-limited offers, but counts (and the blue dot) must
         // reflect real DB totals regardless of the snapshot.
         // level_up offers are status 'ai_rejected' (with a salaried employment type) —
@@ -426,7 +431,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       const bucketOfferWhere = {
         ...(source && source !== 'all' ? { source } : {}),
       };
-      const isScoreRelevant = bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected';
       // level_up (ai_rejected) requires missing skills + a computed salary delta.
       // NOTE: ai_rejected rows written before this rule used the old logic and only
       // get reclassified on the next re-sync (no migration).
@@ -436,7 +440,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         ...(bucketStatus === 'ai_rejected'
           ? { claude_missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }
           : {}),
-        ...(isScoreRelevant && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
+        // minScore applies to apply_now (pending_apply) only — level_up is not score-gated.
+        ...(bucketStatus === 'pending_apply' && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
         ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
         ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
         ...(Object.keys(bucketOfferWhere).length > 0
