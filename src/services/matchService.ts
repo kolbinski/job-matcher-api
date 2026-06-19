@@ -275,6 +275,8 @@ export async function runMatchForUser(
     }
     const totalBatches = batchesToProcess.length;
     const CONCURRENCY = 3;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     const processBatch = async (
       batch: typeof filteredPairs,
@@ -309,6 +311,9 @@ export async function runMatchForUser(
           );
         return;
       }
+
+      totalInputTokens += batchResults.input_tokens ?? 0;
+      totalOutputTokens += batchResults.output_tokens ?? 0;
 
       // Apply evaluations to this batch's pairs in-place
       const userSkillsLower = new Set(
@@ -517,6 +522,14 @@ export async function runMatchForUser(
     if (pendingApplyOffers.length > 0) {
       await upsertOfferSkills(userId, profile, pendingApplyOffers);
     }
+
+    const pricingSettings = await prisma.settings.findUnique({ where: { key: 'anthropic_pricing' } })
+    const anthropicPricing = (pricingSettings ? JSON.parse(pricingSettings.value) : {}) as Record<string, { input: number; output: number }>
+    const modelPricing = anthropicPricing[matchingModel]
+    const estimatedCost = modelPricing
+      ? (totalInputTokens / 1_000_000) * modelPricing.input + (totalOutputTokens / 1_000_000) * modelPricing.output
+      : 0
+    console.log(`[match] Matching for user_id=${userId} completed — input: ${totalInputTokens} tokens, output: ${totalOutputTokens} tokens, estimated cost: $${estimatedCost.toFixed(4)}`)
   }
 
   // ── 10. Stretch offers (runs after user_offers write) ─────────────────────
