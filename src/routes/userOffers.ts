@@ -390,14 +390,11 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         };
         const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
         const levelUpOffers = filterSnapshotOffersLevelUp(snap.level_up?.offers ?? []);
-        // Free users see snapshot-limited offers, but counts (and the blue dot) must
-        // reflect real DB totals regardless of the snapshot.
-        // level_up offers are status 'ai_rejected' (with a salaried employment type) —
-        // see buildAndSaveFreePlanSnapshot. apply_now offers are status 'pending_apply'.
-        const [applyNowCount, levelUpCount] = await Promise.all([
-          prisma.userOffer.count({ where: { user_id: clientId, status: 'pending_apply', claude_recommended: true } }),
-          prisma.userOffer.count({ where: { user_id: clientId, status: 'ai_rejected', offer: { employment_types: { not: [] as Prisma.InputJsonValue } } } }),
-        ]);
+        // Use the snapshot's own counts — they're built from deduplicated data in
+        // buildAndSaveFreePlanSnapshot. Live re-querying caused count/offers mismatch
+        // when the DB still holds duplicate user_offers.
+        const applyNowCount = snap.apply_now?.count ?? 0;
+        const levelUpCount = snap.level_up?.count ?? 0;
         return res.json({
           ...snap,
           count: applyNowCount + levelUpCount,
