@@ -44,6 +44,7 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
     languages: offer.languages,
     url: offer.url,
     published_at: offer.published_at,
+    expired_at: offer.expired_at,
     fetched_at: fetchedAt,
     is_active: true,
   };
@@ -52,8 +53,22 @@ function toUpsertData(offer: NormalizedOffer, fetchedAt: Date) {
 async function upsertPage(
   offers: NormalizedOffer[],
   fetchedAt: Date,
-): Promise<{ inserted: number; updated: number; insertedSlugs: string[] }> {
+): Promise<{ inserted: number; updated: number }> {
+  let totalInserted = 0;
+  let totalUpdated = 0;
+
   for (const batch of chunk(offers, BATCH_SIZE)) {
+    const existingSlugs = new Set(
+      await prisma.offer
+        .findMany({ where: { slug: { in: batch.map(o => o.slug) } }, select: { slug: true } })
+        .then(rows => rows.map(r => r.slug)),
+    );
+    const newCount = batch.filter(o => !existingSlugs.has(o.slug)).length;
+    const updateCount = batch.length - newCount;
+    totalInserted += newCount;
+    totalUpdated += updateCount;
+    console.log(`[offerSync] Batch: ${newCount} new inserts, ${updateCount} updates (${batch.length} total)`);
+
     for (const offer of batch) {
       const data = toUpsertData(offer, fetchedAt);
       await prisma.offer.upsert({
@@ -80,11 +95,7 @@ async function upsertPage(
     }
   }
 
-  return {
-    inserted: offers.length,
-    updated: 0,
-    insertedSlugs: offers.map(o => o.slug),
-  };
+  return { inserted: totalInserted, updated: totalUpdated };
 }
 
 async function resetProfileSyncedAt(page: number, upsertCount: number): Promise<void> {
@@ -172,7 +183,7 @@ async function syncJustJoin(
     pageNum++;
 
     console.log(
-      `[offerScraper][justjoin] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
+      `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
     await resetProfileSyncedAt(pageNum, inserted);
 
@@ -229,7 +240,7 @@ async function syncNfj(
     totalUpdated += updated;
 
     console.log(
-      `[offerScraper][nofluffjobs] Page ${pageNum}: fetched ${offers.length} offers in ${pageMs}ms (total so far: ${totalFetched}, upserted: ${inserted + updated})`,
+      `[offerSync] Page ${pageNum}: ${inserted} new inserts, ${updated} updates (${offers.length} total fetched) in ${pageMs}ms`,
     );
     await resetProfileSyncedAt(pageNum, inserted);
 
@@ -258,6 +269,12 @@ export async function syncOffers(cleanupEnabled = true): Promise<{
 }> {
   const fetchedAt = new Date();
 
+  await prisma.offer.updateMany({
+    where: { expired_at: { lt: new Date() } },
+    data: { is_active: false },
+  });
+  console.log('[offerSync] Marked expired offers as inactive');
+
   const [maxPagesRow, nfjMaxPagesRow] = await Promise.all([
     prisma.settings.findUnique({ where: { key: 'justjoin_max_pages' } }),
     prisma.settings.findUnique({ where: { key: 'nfj_max_pages' } }),
@@ -275,20 +292,16 @@ export async function syncOffers(cleanupEnabled = true): Promise<{
   ]);
 
   await Promise.all([
-    prisma.offerFetch.create({
-      data: {
-        source: 'justjoin',
-        new_upserts_count: jjResult.inserted,
-        fetched_at: fetchedAt,
-      },
-    }),
-    prisma.offerFetch.create({
-      data: {
-        source: 'nofluffjobs',
-        new_upserts_count: nfjResult.inserted,
-        fetched_at: fetchedAt,
-      },
-    }),
+    jjResult.inserted > 0
+      ? prisma.offerFetch.create({
+          data: { source: 'justjoin', new_inserts_count: jjResult.inserted, fetched_at: fetchedAt },
+        })
+      : Promise.resolve(),
+    nfjResult.inserted > 0
+      ? prisma.offerFetch.create({
+          data: { source: 'nofluffjobs', new_inserts_count: nfjResult.inserted, fetched_at: fetchedAt },
+        })
+      : Promise.resolve(),
   ]);
 
   const totalFetched = jjResult.fetched + nfjResult.fetched;

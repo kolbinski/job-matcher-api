@@ -140,6 +140,7 @@ model Offer {
   url                     String?
   published_at            DateTime?
   fetched_at              DateTime?
+  expired_at              DateTime?
   created_at              DateTime    @default(now())
   updated_at              DateTime    @updatedAt
   id                      String      @id @default(uuid())
@@ -239,7 +240,7 @@ model ApiCall {
 model OfferFetch {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   source            String
-  new_upserts_count Int
+  new_inserts_count Int
   fetched_at        DateTime
 
   @@map("offer_fetches")

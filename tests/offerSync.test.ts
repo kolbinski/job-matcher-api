@@ -61,6 +61,7 @@ function makeOffer(slug: string, overrides: Partial<NormalizedOffer> = {}): Norm
     languages: [],
     url: 'https://justjoin.it/test',
     published_at: new Date('2026-06-01T00:00:00Z'),
+    expired_at: null,
     ...overrides,
   }
 }

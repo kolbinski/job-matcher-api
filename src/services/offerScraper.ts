@@ -33,6 +33,7 @@ export interface NormalizedOffer {
   languages: string[]
   url: string | null
   published_at: Date | null
+  expired_at: Date | null
 }
 
 export interface FetchPageResult {
@@ -97,6 +98,7 @@ export function normalizeOffer(raw: Record<string, unknown>): NormalizedOffer | 
     languages: extractSkillNames(raw.languages),
     url: `https://justjoin.it/job-offer/${slug}`,
     published_at: toDate(raw.publishedAt),
+    expired_at: toDate(raw.expiredAt),
   }
 }
 

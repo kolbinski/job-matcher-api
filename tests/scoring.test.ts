@@ -40,6 +40,7 @@ function makeOffer(overrides: Partial<Offer> = {}): Offer {
     languages: [],
     url: null,
     published_at: null,
+    expired_at: null,
     fetched_at: null,
     created_at: new Date(),
     updated_at: new Date(),

@@ -103,6 +103,7 @@ export function normalizeNfjOffer(raw: NfjPosting): NormalizedOffer | null {
     languages: [],
     url: raw.url ? `https://nofluffjobs.com/job/${raw.url}` : null,
     published_at: raw.posted ? new Date(raw.posted) : null,
+    expired_at: raw.posted ? new Date(raw.posted + 30 * 24 * 60 * 60 * 1000) : null,
   }
 }
 

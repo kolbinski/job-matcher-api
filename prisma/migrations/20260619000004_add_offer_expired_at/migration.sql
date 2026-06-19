@@ -1,0 +1,1 @@
+ALTER TABLE "offers" ADD COLUMN "expired_at" TIMESTAMPTZ;

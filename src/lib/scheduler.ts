@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { syncOffers } from '../jobs/offerSync';
 import { categorizeSkills } from '../jobs/categorizeSkills';
@@ -281,6 +282,56 @@ export async function startScheduler(): Promise<void> {
 
   cron.schedule('0 * * * *', runCategorizeSkills);
   console.log('[scheduler] Skill categorizer registered (0 * * * *)');
+
+  const dropRow = await prisma.settings.findUnique({ where: { key: 'drop_offers_after_build' } });
+  if (dropRow?.value === 'true') {
+    console.log('[startup] drop_offers_after_build=true — clearing offers and related data');
+
+    let statusDeleted = 0;
+    let batch: { count: bigint };
+    do {
+      batch = await prisma.$executeRaw`
+        DELETE FROM user_offer_statuses
+        WHERE id IN (
+          SELECT uos.id FROM user_offer_statuses uos
+          JOIN user_offers uo ON uo.id = uos.user_offer_id
+          LIMIT 1000
+        )
+      ` as unknown as { count: bigint };
+      statusDeleted += Number(batch);
+    } while (Number(batch) > 0);
+    console.log(`[startup] Deleted ${statusDeleted} user_offer_statuses`);
+
+    let offerStatusDeleted = 0;
+    do {
+      batch = await prisma.$executeRaw`
+        DELETE FROM user_offers WHERE id IN (SELECT id FROM user_offers LIMIT 1000)
+      ` as unknown as { count: bigint };
+      offerStatusDeleted += Number(batch);
+    } while (Number(batch) > 0);
+    console.log(`[startup] Deleted ${offerStatusDeleted} user_offers`);
+
+    const { count: offersDeleted } = await prisma.offer.deleteMany();
+    console.log(`[startup] Deleted ${offersDeleted} offers`);
+
+    const { count: fetchesDeleted } = await prisma.offerFetch.deleteMany();
+    console.log(`[startup] Deleted ${fetchesDeleted} offer_fetches`);
+
+    await prisma.user.updateMany({
+      where: { profile_ready: true },
+      data: {
+        profile_synced_at: null,
+        sync_started_at: null,
+        pending_rematch: false,
+        free_plan_snapshot: Prisma.DbNull,
+        offer_skills: Prisma.DbNull,
+      },
+    });
+    console.log('[startup] reset sync state for all ready users');
+
+    await prisma.settings.update({ where: { key: 'drop_offers_after_build' }, data: { value: 'false' } });
+    console.log('[startup] drop_offers_after_build reset to false');
+  }
 
   console.log('[scheduler] Reading fetch_offers_after_build from DB...');
   const fetchRow = await prisma.settings.findUnique({
