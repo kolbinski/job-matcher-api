@@ -218,6 +218,12 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
     if (isSalaryOnlyChange) {
       oldPrefs = ((getField(user.profile_editing_snapshot, ['preferences', 'salary']) ?? []) as SalaryPref[])
       newPrefs = ((getField(user.profile, ['preferences', 'salary']) ?? []) as SalaryPref[])
+      console.log('[trigger-sync] salary-only change detected:')
+      for (const newPref of newPrefs) {
+        const oldPref = oldPrefs.find(p => p.type === newPref.type && p.currency === newPref.currency)
+        const oldMin = oldPref?.min ?? 'none'
+        console.log(`[trigger-sync]   ${newPref.type} ${newPref.currency}: ${oldMin} → ${newPref.min}`)
+      }
       salaryOnlyIncreased = newPrefs.every(newPref => {
         const oldPref = oldPrefs.find(p => p.type === newPref.type && p.currency === newPref.currency)
         return !oldPref || newPref.min >= oldPref.min
