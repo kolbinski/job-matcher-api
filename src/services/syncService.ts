@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
-import { deduplicateMatchResult, dedupeUserOffers } from '../utils/deduplicateOffers';
+import { deduplicateMatchResult, dedupeUserOffers, dedupKey } from '../utils/deduplicateOffers';
 // import { sendMatchReport } from './emailService';
 
 // const isTestUser = (email: string): boolean =>
@@ -480,8 +480,13 @@ export async function buildAndSaveFreePlanSnapshot(
     }),
   ])
 
+  console.log('[snapshot] allApplyNow before dedup:', allApplyNow.length)
+  for (const uo of allApplyNow.slice(0, 3)) {
+    console.log('[snapshot] dedupKey:', dedupKey(uo.offer))
+  }
   // Dedup by offer fingerprint before counting/slicing, matching GET /v1/user-offers.
   const dedupedApplyNow = dedupeUserOffers(allApplyNow)
+  console.log('[snapshot] allApplyNow after dedup:', dedupedApplyNow.length)
 
   const filteredLevelUp = allLevelUpRaw
     .filter(uo => learningGoals.length === 0 || uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
