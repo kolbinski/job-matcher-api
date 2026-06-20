@@ -399,12 +399,16 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         // when the DB still holds duplicate user_offers.
         const applyNowCount = snap.apply_now?.count ?? 0;
         const levelUpCount = snap.level_up?.count ?? 0;
+        const applyHasMore = start + pageSize < applyNowOffers.length;
+        const levelUpHasMore = start + pageSize < levelUpOffers.length;
+        const paginatedApplyNow = applyNowOffers.slice(start, start + pageSize);
+        const paginatedLevelUp = levelUpOffers.slice(start, start + pageSize);
         return res.json({
           ...snap,
           count: applyNowCount + levelUpCount,
           new_skills_count,
-          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowCount, offers: applyNowOffers } } : {}),
-          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpCount, offers: levelUpOffers } } : {}),
+          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowCount, has_more: applyHasMore, offers: paginatedApplyNow } } : {}),
+          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpCount, has_more: levelUpHasMore, offers: paginatedLevelUp } } : {}),
         });
       }
     }
