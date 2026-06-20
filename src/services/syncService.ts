@@ -5,6 +5,7 @@ import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
 import { deduplicateMatchResult, dedupeUserOffers, dedupKey } from '../utils/deduplicateOffers';
+import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 // import { sendMatchReport } from './emailService';
 
 // const isTestUser = (email: string): boolean =>
@@ -389,33 +390,20 @@ type SnapshotUO = {
   }
 }
 
-function buildSnapshotSalaryEntries(
-  employmentTypes: Prisma.JsonValue,
-  salaryPrefs: SalaryPref[],
-  rates: Record<string, number>,
-): Array<{ min: number; max: number; currency: string; type: string; delta: number; delta_normalized: number }> {
-  if (salaryPrefs.length === 0) return []
-  const types = Array.isArray(employmentTypes)
-    ? (employmentTypes as Array<{ from?: number; to?: number; currency?: string; type?: string; unit?: string }>)
-    : []
-  const entries: ReturnType<typeof buildSnapshotSalaryEntries> = []
-  for (const et of types) {
-    const { from, to, currency, type: etType, unit } = et
-    if (from == null || to == null || !currency || !etType) continue
-    const pref = salaryPrefs.find(
-      p => p.type.toLowerCase() === etType.toLowerCase() &&
-           p.currency.toUpperCase() === currency.toUpperCase()
-    )
-    if (!pref) continue
-    const effectiveTo = unit?.toLowerCase() === 'day' ? to * 20 : to
-    const delta = effectiveTo - pref.min
-    const rate = currency.toUpperCase() === 'PLN' ? 1 : (rates[currency.toUpperCase()] ?? 1)
-    entries.push({ min: from, max: to, currency, type: etType, delta, delta_normalized: Math.round(delta * rate) })
-  }
-  return entries
-}
 
-function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Record<string, number>) {
+function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Record<string, number>, preferredCurrency: string) {
+  const salaryResult = calculateUserOfferSalary(
+    Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
+    preferredCurrency,
+    salaryPrefs,
+    rates,
+  )
+  const salary = salaryResult
+    ? [
+        ...(salaryResult.contract ? [{ min: salaryResult.contract.min, max: salaryResult.contract.max, currency: salaryResult.salary_currency, delta: salaryResult.contract.delta, delta_normalized: Math.round(salaryResult.contract.delta), type: 'contract' }] : []),
+        ...(salaryResult.permanent ? [{ min: salaryResult.permanent.min, max: salaryResult.permanent.max, currency: salaryResult.salary_currency, delta: salaryResult.permanent.delta, delta_normalized: Math.round(salaryResult.permanent.delta), type: 'permanent' }] : []),
+      ]
+    : []
   return {
     user_offer_id: uo.id,
     offer_title: uo.offer.title,
@@ -429,7 +417,7 @@ function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Reco
     rejection_reason: uo.rejection_reason,
     matched_at: uo.matched_at,
     applied_at: null,
-    salary: buildSnapshotSalaryEntries(uo.offer.employment_types, salaryPrefs, rates),
+    salary,
     source: uo.offer.source,
     city: uo.offer.city ?? null,
     work_model: uo.offer.workplace_type ?? null,
@@ -466,7 +454,7 @@ export async function buildAndSaveFreePlanSnapshot(
   const snapshotWorkModel = (profile?.preferences?.work_model ?? []).map(m => m.toLowerCase())
   const snapshotOfficeCities = profile?.preferences?.office_location_cities ?? []
 
-  const [allApplyNow, allLevelUpRaw, dedupSourcePrefSetting] = await Promise.all([
+  const [allApplyNow, allLevelUpRaw, dedupSourcePrefSetting, snapshotUser] = await Promise.all([
     prisma.userOffer.findMany({
       where: { user_id: userId, status: 'pending_apply' },
       include: { offer: { select: snapshotOfferSelect } },
@@ -481,8 +469,10 @@ export async function buildAndSaveFreePlanSnapshot(
       orderBy: { claude_score: 'desc' },
     }),
     prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { preferred_currency: true } }),
   ])
   const snapshotPreferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined
+  const snapshotPreferredCurrency = snapshotUser?.preferred_currency ?? 'PLN'
 
   console.log('[snapshot] allApplyNow before dedup:', allApplyNow.length)
   for (const uo of allApplyNow.slice(0, 3)) {
@@ -505,12 +495,12 @@ export async function buildAndSaveFreePlanSnapshot(
     apply_now: {
       count: dedupedApplyNow.length,
       status: 'pending_apply',
-      offers: applyNowOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
+      offers: applyNowOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates, snapshotPreferredCurrency)),
     },
     level_up: {
       count: dedupedLevelUp.length,
       status: 'ai_rejected',
-      offers: levelUpOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates)),
+      offers: levelUpOffers.map(uo => mapSnapshotOffer(uo as unknown as SnapshotUO, salaryPrefs, exchangeRates, snapshotPreferredCurrency)),
     },
   }
 
