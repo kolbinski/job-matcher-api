@@ -144,10 +144,14 @@ onboardingRouter.post(
     const prompt = `You are a CV parser. Extract structured data from the CV text below and return it as a JSON object matching the exact schema provided.
 
 SCHEMA:
-${PROFILE_SCHEMA}
+{
+  "is_cv": true,
+  "profile": ${PROFILE_SCHEMA}
+}
 
 RULES:
 - Return ONLY valid JSON. Do NOT wrap in markdown code fences or backticks.
+- is_cv: set to true if the document is a CV or resume; set to false if it appears to be something else (invoice, article, contract, random PDF, etc.)
 - Use null for fields that cannot be determined from the CV
 - Use empty arrays [] for list fields with no data
 - experience_level: junior = 0-2 yrs, mid = 2-5 yrs, senior = 5-8 yrs, lead = 8-12 yrs, principal/staff/architect = 10+ yrs with broad technical influence, c_level = executive
@@ -194,10 +198,9 @@ ${cvText.slice(0, 12000)}`;
     const rawText = data.content[0].text.trim();
     const clean = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
 
-    let profile: unknown;
+    let parsed: unknown;
     try {
-      profile = JSON.parse(clean);
-
+      parsed = JSON.parse(clean);
     } catch {
       throw new AppError(
         500,
@@ -205,6 +208,10 @@ ${cvText.slice(0, 12000)}`;
         'Profile parsing failed — Claude returned invalid JSON',
       );
     }
+
+    const wrapper = parsed as { is_cv?: boolean; profile?: unknown };
+    const is_cv = typeof wrapper.is_cv === 'boolean' ? wrapper.is_cv : true;
+    const profile = wrapper.profile ?? parsed;
 
     const p = profile as {
       basic_info?: { github?: string | null; linkedin?: string | null };
@@ -259,7 +266,7 @@ ${cvText.slice(0, 12000)}`;
         .catch(err => console.error('[ai_usage] insert failed:', err));
     }
 
-    return res.json({ profile });
+    return res.json({ profile, is_cv });
   },
 );
 
