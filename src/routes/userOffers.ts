@@ -20,7 +20,7 @@ const QuerySchema = z.object({
   min_score: z.coerce.number().int().min(0).optional(),
   generated_cv: z.enum(['true', 'false']).optional(),
   generated_cl: z.enum(['true', 'false']).optional(),
-  sort_by: z.enum(['score', 'salary_delta']).optional(),
+  sort_by: z.enum(['score', 'salary_delta', 'published_at']).optional(),
   known_apply_count: z.coerce.number().int().min(0).optional(),
   known_level_up_count: z.coerce.number().int().min(0).optional(),
   known_new_skills_count: z.coerce.number().int().min(0).optional(),
@@ -458,6 +458,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         },
         orderBy: sortBy === 'salary_delta'
           ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+          : sortBy === 'published_at'
+          ? [{ offer: { published_at: 'desc' } }]
           : [{ claude_score: 'desc' }],
       });
 
@@ -667,6 +669,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     },
     orderBy: sortBy === 'salary_delta'
       ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
+      : sortBy === 'published_at'
+      ? [{ offer: { published_at: 'desc' } }]
       : [{ claude_score: 'desc' }],
   });
 

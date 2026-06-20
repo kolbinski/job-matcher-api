@@ -357,7 +357,7 @@ async function _syncUserById(userId: string): Promise<void> {
 const snapshotOfferSelect = {
   title: true, company_name: true, url: true, employment_types: true,
   source: true, city: true, workplace_type: true, required_skills: true, nice_to_have_skills: true,
-  experience_level: true, working_time: true,
+  experience_level: true, working_time: true, published_at: true,
 } as const
 
 type SnapshotUO = {
@@ -385,6 +385,7 @@ type SnapshotUO = {
     workplace_type: string | null
     required_skills: string[]
     nice_to_have_skills: string[]
+    published_at: Date | null
   }
 }
 
