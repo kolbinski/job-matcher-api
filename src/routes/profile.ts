@@ -244,10 +244,10 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
       include: { offer: { select: { employment_types: true } } },
     })
-    console.log(`[trigger-sync] fetched ${existingOffers.length} pending_apply/ai_rejected offers to recalculate`)
 
-    let keptCount = 0
-    let rejectedCount = 0
+    type KeepEntry = { id: string; contractDelta: number | null; permanentDelta: number | null; currency: string }
+    const toReject: string[] = []
+    const toKeep: KeepEntry[] = []
 
     for (const uo of existingOffers) {
       const salaryResult = calculateUserOfferSalary(
@@ -260,30 +260,35 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
         salaryResult?.contract?.delta ?? -Infinity,
         salaryResult?.permanent?.delta ?? -Infinity,
       )
-      const newContractDelta = salaryResult?.contract?.delta ?? null
-      console.log(
-        `[trigger-sync] offer ${uo.offer_id}: old_contract_delta=${uo.salary_contract_delta} new_contract_delta=${newContractDelta} → ${!salaryResult || bestDelta < 0 ? 'pre_filter_rejected' : 'kept'}`,
-      )
-
       if (!salaryResult || bestDelta < 0) {
-        await prisma.userOffer.update({
-          where: { id: uo.id },
-          data: { status: 'pre_filter_rejected', salary_contract_delta: null, salary_permanent_delta: null },
-        })
-        rejectedCount++
+        toReject.push(uo.id)
       } else {
-        await prisma.userOffer.update({
-          where: { id: uo.id },
-          data: {
-            salary_contract_delta: salaryResult.contract?.delta ?? null,
-            salary_permanent_delta: salaryResult.permanent?.delta ?? null,
-            salary_currency: salaryResult.salary_currency,
-          },
+        toKeep.push({
+          id: uo.id,
+          contractDelta: salaryResult.contract?.delta ?? null,
+          permanentDelta: salaryResult.permanent?.delta ?? null,
+          currency: salaryResult.salary_currency,
         })
-        keptCount++
       }
     }
-    return [keptCount, rejectedCount]
+
+    if (toReject.length > 0) {
+      await prisma.userOffer.updateMany({
+        where: { id: { in: toReject } },
+        data: { status: 'pre_filter_rejected', salary_contract_delta: null, salary_permanent_delta: null },
+      })
+    }
+    if (toKeep.length > 0) {
+      await prisma.$transaction(
+        toKeep.map(o => prisma.userOffer.update({
+          where: { id: o.id },
+          data: { salary_contract_delta: o.contractDelta, salary_permanent_delta: o.permanentDelta, salary_currency: o.currency },
+        }))
+      )
+    }
+
+    console.log(`[trigger-sync] salary recalc: kept ${toKeep.length}, rejected ${toReject.length}`)
+    return [toKeep.length, toReject.length]
   }
 
   // ── Step 3: salary-only increase — partial re-sync, no Claude ─────────────────
