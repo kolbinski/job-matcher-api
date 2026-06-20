@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { runMatchForUser } from './matchService';
 import { buildEmailReport } from './emailReport';
 import { buildSyncReport, type SalaryPref } from './syncReport';
-import { deduplicateMatchResult, dedupeUserOffers, dedupKey } from '../utils/deduplicateOffers';
+import { deduplicateMatchResult, dedupeUserOffers } from '../utils/deduplicateOffers';
 import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 // import { sendMatchReport } from './emailService';
 
@@ -474,13 +474,8 @@ export async function buildAndSaveFreePlanSnapshot(
   const snapshotPreferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined
   const snapshotPreferredCurrency = snapshotUser?.preferred_currency ?? 'PLN'
 
-  console.log('[snapshot] allApplyNow before dedup:', allApplyNow.length)
-  for (const uo of allApplyNow.slice(0, 3)) {
-    console.log('[snapshot] dedupKey:', dedupKey(uo.offer, snapshotWorkModel, snapshotOfficeCities))
-  }
   // Dedup by offer fingerprint before counting/slicing, matching GET /v1/user-offers.
   const dedupedApplyNow = dedupeUserOffers(allApplyNow, snapshotPreferredSource, snapshotWorkModel, snapshotOfficeCities)
-  console.log('[snapshot] allApplyNow after dedup:', dedupedApplyNow.length)
 
   const filteredLevelUp = allLevelUpRaw
     .filter(uo => learningGoals.length === 0 || uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))

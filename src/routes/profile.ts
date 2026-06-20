@@ -400,6 +400,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
         profile_relevant_change_pending: false,
         profile_synced_at: new Date(),
         profile_editing_snapshot: Prisma.JsonNull,
+        free_plan_snapshot: Prisma.JsonNull,
       },
     })
   } else {
