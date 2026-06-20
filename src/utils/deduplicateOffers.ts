@@ -1,6 +1,6 @@
 import type { MatchedOffer, StretchOffer, MatchResponse } from '../types/match'
 
-export type EtEntry = { type?: string; currency?: string; unit?: string; from?: number; to?: number }
+export type EtEntry = { type?: string; currency?: string; unit?: string; from?: number; to?: number; currencySource?: string | null }
 
 export interface DedupableOffer {
   source: string
@@ -19,6 +19,7 @@ export function dedupKey(offer: DedupableOffer): string {
   const req = [...offer.required_skills].sort()
   const nth = [...offer.nice_to_have_skills].sort()
   const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
+    .filter(e => !e.currencySource || e.currencySource === 'original')
     .slice()
     .sort((a, b) => {
       if ((a.type ?? '') !== (b.type ?? '')) return (a.type ?? '') < (b.type ?? '') ? -1 : 1
