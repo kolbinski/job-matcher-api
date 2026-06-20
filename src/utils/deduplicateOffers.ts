@@ -20,7 +20,7 @@ export function dedupKey(offer: DedupableOffer, userWorkModel?: string[], userOf
   const nth = [...offer.nice_to_have_skills].sort()
   const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
     .filter(e => !e.currencySource || e.currencySource === 'original')
-    .slice()
+    .map(e => ({ type: e.type, currency: e.currency, from: e.from, to: e.to, unit: e.unit }))
     .sort((a, b) => {
       if ((a.type ?? '') !== (b.type ?? '')) return (a.type ?? '') < (b.type ?? '') ? -1 : 1
       if ((a.currency ?? '') !== (b.currency ?? '')) return (a.currency ?? '') < (b.currency ?? '') ? -1 : 1
