@@ -335,7 +335,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
   // ── Multi-status path ──────────────────────────────────────────────────────
   if (statuses.length > 1) {
-    const [{ learningGoals }, subscription, pageSizeSetting, dbUser, exchangeRatesSetting] =
+    const [{ learningGoals }, subscription, pageSizeSetting, dbUser, exchangeRatesSetting, dedupSourcePrefSetting] =
       await Promise.all([
         loadClientProfile(clientId),
         role === 'client'
@@ -350,18 +350,22 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           select: { preferred_currency: true, profile: true, offer_skills: true },
         }),
         prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+        prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
       ]);
     const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
     const exchangeRates: Record<string, number> = exchangeRatesSetting
       ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
       : {};
-    const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }> } } | null;
+    const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }>; work_model?: string[]; office_location_cities?: string[] } } | null;
     const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
       type: p.type,
       currency: p.currency,
       min: p.min,
       unit: p.unit,
     }));
+    const multiUserWorkModel = (rawProfile?.preferences?.work_model ?? []).map(m => m.toLowerCase());
+    const multiUserOfficeCities = rawProfile?.preferences?.office_location_cities ?? [];
+    const multiPreferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined;
     interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
     const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
     const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
@@ -463,8 +467,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           : [{ claude_score: 'desc' }],
       });
 
-      // Dedup: one row per offer fingerprint (highest claude_score, tie-break matched_at)
-      let result = dedupeUserOffers(rows);
+      // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
+      let result = dedupeUserOffers(rows, multiPreferredSource, multiUserWorkModel, multiUserOfficeCities);
 
       // ai_rejected salary + missing-skills filters now live in the query above;
       // learning-goals personalization stays here.
@@ -674,7 +678,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       : [{ claude_score: 'desc' }],
   });
 
-  const [{ learningGoals }, pageSizeSetting, dbUser, exchangeRatesSetting] = await Promise.all([
+  const [{ learningGoals }, pageSizeSetting, dbUser, exchangeRatesSetting, singleDedupSourcePrefSetting] = await Promise.all([
     loadClientProfile(clientId),
     prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
     prisma.user.findUnique({
@@ -682,25 +686,29 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       select: { preferred_currency: true, profile: true, offer_skills: true },
     }),
     prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
+    prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
   ]);
   const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
   const exchangeRates: Record<string, number> = exchangeRatesSetting
     ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
     : {};
-  const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }> } } | null;
+  const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }>; work_model?: string[]; office_location_cities?: string[] } } | null;
   const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
     type: p.type,
     currency: p.currency,
     min: p.min,
     unit: p.unit,
   }));
+  const singleUserWorkModel = (rawProfile?.preferences?.work_model ?? []).map(m => m.toLowerCase());
+  const singleUserOfficeCities = rawProfile?.preferences?.office_location_cities ?? [];
+  const singlePreferredSource = singleDedupSourcePrefSetting ? (JSON.parse(singleDedupSourcePrefSetting.value) as string) : undefined;
   interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
   const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
   const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
   const start = (page - 1) * pageSize;
 
-  // Dedup: one row per offer fingerprint (highest claude_score, tie-break matched_at)
-  let result = dedupeUserOffers(userOffers);
+  // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
+  let result = dedupeUserOffers(userOffers, singlePreferredSource, singleUserWorkModel, singleUserOfficeCities);
 
   if (status === 'ai_rejected') {
     result = result.filter(uo => hasSalaryData(uo.offer.employment_types));

@@ -15,7 +15,7 @@ export interface DedupableOffer {
   city: string | null
 }
 
-export function dedupKey(offer: DedupableOffer): string {
+export function dedupKey(offer: DedupableOffer, userWorkModel?: string[], userOfficeCities?: string[]): string {
   const req = [...offer.required_skills].sort()
   const nth = [...offer.nice_to_have_skills].sort()
   const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
@@ -28,10 +28,21 @@ export function dedupKey(offer: DedupableOffer): string {
       if ((a.from ?? 0) !== (b.from ?? 0)) return (a.from ?? 0) - (b.from ?? 0)
       return (a.to ?? 0) - (b.to ?? 0)
     })
+
+  const isRemoteOnly = userWorkModel && userWorkModel.length > 0 && userWorkModel.every(m => m === 'remote')
+  let city: string | null
+  if (isRemoteOnly) {
+    city = null
+  } else if (userWorkModel && (userWorkModel.includes('hybrid') || userWorkModel.includes('office'))) {
+    city = (userOfficeCities ?? []).includes(offer.city ?? '') ? offer.city : null
+  } else {
+    city = offer.city ?? null
+  }
+
   return JSON.stringify([
-    offer.source, offer.title, offer.company_name,
+    offer.title, offer.company_name,
     offer.experience_level, offer.workplace_type, offer.working_time,
-    req, nth, ets, offer.city,
+    req, nth, ets, city,
   ])
 }
 
@@ -41,21 +52,34 @@ export interface DedupableUserOffer {
   matched_at: Date
 }
 
-// Collapse user_offer rows that share an offer fingerprint, keeping the row with the
-// highest claude_score (tie-break: most recent matched_at). Shared by GET /v1/user-offers
-// (both paths) and buildAndSaveFreePlanSnapshot.
-export function dedupeUserOffers<T extends DedupableUserOffer>(rows: T[]): T[] {
+// Collapse user_offer rows that share an offer fingerprint.
+// Tie-break order: preferred source → highest claude_score → most recent matched_at.
+// Shared by GET /v1/user-offers (both paths) and buildAndSaveFreePlanSnapshot.
+export function dedupeUserOffers<T extends DedupableUserOffer>(
+  rows: T[],
+  preferredSource?: string,
+  userWorkModel?: string[],
+  userOfficeCities?: string[],
+): T[] {
   const seen = new Map<string, T>()
   for (const uo of rows) {
-    const key = dedupKey(uo.offer)
+    const key = dedupKey(uo.offer, userWorkModel, userOfficeCities)
     const prev = seen.get(key)
     if (!prev) {
       seen.set(key, uo)
     } else {
-      const prevScore = prev.claude_score ?? -1
-      const newScore = uo.claude_score ?? -1
-      if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+      const curIsPreferred = preferredSource ? uo.offer.source === preferredSource : false
+      const prevIsPreferred = preferredSource ? prev.offer.source === preferredSource : false
+      if (curIsPreferred && !prevIsPreferred) {
         seen.set(key, uo)
+      } else if (!curIsPreferred && prevIsPreferred) {
+        // keep prev
+      } else {
+        const prevScore = prev.claude_score ?? -1
+        const newScore = uo.claude_score ?? -1
+        if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+          seen.set(key, uo)
+        }
       }
     }
   }

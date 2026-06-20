@@ -461,10 +461,12 @@ export async function buildAndSaveFreePlanSnapshot(
   const maxApplyNow = limits?.max_apply_now ?? null
   const maxLevelUp = limits?.max_level_up ?? null
 
-  const profile = userProfile as unknown as { preferences?: { learning_skills_goals?: string[] } } | null
+  const profile = userProfile as unknown as { preferences?: { learning_skills_goals?: string[]; work_model?: string[]; office_location_cities?: string[] } } | null
   const learningGoals = (profile?.preferences?.learning_skills_goals ?? []).map(g => g.toLowerCase())
+  const snapshotWorkModel = (profile?.preferences?.work_model ?? []).map(m => m.toLowerCase())
+  const snapshotOfficeCities = profile?.preferences?.office_location_cities ?? []
 
-  const [allApplyNow, allLevelUpRaw] = await Promise.all([
+  const [allApplyNow, allLevelUpRaw, dedupSourcePrefSetting] = await Promise.all([
     prisma.userOffer.findMany({
       where: { user_id: userId, status: 'pending_apply' },
       include: { offer: { select: snapshotOfferSelect } },
@@ -478,19 +480,21 @@ export async function buildAndSaveFreePlanSnapshot(
       include: { offer: { select: snapshotOfferSelect } },
       orderBy: { claude_score: 'desc' },
     }),
+    prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
   ])
+  const snapshotPreferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined
 
   console.log('[snapshot] allApplyNow before dedup:', allApplyNow.length)
   for (const uo of allApplyNow.slice(0, 3)) {
-    console.log('[snapshot] dedupKey:', dedupKey(uo.offer))
+    console.log('[snapshot] dedupKey:', dedupKey(uo.offer, snapshotWorkModel, snapshotOfficeCities))
   }
   // Dedup by offer fingerprint before counting/slicing, matching GET /v1/user-offers.
-  const dedupedApplyNow = dedupeUserOffers(allApplyNow)
+  const dedupedApplyNow = dedupeUserOffers(allApplyNow, snapshotPreferredSource, snapshotWorkModel, snapshotOfficeCities)
   console.log('[snapshot] allApplyNow after dedup:', dedupedApplyNow.length)
 
   const filteredLevelUp = allLevelUpRaw
     .filter(uo => learningGoals.length === 0 || uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
-  const dedupedLevelUp = dedupeUserOffers(filteredLevelUp)
+  const dedupedLevelUp = dedupeUserOffers(filteredLevelUp, snapshotPreferredSource, snapshotWorkModel, snapshotOfficeCities)
 
   const applyNowOffers = maxApplyNow != null ? dedupedApplyNow.slice(0, maxApplyNow) : dedupedApplyNow
   const levelUpOffers = maxLevelUp != null ? dedupedLevelUp.slice(0, maxLevelUp) : dedupedLevelUp

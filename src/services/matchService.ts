@@ -261,7 +261,7 @@ export async function runMatchForUser(
   const dedupMap = new Map<string, MatchedPair>();
   const duplicatesByKey = new Map<string, MatchedPair[]>();
   for (const pair of filteredPairs) {
-    const key = dedupKey(pair.original);
+    const key = dedupKey(pair.original, norm.workModel, profile.preferences?.office_location_cities ?? []);
     if (!dedupMap.has(key)) {
       dedupMap.set(key, pair);
       duplicatesByKey.set(key, []);
@@ -407,7 +407,7 @@ export async function runMatchForUser(
       for (let i = 0; i < batch.length; i++) {
         const p = batch[i];
         if (p.offer.recommended === null) continue;
-        const key = dedupKey(p.original);
+        const key = dedupKey(p.original, norm.workModel, profile.preferences?.office_location_cities ?? []);
         const dups = duplicatesByKey.get(key) ?? [];
         if (dups.length === 0) continue;
         const isPendingApply = p.offer.recommended === true || p.offer.missing_skills.length === 0;
