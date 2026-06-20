@@ -299,6 +299,8 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       : {}
     const preferredCurrency = user.preferred_currency ?? 'USD'
 
+    await prisma.user.update({ where: { id: userId }, data: { free_plan_snapshot: Prisma.JsonNull } })
+
     const [keptCount, rejectedCount] = await recalculateSalaryDeltas(newPrefs, exchangeRates, preferredCurrency)
     console.log(`[trigger-sync] salary-only increase: kept ${keptCount} offers, rejected ${rejectedCount} offers`)
 
@@ -359,12 +361,11 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       await prisma.userOffer.deleteMany({ where: { id: { in: qualifyingIds } } })
     }
 
+    await prisma.user.update({ where: { id: userId }, data: { free_plan_snapshot: Prisma.JsonNull } })
+
     // Recalculate deltas for existing pending_apply/ai_rejected
     const [keptCount, rejectedCount] = await recalculateSalaryDeltas(newPrefs, exchangeRates, preferredCurrency)
     console.log(`[trigger-sync] salary decreased: recalculated deltas for ${keptCount + rejectedCount} existing offers`)
-
-    await buildAndSaveFreePlanSnapshot(userId, newPrefs, exchangeRates, user.profile)
-    console.log('[trigger-sync] salary decreased: snapshot rebuilt')
 
     await prisma.user.update({
       where: { id: userId },
