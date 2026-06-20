@@ -211,12 +211,6 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
       stableStringify(getField(user.profile, ['preferences', 'salary']))
     isSalaryOnlyChange = !nonSalaryChange && salaryChanged
 
-    console.log('[trigger-sync] nonSalaryChange:', nonSalaryChange)
-    console.log('[trigger-sync] salaryChanged:', salaryChanged)
-    console.log('[trigger-sync] isSalaryOnlyChange:', isSalaryOnlyChange)
-    console.log('[trigger-sync] old salary prefs:', JSON.stringify(getField(user.profile_editing_snapshot, ['preferences', 'salary'])))
-    console.log('[trigger-sync] new salary prefs:', JSON.stringify(getField(user.profile, ['preferences', 'salary'])))
-
     if (isSalaryOnlyChange) {
       oldPrefs = ((getField(user.profile_editing_snapshot, ['preferences', 'salary']) ?? []) as SalaryPref[])
       newPrefs = ((getField(user.profile, ['preferences', 'salary']) ?? []) as SalaryPref[])
