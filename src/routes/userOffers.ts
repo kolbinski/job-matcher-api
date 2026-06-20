@@ -472,7 +472,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       });
 
       // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
-      console.log('[dedup] userWorkModel:', multiUserWorkModel, 'userOfficeCities:', multiUserOfficeCities)
       let result = dedupeUserOffers(rows, multiPreferredSource, multiUserWorkModel, multiUserOfficeCities);
 
       // ai_rejected salary + missing-skills filters now live in the query above;
@@ -713,7 +712,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
   const start = (page - 1) * pageSize;
 
   // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
-  console.log('[dedup] userWorkModel:', singleUserWorkModel, 'userOfficeCities:', singleUserOfficeCities)
   let result = dedupeUserOffers(userOffers, singlePreferredSource, singleUserWorkModel, singleUserOfficeCities);
 
   if (status === 'ai_rejected') {
