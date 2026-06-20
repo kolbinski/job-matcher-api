@@ -24,6 +24,7 @@ const QuerySchema = z.object({
   known_apply_count: z.coerce.number().int().min(0).optional(),
   known_level_up_count: z.coerce.number().int().min(0).optional(),
   known_new_skills_count: z.coerce.number().int().min(0).optional(),
+  with_salary: z.enum(['true', 'false']).optional(),
 });
 
 interface ClientProfile {
@@ -284,6 +285,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     sort_by: sortBy,
     known_apply_count: knownApplyCount,
     known_level_up_count: knownLevelUpCount,
+    with_salary,
   } = parsed.data;
   const page = pageParam ?? 1;
   const minScore = minScoreParam ?? 0;
@@ -293,6 +295,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     if (minScore > 0) arr = arr.filter(o => ((o['claude_score'] as number | null) ?? 0) >= minScore);
     if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
     if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
+    if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0);
     return arr;
   };
   // level_up offers are not score-gated — minScore applies to apply_now only.
@@ -300,6 +303,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     let arr = offers as Array<Record<string, unknown>>;
     if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
     if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
+    if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0);
     return arr;
   };
   const { role, agent_id, user_id } = req.jwt!;
@@ -449,6 +453,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         ...(bucketStatus === 'pending_apply' && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
         ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
         ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
+        // ai_rejected already enforces salary delta via its OR clause above.
+        ...(with_salary === 'true' && bucketStatus !== 'ai_rejected' ? { OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] } : {}),
         ...(Object.keys(bucketOfferWhere).length > 0
           ? { offer: bucketOfferWhere }
           : {}),
@@ -619,6 +625,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     ...(isScoreStatus && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
     ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
     ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
+    ...(with_salary === 'true' ? { OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] } : {}),
     ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
   };
 
