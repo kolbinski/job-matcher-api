@@ -351,7 +351,7 @@ async function _syncUserById(userId: string): Promise<void> {
     data: { profile_synced_at: new Date() },
   });
 
-  await buildAndSaveFreePlanSnapshot(userId, salaryPrefs, exchangeRates, user.profile);
+  await buildAndSaveFreePlanSnapshot(userId, salaryPrefs, exchangeRates, user.profile, syncStartedAt);
 
 }
 
@@ -438,6 +438,7 @@ export async function buildAndSaveFreePlanSnapshot(
   salaryPrefs: SalaryPref[],
   exchangeRates: Record<string, number>,
   userProfile: Prisma.JsonValue,
+  syncStartedAt?: Date,
 ): Promise<void> {
   const sub = await prisma.subscription.findFirst({
     where: { user_id: userId, status: 'active' },
@@ -499,9 +500,13 @@ export async function buildAndSaveFreePlanSnapshot(
     },
   }
 
-  const userBeforeSnapshot = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  const userBeforeSnapshot = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, sync_started_at: true } });
   if (!userBeforeSnapshot) {
     console.log(`[sync] User ${userId} deleted during sync, skipping free_plan_snapshot write`);
+    return;
+  }
+  if (syncStartedAt && userBeforeSnapshot.sync_started_at?.getTime() !== syncStartedAt.getTime()) {
+    console.log(`[snapshot] skipping — sync_started_at mismatch, newer sync took over`);
     return;
   }
   await prisma.user.update({
