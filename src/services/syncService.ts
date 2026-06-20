@@ -435,6 +435,7 @@ function mapSnapshotOffer(uo: SnapshotUO, salaryPrefs: SalaryPref[], rates: Reco
     work_model: uo.offer.workplace_type ?? null,
     required_skills: uo.offer.required_skills,
     nice_to_have_skills: uo.offer.nice_to_have_skills,
+    published_at: uo.offer.published_at ?? null,
     cv_language: uo.cv_language,
     cv_status: uo.cv_status ?? null,
     cv_url: uo.cv_url ?? null,
