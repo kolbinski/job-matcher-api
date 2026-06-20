@@ -312,6 +312,17 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
   // ── Step 4: salary-only decrease — partial re-sync, Claude for new qualifiers ─
   if (isSalaryOnlyChange && !salaryOnlyIncreased) {
+    const existingOfferCount = await prisma.userOffer.count({
+      where: { user_id: userId, status: { in: ['pending_apply', 'ai_rejected'] } },
+    })
+
+    if (existingOfferCount === 0) {
+      console.log('[trigger-sync] salary decreased but no existing offers to preserve — running full sync')
+      isSalaryOnlyChange = false
+    }
+  }
+
+  if (isSalaryOnlyChange && !salaryOnlyIncreased) {
     console.log('[trigger-sync] salary min decreased — partial re-sync with Claude for newly qualifying offers')
     console.log(`[trigger-sync] old salary prefs: ${JSON.stringify(oldPrefs)}`)
     console.log(`[trigger-sync] new salary prefs: ${JSON.stringify(newPrefs)}`)
