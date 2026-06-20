@@ -1,7 +1,5 @@
 import type { MatchedOffer, StretchOffer, MatchResponse } from '../types/match'
 
-export type EtEntry = { type?: string; currency?: string; unit?: string; from?: number; to?: number; currencySource?: string | null }
-
 export interface DedupableOffer {
   source: string
   title: string
@@ -18,16 +16,6 @@ export interface DedupableOffer {
 export function dedupKey(offer: DedupableOffer, userWorkModel?: string[], userOfficeCities?: string[]): string {
   const req = [...offer.required_skills].sort()
   const nth = [...offer.nice_to_have_skills].sort()
-  const ets = (Array.isArray(offer.employment_types) ? (offer.employment_types as EtEntry[]) : [])
-    .filter(e => !e.currencySource || e.currencySource === 'original')
-    .map(e => ({ type: e.type, currency: e.currency, from: e.from, to: e.to, unit: e.unit }))
-    .sort((a, b) => {
-      if ((a.type ?? '') !== (b.type ?? '')) return (a.type ?? '') < (b.type ?? '') ? -1 : 1
-      if ((a.currency ?? '') !== (b.currency ?? '')) return (a.currency ?? '') < (b.currency ?? '') ? -1 : 1
-      if ((a.unit ?? '') !== (b.unit ?? '')) return (a.unit ?? '') < (b.unit ?? '') ? -1 : 1
-      if ((a.from ?? 0) !== (b.from ?? 0)) return (a.from ?? 0) - (b.from ?? 0)
-      return (a.to ?? 0) - (b.to ?? 0)
-    })
 
   const isRemoteOnly = userWorkModel && userWorkModel.length > 0 && userWorkModel.every(m => m === 'remote')
   let city: string | null
@@ -41,8 +29,8 @@ export function dedupKey(offer: DedupableOffer, userWorkModel?: string[], userOf
 
   return JSON.stringify([
     offer.title, offer.company_name,
-    offer.experience_level, offer.workplace_type, offer.working_time,
-    req, nth, ets, city,
+    offer.experience_level, offer.workplace_type,
+    req, nth, city,
   ])
 }
 
