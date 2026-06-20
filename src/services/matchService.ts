@@ -19,6 +19,7 @@ import type {
 import { parseEmploymentTypes } from '../lib/offers';
 import { calculateUserOfferSalary } from '../lib/salaryCalculator';
 import { calculateCost } from '../lib/aiCost';
+import { dedupKey } from '../utils/deduplicateOffers';
 
 export type MatchedPair = { offer: MatchedOffer; original: Offer };
 
@@ -252,18 +253,41 @@ export async function runMatchForUser(
   );
   const filteredPairs = applyPostScoreFilters(pairs, opts?.filters);
 
+  // ── 7b. Dedup filteredPairs before Claude batching ─────────────────────────
+  // Offers that share a dedupKey fingerprint (same title/company/skills/etc. across
+  // regions or sources) are collapsed to one representative. After Claude evaluates
+  // the representative, its result is copied to all duplicates so every variant
+  // gets a user_offer row with the correct status — without extra Claude calls.
+  const dedupMap = new Map<string, MatchedPair>();
+  const duplicatesByKey = new Map<string, MatchedPair[]>();
+  for (const pair of filteredPairs) {
+    const key = dedupKey(pair.original);
+    if (!dedupMap.has(key)) {
+      dedupMap.set(key, pair);
+      duplicatesByKey.set(key, []);
+    } else {
+      const dups = duplicatesByKey.get(key);
+      if (dups) dups.push(pair);
+    }
+  }
+  const dedupedPairs = [...dedupMap.values()];
+  const duplicateCount = filteredPairs.length - dedupedPairs.length;
+  if (duplicateCount > 0) {
+    console.log(`[match] dedup: ${filteredPairs.length} offers before, ${dedupedPairs.length} after (${duplicateCount} duplicates removed)`);
+  }
+
   // ── 8. Claude evaluation — insert each batch immediately after evaluation ──
   // Rows are persisted before the next Claude API call so a mid-run failure
   // leaves already-processed batches saved and seenIds grows with each batch.
   let aiScoring = false;
   let claudeEvaluationsCount = 0;
 
-  if (doAiScoring && !isTestUser && filteredPairs.length === 0) {
+  if (doAiScoring && !isTestUser && dedupedPairs.length === 0) {
     console.log('[match] No offers to evaluate — skipping Claude API call');
   } else if (doAiScoring && !isTestUser) {
-    const allBatches: (typeof filteredPairs)[] = [];
-    for (let i = 0; i < filteredPairs.length; i += claudeBatchSize) {
-      allBatches.push(filteredPairs.slice(i, i + claudeBatchSize));
+    const allBatches: (typeof dedupedPairs)[] = [];
+    for (let i = 0; i < dedupedPairs.length; i += claudeBatchSize) {
+      allBatches.push(dedupedPairs.slice(i, i + claudeBatchSize));
     }
     const aiMaxBatches = devMode.ai_max_batches ?? 0;
     const batchesToProcess =
@@ -378,19 +402,57 @@ export async function runMatchForUser(
           };
         });
 
+      // Build rows for duplicate offers using the representative's Claude result
+      const duplicateRows: typeof batchRows = [];
+      for (let i = 0; i < batch.length; i++) {
+        const p = batch[i];
+        if (p.offer.recommended === null) continue;
+        const key = dedupKey(p.original);
+        const dups = duplicatesByKey.get(key) ?? [];
+        if (dups.length === 0) continue;
+        const isPendingApply = p.offer.recommended === true || p.offer.missing_skills.length === 0;
+        const cvLang = cvLanguageByIndex.get(i) ?? 'en';
+        for (const dup of dups) {
+          const dupSalaryResult = calculateUserOfferSalary(
+            Array.isArray(dup.original.employment_types) ? dup.original.employment_types : [],
+            preferredCurrency,
+            salaryPrefs,
+            exchangeRates,
+          );
+          duplicateRows.push({
+            user_id: userId,
+            offer_id: dup.original.id,
+            status: isPendingApply ? 'pending_apply' : 'ai_rejected',
+            rejection_reason: !isPendingApply ? (p.offer.role_fit ?? null) : null,
+            claude_score: p.offer.score,
+            claude_role_fit: p.offer.role_fit ?? null,
+            claude_matched_reasons: p.offer.matched_reasons,
+            missing_skills: p.offer.missing_skills,
+            claude_recommended: p.offer.recommended,
+            cv_language: cvLang,
+            matched_at: now,
+            updated_at: now,
+            salary_currency: dupSalaryResult?.salary_currency ?? null,
+            salary_contract_delta: dupSalaryResult?.contract?.delta ?? null,
+            salary_permanent_delta: dupSalaryResult?.permanent?.delta ?? null,
+          });
+        }
+      }
+      const allRowsToInsert = [...batchRows, ...duplicateRows];
+
       let batchPendingApplyCount = 0;
-      if (batchRows.length > 0) {
+      if (allRowsToInsert.length > 0) {
         const existingClaudeOffers = await prisma.offer.findMany({
-          where: { id: { in: batchRows.map(r => r.offer_id) } },
+          where: { id: { in: allRowsToInsert.map(r => r.offer_id) } },
           select: { id: true },
         });
         const existingClaudeIds = new Set(existingClaudeOffers.map(o => o.id));
-        const validBatchRows = batchRows.filter(r =>
+        const validBatchRows = allRowsToInsert.filter(r =>
           existingClaudeIds.has(r.offer_id),
         );
-        if (validBatchRows.length !== batchRows.length) {
+        if (validBatchRows.length !== allRowsToInsert.length) {
           console.warn(
-            `[match] Skipping ${batchRows.length - validBatchRows.length} claude rows with missing offer_ids`,
+            `[match] Skipping ${allRowsToInsert.length - validBatchRows.length} claude rows with missing offer_ids`,
           );
         }
         if (validBatchRows.length > 0) {
