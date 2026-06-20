@@ -256,11 +256,15 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
         salaryPrefs,
         exchangeRates,
       )
+      if (!salaryResult) {
+        // Salary not disclosed — cannot filter, keep as-is with no delta update
+        continue
+      }
       const bestDelta = Math.max(
-        salaryResult?.contract?.delta ?? -Infinity,
-        salaryResult?.permanent?.delta ?? -Infinity,
+        salaryResult.contract?.delta ?? -Infinity,
+        salaryResult.permanent?.delta ?? -Infinity,
       )
-      if (!salaryResult || bestDelta < 0) {
+      if (bestDelta < 0) {
         toReject.push(uo.id)
       } else {
         toKeep.push({
