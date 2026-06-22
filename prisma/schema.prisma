@@ -172,6 +172,7 @@ model UserOffer {
   salary_currency          String?
   salary_contract_delta    Float?
   salary_permanent_delta   Float?
+  is_starred               Boolean           @default(false)
   status_history           UserOfferStatus[]
   offer                    Offer             @relation(fields: [offer_id], references: [id], onDelete: Cascade)
   user                     User              @relation(fields: [user_id], references: [id], onDelete: Cascade)

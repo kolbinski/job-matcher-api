@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { validateJwt } from '../middleware/validateJwt';
 import { dedupeUserOffers } from '../utils/deduplicateOffers';
@@ -16,7 +15,6 @@ const QuerySchema = z.object({
   source: z.string().optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
-  page: z.coerce.number().int().min(1).optional(),
   min_score: z.coerce.number().int().min(0).optional(),
   generated_cv: z.enum(['true', 'false']).optional(),
   generated_cl: z.enum(['true', 'false']).optional(),
@@ -25,6 +23,14 @@ const QuerySchema = z.object({
   known_level_up_count: z.coerce.number().int().min(0).optional(),
   known_new_skills_count: z.coerce.number().int().min(0).optional(),
   with_salary: z.enum(['true', 'false']).optional(),
+  is_starred: z.enum(['true', 'false']).optional(),
+  page_apply_now: z.coerce.number().int().min(1).optional(),
+  page_level_up: z.coerce.number().int().min(1).optional(),
+  page_applied: z.coerce.number().int().min(1).optional(),
+  page_client_withdrawn: z.coerce.number().int().min(1).optional(),
+  page_recruiter_rejected: z.coerce.number().int().min(1).optional(),
+  page_offer_received: z.coerce.number().int().min(1).optional(),
+  page_accepted: z.coerce.number().int().min(1).optional(),
 });
 
 interface ClientProfile {
@@ -59,6 +65,21 @@ function hasSalaryData(types: unknown): boolean {
       (typeof et.to === 'number' && et.to > 0),
   );
 }
+
+const STATUS_KEY: Record<string, string> = {
+  pending_apply: 'apply_now',
+  ai_rejected: 'level_up',
+  applied: 'applied',
+  client_withdrawn: 'client_withdrawn',
+  recruiter_rejected: 'recruiter_rejected',
+  offer_received: 'offer_received',
+  accepted: 'accepted',
+}
+
+const ALL_STATUSES = [
+  'pending_apply', 'ai_rejected', 'applied', 'client_withdrawn',
+  'recruiter_rejected', 'offer_received', 'accepted',
+]
 
 const StatusBodySchema = z.object({
   status: z.enum([
@@ -210,6 +231,24 @@ userOffersRouter.patch('/:id/role-fit', validateJwt, async (req, res) => {
   return res.json({ success: true })
 })
 
+userOffersRouter.patch('/:id/star', validateJwt, async (req, res) => {
+  const { role, user_id } = req.jwt!
+  if (role !== 'client') {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only clients can use this endpoint' })
+  }
+  const { id } = req.params as { id: string }
+  const userOffer = await prisma.userOffer.findFirst({ where: { id, user_id: user_id! } })
+  if (!userOffer) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer not found or does not belong to you' })
+  }
+  const updated = await prisma.userOffer.update({
+    where: { id },
+    data: { is_starred: !userOffer.is_starred },
+    select: { is_starred: true },
+  })
+  return res.json({ is_starred: updated.is_starred })
+})
+
 userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
   const { id } = req.params as { id: string };
   const parsed = StatusBodySchema.safeParse(req.body);
@@ -262,13 +301,13 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
 });
 
 userOffersRouter.get('/', validateJwt, async (req, res) => {
-  const parsed = QuerySchema.safeParse(req.query);
+  const parsed = QuerySchema.safeParse(req.query)
   if (!parsed.success) {
     return res.status(422).json({
       error: 'INVALID_REQUEST',
       message: 'Missing required query param: status',
       issues: parsed.error.issues,
-    });
+    })
   }
 
   const {
@@ -278,7 +317,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     source,
     date_from,
     date_to,
-    page: pageParam,
     min_score: minScoreParam,
     generated_cv,
     generated_cl,
@@ -286,217 +324,231 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     known_apply_count: knownApplyCount,
     known_level_up_count: knownLevelUpCount,
     with_salary,
-  } = parsed.data;
-  const page = pageParam ?? 1;
-  const minScore = minScoreParam ?? 0;
+    is_starred: isStarredFilter,
+    page_apply_now,
+    page_level_up,
+    page_applied,
+    page_client_withdrawn,
+    page_recruiter_rejected,
+    page_offer_received,
+    page_accepted,
+  } = parsed.data
+  const minScore = minScoreParam ?? 0
 
-  const filterSnapshotOffers = (offers: unknown[]): unknown[] => {
-    let arr = offers as Array<Record<string, unknown>>;
-    if (minScore > 0) arr = arr.filter(o => ((o['claude_score'] as number | null) ?? 0) >= minScore);
-    if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
-    if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
-    if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0);
-    return arr;
-  };
-  // level_up offers are not score-gated — minScore applies to apply_now only.
-  const filterSnapshotOffersLevelUp = (offers: unknown[]): unknown[] => {
-    let arr = offers as Array<Record<string, unknown>>;
-    if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done');
-    if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done');
-    if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0);
-    return arr;
-  };
-  const { role, agent_id, user_id } = req.jwt!;
+  const { role, agent_id, user_id } = req.jwt!
 
-  let clientId: string;
+  let clientId: string
 
   if (role === 'client') {
-    clientId = user_id!;
+    clientId = user_id!
   } else {
     if (!parsed.data.client_id) {
-      return res.status(422).json({
-        error: 'INVALID_REQUEST',
-        message: 'Missing required query param: client_id',
-      });
+      return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Missing required query param: client_id' })
     }
-    clientId = parsed.data.client_id;
-
+    clientId = parsed.data.client_id
     const agentClient = await prisma.agentClient.findUnique({
       where: { agent_id_user_id: { agent_id: agent_id!, user_id: clientId } },
-    });
+    })
     if (!agentClient) {
-      return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: 'Client not linked to this agent',
-      });
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Client not linked to this agent' })
     }
   }
 
-  const statuses = status
-    .split('|')
-    .map(s => s.trim())
-    .filter(Boolean);
+  const statuses = status === 'all'
+    ? ALL_STATUSES
+    : status.split('|').map(s => s.trim()).filter(Boolean)
 
-  // ── Multi-status path ──────────────────────────────────────────────────────
-  if (statuses.length > 1) {
+  const pageForStatus = (s: string): number => {
+    const pageMap: Record<string, number | undefined> = {
+      apply_now: page_apply_now,
+      level_up: page_level_up,
+      applied: page_applied,
+      client_withdrawn: page_client_withdrawn,
+      recruiter_rejected: page_recruiter_rejected,
+      offer_received: page_offer_received,
+      accepted: page_accepted,
+    }
+    return pageMap[STATUS_KEY[s] ?? s] ?? 1
+  }
+
+  // ── Legacy count_only — single-status early return ─────────────────────────
+  if (count_only === 'true' && statuses.length === 1) {
+    const singleStatus = statuses[0]!
+    const offerWhere = { ...(source && source !== 'all' ? { source } : {}) }
+    const isScoreStatus = singleStatus === 'pending_apply' || singleStatus === 'ai_rejected'
+    const where = {
+      user_id: clientId,
+      status: singleStatus,
+      ...(isScoreStatus && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
+      ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
+    }
+    if (singleStatus === 'ai_rejected') {
+      const rows = await prisma.userOffer.findMany({
+        where,
+        select: { missing_skills: true, offer: { select: { employment_types: true } } },
+      })
+      let countFiltered = rows.filter(uo => hasSalaryData(uo.offer.employment_types))
+      if (has_learning_skills_goals === 'true') {
+        const { learningGoals } = await loadClientProfile(clientId)
+        if (learningGoals.length > 0) {
+          countFiltered = countFiltered.filter(uo => uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase())))
+        }
+      }
+      return res.json({ count: countFiltered.length })
+    }
+    const count = await prisma.userOffer.count({ where })
+    return res.json({ count })
+  }
+
+  // ── Load shared data ────────────────────────────────────────────────────────
+  {
     const [{ learningGoals }, subscription, pageSizeSetting, dbUser, exchangeRatesSetting, dedupSourcePrefSetting] =
       await Promise.all([
         loadClientProfile(clientId),
         role === 'client'
-          ? prisma.subscription.findUnique({
-              where: { user_id: clientId },
-              include: { plan: true },
-            })
+          ? prisma.subscription.findUnique({ where: { user_id: clientId }, include: { plan: true } })
           : Promise.resolve(null),
         prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
-        prisma.user.findUnique({
-          where: { id: clientId },
-          select: { preferred_currency: true, profile: true, offer_skills: true },
-        }),
+        prisma.user.findUnique({ where: { id: clientId }, select: { preferred_currency: true, profile: true, offer_skills: true } }),
         prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
         prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
-      ]);
+      ])
     const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
     const exchangeRates: Record<string, number> = exchangeRatesSetting
       ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
-      : {};
-    const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }>; work_model?: string[]; office_location_cities?: string[] } } | null;
-    const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
-      type: p.type,
-      currency: p.currency,
-      min: p.min,
-      unit: p.unit,
-    }));
-    const multiUserWorkModel = (rawProfile?.preferences?.work_model ?? []).map(m => m.toLowerCase());
-    const multiUserOfficeCities = rawProfile?.preferences?.office_location_cities ?? [];
-    const multiPreferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined;
-    interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
-    const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
-    const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
-    const start = (page - 1) * pageSize;
-    const effectivePlan =
-      subscription?.plan ??
-      (role === 'client'
-        ? await prisma.plan.findUnique({ where: { name: 'free' } })
-        : null);
-    const limits = effectivePlan?.limits as {
-      max_apply_now: number | null;
-      max_level_up: number | null;
-    } | null;
+      : {}
+    const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }>; work_model?: string[]; office_location_cities?: string[] } } | null
+    const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({ type: p.type, currency: p.currency, min: p.min, unit: p.unit }))
+    const userWorkModel = (rawProfile?.preferences?.work_model ?? []).map(m => m.toLowerCase())
+    const userOfficeCities = rawProfile?.preferences?.office_location_cities ?? []
+    const preferredSource = dedupSourcePrefSetting ? (JSON.parse(dedupSourcePrefSetting.value) as string) : undefined
+    interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean }
+    const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length
+    const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10
+    const effectivePlan = subscription?.plan ?? (role === 'client' ? await prisma.plan.findUnique({ where: { name: 'free' } }) : null)
+    const planLimits = effectivePlan?.limits as { max_apply_now: number | null; max_level_up: number | null } | null
 
 
-    if (role === 'client' && effectivePlan?.name === 'free') {
+    const offerSelect = {
+      title: true, company_name: true, url: true, employment_types: true,
+      source: true, city: true, workplace_type: true, experience_level: true,
+      working_time: true, required_skills: true, nice_to_have_skills: true, published_at: true,
+    } as const
+
+    // ── Free plan snapshot (pending_apply|ai_rejected two-section view only) ──
+    const isDefaultView = statuses.length === 2 && statuses.includes('pending_apply') && statuses.includes('ai_rejected')
+    if (role === 'client' && effectivePlan?.name === 'free' && isDefaultView) {
       const userWithSnapshot = await prisma.user.findUnique({
         where: { id: clientId },
         select: { free_plan_snapshot: true },
-      });
+      })
       if (userWithSnapshot?.free_plan_snapshot != null) {
         const snap = userWithSnapshot.free_plan_snapshot as {
-          count?: number;
-          apply_now?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
-          level_up?: { status: string; count: number; has_more?: boolean; offers: unknown[] };
-        };
-        const applyNowOffers = filterSnapshotOffers(snap.apply_now?.offers ?? []);
-        const levelUpOffers = filterSnapshotOffersLevelUp(snap.level_up?.offers ?? []);
-        // Use the snapshot's own counts — they're built from deduplicated data in
-        // buildAndSaveFreePlanSnapshot. Live re-querying caused count/offers mismatch
-        // when the DB still holds duplicate user_offers.
-        const applyNowCount = snap.apply_now?.count ?? 0;
-        const levelUpCount = snap.level_up?.count ?? 0;
-        const applyHasMore = start + pageSize < applyNowOffers.length;
-        const levelUpHasMore = start + pageSize < levelUpOffers.length;
-        const paginatedApplyNow = applyNowOffers.slice(start, start + pageSize);
-        const paginatedLevelUp = levelUpOffers.slice(start, start + pageSize);
-        return res.json({
-          ...snap,
-          count: applyNowCount + levelUpCount,
-          new_skills_count,
-          ...(snap.apply_now ? { apply_now: { ...snap.apply_now, count: applyNowCount, has_more: applyHasMore, offers: paginatedApplyNow } } : {}),
-          ...(snap.level_up ? { level_up: { ...snap.level_up, count: levelUpCount, has_more: levelUpHasMore, offers: paginatedLevelUp } } : {}),
-        });
+          apply_now?: { count: number; offers: unknown[] }
+          level_up?: { count: number; offers: unknown[] }
+        }
+        const snapApplyNow = (snap.apply_now?.offers ?? []) as Array<Record<string, unknown>>
+        const snapLevelUp = (snap.level_up?.offers ?? []) as Array<Record<string, unknown>>
+
+        // Fetch live is_starred values for snapshot offers
+        const allSnapIds = [...snapApplyNow, ...snapLevelUp]
+          .map(o => o['user_offer_id'] as string).filter(Boolean)
+        const starredRows = await prisma.userOffer.findMany({
+          where: { id: { in: allSnapIds } },
+          select: { id: true, is_starred: true },
+        })
+        const isStarredMap: Record<string, boolean> = {}
+        for (const r of starredRows) { isStarredMap[r.id] = r.is_starred }
+
+        const enrichSnap = (offers: Array<Record<string, unknown>>) =>
+          offers.map(o => ({ ...o, is_starred: isStarredMap[o['user_offer_id'] as string] ?? false }))
+
+        const filterSnap = (offers: Array<Record<string, unknown>>, applyMinScore: boolean): Array<Record<string, unknown>> => {
+          let arr = offers
+          if (applyMinScore && minScore > 0) arr = arr.filter(o => ((o['claude_score'] as number | null) ?? 0) >= minScore)
+          if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0)
+          if (isStarredFilter === 'true') arr = arr.filter(o => o['is_starred'] === true)
+          if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done')
+          if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done')
+          return arr
+        }
+
+        const filteredApplyNow = filterSnap(enrichSnap(snapApplyNow), true)
+        const filteredLevelUp = filterSnap(enrichSnap(snapLevelUp), false)
+        const applyNowCount = snap.apply_now?.count ?? 0
+        const levelUpCount = snap.level_up?.count ?? 0
+        const pageAN = page_apply_now ?? 1
+        const pageLU = page_level_up ?? 1
+        const startAN = (pageAN - 1) * pageSize
+        const startLU = (pageLU - 1) * pageSize
+
+        let applyNow = {
+          count: applyNowCount,
+          count_after_filters: filteredApplyNow.length,
+          has_more: filteredApplyNow.length > startAN + pageSize,
+          offers: filteredApplyNow.slice(startAN, startAN + pageSize),
+        }
+        let levelUp = {
+          count: levelUpCount,
+          count_after_filters: filteredLevelUp.length,
+          has_more: filteredLevelUp.length > startLU + pageSize,
+          offers: filteredLevelUp.slice(startLU, startLU + pageSize),
+        }
+
+        if (knownApplyCount !== undefined && knownApplyCount === applyNowCount) applyNow = { ...applyNow, offers: [] }
+        if (knownLevelUpCount !== undefined && knownLevelUpCount === levelUpCount) levelUp = { ...levelUp, offers: [] }
+
+        return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
       }
     }
 
-    const offerSelect = {
-      title: true,
-      company_name: true,
-      url: true,
-      employment_types: true,
-      source: true,
-      city: true,
-      workplace_type: true,
-      experience_level: true,
-      working_time: true,
-      required_skills: true,
-      nice_to_have_skills: true,
-    } as const;
-
-    const buckets: Record<
-      string,
-      { status: string; count: number; has_more: boolean; offers: unknown[] }
-    > = {};
+    // ── Build sections from live DB ─────────────────────────────────────────────
+    const sections: Record<string, { count: number; count_after_filters: number; has_more: boolean; offers: unknown[] }> = {}
 
     for (const bucketStatus of statuses) {
-      const bucketOfferWhere = {
-        ...(source && source !== 'all' ? { source } : {}),
-      };
-      // level_up (ai_rejected) requires missing skills + a computed salary delta.
-      // NOTE: ai_rejected rows written before this rule used the old logic and only
-      // get reclassified on the next re-sync (no migration).
+      const page = pageForStatus(bucketStatus)
+      const start = (page - 1) * pageSize
+      const sectionKey = STATUS_KEY[bucketStatus] ?? bucketStatus
+      const offerWhere = { ...(source && source !== 'all' ? { source } : {}) }
+
       const bucketWhere = {
         user_id: clientId,
         status: bucketStatus,
         ...(bucketStatus === 'ai_rejected'
           ? { missing_skills: { isEmpty: false }, OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }
           : {}),
-        // minScore applies to apply_now (pending_apply) only — level_up is not score-gated.
         ...(bucketStatus === 'pending_apply' && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
-        ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
-        ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
-        // ai_rejected already enforces salary delta via its OR clause above.
-        ...(with_salary === 'true' && bucketStatus !== 'ai_rejected' ? { OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] } : {}),
-        ...(Object.keys(bucketOfferWhere).length > 0
-          ? { offer: bucketOfferWhere }
-          : {}),
-      };
+        ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
+      }
 
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
         include: {
           offer: { select: offerSelect },
-          status_history: {
-            where: { status: 'applied' },
-            orderBy: { created_at: 'desc' },
-            take: 1,
-          },
+          status_history: { where: { status: 'applied' }, orderBy: { created_at: 'desc' }, take: 1 },
         },
         orderBy: sortBy === 'salary_delta'
           ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
           : sortBy === 'published_at'
           ? [{ offer: { published_at: 'desc' } }]
           : [{ claude_score: 'desc' }],
-      });
+      })
 
-      // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
-      let result = dedupeUserOffers(rows, multiPreferredSource, multiUserWorkModel, multiUserOfficeCities);
+      const deduped = (bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected')
+        ? dedupeUserOffers(rows, preferredSource, userWorkModel, userOfficeCities)
+        : rows
 
-      // ai_rejected salary + missing-skills filters now live in the query above;
-      // learning-goals personalization stays here.
+      // Per-status base filter: learning goals for ai_rejected (affects count, not count_after_filters)
+      let baseFiltered = deduped as typeof rows
       if (bucketStatus === 'ai_rejected' && learningGoals.length > 0) {
-        result = result.filter(uo =>
-          uo.missing_skills.some(sk =>
-            learningGoals.includes(sk.toLowerCase()),
-          ),
-        );
+        baseFiltered = deduped.filter(uo => uo.missing_skills.some(sk => learningGoals.includes(sk.toLowerCase()))) as typeof rows
       }
 
-      const mapped = result.map(uo => {
+      const mapped = baseFiltered.map(uo => {
         const salaryResult = calculateUserOfferSalary(
           Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
-          preferredCurrency,
-          salaryPrefs,
-          exchangeRates,
-        );
+          preferredCurrency, salaryPrefs, exchangeRates,
+        )
         return {
           user_offer_id: uo.id,
           offer_id: uo.offer_id,
@@ -530,355 +582,86 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           work_model: uo.offer.workplace_type ?? null,
           required_skills: uo.offer.required_skills,
           nice_to_have_skills: uo.offer.nice_to_have_skills,
+          published_at: uo.offer.published_at ?? null,
+          is_starred: uo.is_starred,
           cv_language: uo.cv_language,
           cv_status: uo.cv_status ?? null,
           cv_url: uo.cv_url ?? null,
           cl_status: uo.cl_status ?? null,
           cl_url: uo.cl_url ?? null,
           status: uo.status,
-        };
-      });
+        }
+      })
 
-      // salary gate is enforced in the query (salary_delta not null), so no extra
-      // request-time salary filter is needed here.
-      const finalMapped = mapped;
+      const count = mapped.length
 
-      const count = finalMapped.length;
-      let offers: typeof finalMapped = finalMapped;
-
-      if (role === 'client' && limits != null) {
-        const byScoreAndDelta = (
-          a: (typeof finalMapped)[number],
-          b: (typeof finalMapped)[number],
-        ) =>
-          (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
-          (b.salary_delta ?? -Infinity) - (a.salary_delta ?? -Infinity);
-
-        if (bucketStatus === 'pending_apply' && limits.max_apply_now != null) {
-          offers = [...finalMapped]
-            .sort(byScoreAndDelta)
-            .slice(0, limits.max_apply_now);
-        } else if (
-          bucketStatus === 'ai_rejected' &&
-          limits.max_level_up != null
-        ) {
-          offers = [...finalMapped]
-            .sort(byScoreAndDelta)
-            .slice(0, limits.max_level_up);
+      // User-level filters (affect count_after_filters, not count)
+      let userFiltered = mapped as typeof mapped
+      if (with_salary === 'true') userFiltered = userFiltered.filter(o => o.salary.length > 0)
+      if (isStarredFilter === 'true') userFiltered = userFiltered.filter(o => o.is_starred)
+      if (generated_cv === 'true') userFiltered = userFiltered.filter(o => o.cv_status === 'done')
+      if (generated_cl === 'true') userFiltered = userFiltered.filter(o => o.cl_status === 'done')
+      if (bucketStatus === 'applied') {
+        if (date_from) {
+          const from = new Date(date_from)
+          userFiltered = userFiltered.filter(o => o.applied_at != null && new Date(o.applied_at) >= from)
+        }
+        if (date_to) {
+          const to = new Date(date_to)
+          userFiltered = userFiltered.filter(o => o.applied_at != null && new Date(o.applied_at) <= to)
         }
       }
 
-      offers = [...offers].sort((a, b) => {
+      const count_after_filters = userFiltered.length
+
+      // Plan limits (pending_apply and ai_rejected only)
+      let limited = userFiltered
+      if (role === 'client' && planLimits != null) {
+        const byScoreAndDelta = (a: typeof mapped[0], b: typeof mapped[0]) =>
+          (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
+          (b.salary_delta ?? -Infinity) - (a.salary_delta ?? -Infinity)
+        if (bucketStatus === 'pending_apply' && planLimits.max_apply_now != null) {
+          limited = [...userFiltered].sort(byScoreAndDelta).slice(0, planLimits.max_apply_now)
+        } else if (bucketStatus === 'ai_rejected' && planLimits.max_level_up != null) {
+          limited = [...userFiltered].sort(byScoreAndDelta).slice(0, planLimits.max_level_up)
+        }
+      }
+
+      // Final sort + paginate
+      const sorted = [...limited].sort((a, b) => {
         if (sortBy === 'salary_delta') {
-          const da = a.salary_delta
-          const db = b.salary_delta
+          const da = a.salary_delta, db = b.salary_delta
           if (da !== db) {
-            if (da === null) return 1
-            if (db === null) return -1
+            if (da === -Infinity) return 1
+            if (db === -Infinity) return -1
             return db - da
           }
+        }
+        if (sortBy === 'published_at') {
+          const da = a.published_at ? new Date(a.published_at).getTime() : 0
+          const db = b.published_at ? new Date(b.published_at).getTime() : 0
+          if (da !== db) return db - da
         }
         const scoreDiff = (b.claude_score ?? 0) - (a.claude_score ?? 0)
         if (scoreDiff !== 0) return scoreDiff
         return (a.work_model === 'remote' ? 0 : 1) - (b.work_model === 'remote' ? 0 : 1)
       })
 
-      const pagedOffers = offers.slice(start, start + pageSize);
-      const has_more = offers.length > start + pageSize;
-
-      buckets[bucketStatus] = { status: bucketStatus, count, has_more, offers: pagedOffers };
-    }
-
-    const totalCount = Object.values(buckets).reduce(
-      (sum, b) => sum + b.count,
-      0,
-    );
-    const bucketKeyMap: Record<string, string> = {
-      pending_apply: 'apply_now',
-      ai_rejected: 'level_up',
-    }
-    const namedBuckets = Object.fromEntries(
-      Object.entries(buckets).map(([k, v]) => [bucketKeyMap[k] ?? k, v]),
-    )
-
-    if (knownApplyCount !== undefined && namedBuckets['apply_now'] && knownApplyCount === namedBuckets['apply_now'].count) {
-      namedBuckets['apply_now'] = { ...namedBuckets['apply_now'], offers: [] };
-    }
-    if (knownLevelUpCount !== undefined && namedBuckets['level_up'] && knownLevelUpCount === namedBuckets['level_up'].count) {
-      namedBuckets['level_up'] = { ...namedBuckets['level_up'], offers: [] };
-    }
-
-    return res.json({ count: totalCount, new_skills_count, ...namedBuckets });
-  }
-
-  // ── Single-status path (backward compatible) ───────────────────────────────
-  const offerWhere = {
-    ...(source && source !== 'all' ? { source } : {}),
-    ...(status === 'ai_rejected'
-      ? { employment_types: { not: [] as Prisma.InputJsonValue } }
-      : {}),
-  };
-  const isScoreStatus = status === 'pending_apply' || status === 'ai_rejected';
-  const where = {
-    user_id: clientId,
-    status,
-    ...(isScoreStatus && minScore > 0 ? { claude_score: { gte: minScore } } : {}),
-    ...(generated_cv === 'true' ? { cv_status: 'done' } : {}),
-    ...(generated_cl === 'true' ? { cl_status: 'done' } : {}),
-    ...(with_salary === 'true' ? { OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] } : {}),
-    ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
-  };
-
-  // count_only for ai_rejected: must filter in memory to check real salary data
-  if (count_only === 'true' && status === 'ai_rejected') {
-    const rows = await prisma.userOffer.findMany({
-      where,
-      select: {
-        missing_skills: true,
-        offer: { select: { employment_types: true } },
-      },
-    });
-    let filtered = rows.filter(uo => hasSalaryData(uo.offer.employment_types));
-    if (has_learning_skills_goals === 'true') {
-      const { learningGoals } = await loadClientProfile(clientId);
-      if (learningGoals.length > 0) {
-        filtered = filtered.filter(uo =>
-          uo.missing_skills.some(sk =>
-            learningGoals.includes(sk.toLowerCase()),
-          ),
-        );
+      sections[sectionKey] = {
+        count,
+        count_after_filters,
+        has_more: sorted.length > start + pageSize,
+        offers: sorted.slice(start, start + pageSize),
       }
     }
-    return res.json({ count: filtered.length });
-  }
 
-  // count_only=true for non-ai_rejected statuses: pure DB count, no data transfer
-  if (count_only === 'true') {
-    const count = await prisma.userOffer.count({ where });
-    return res.json({ count });
-  }
-
-  const userOffers = await prisma.userOffer.findMany({
-    where,
-    include: {
-      offer: {
-        select: {
-          title: true,
-          company_name: true,
-          url: true,
-          employment_types: true,
-          source: true,
-          city: true,
-          workplace_type: true,
-          experience_level: true,
-          working_time: true,
-          required_skills: true,
-          nice_to_have_skills: true,
-        },
-      },
-      status_history: {
-        where: { status: 'applied' },
-        orderBy: { created_at: 'desc' },
-        take: 1,
-      },
-    },
-    orderBy: sortBy === 'salary_delta'
-      ? [{ salary_contract_delta: { sort: 'desc', nulls: 'last' } }, { salary_permanent_delta: { sort: 'desc', nulls: 'last' } }, { claude_score: 'desc' }]
-      : sortBy === 'published_at'
-      ? [{ offer: { published_at: 'desc' } }]
-      : [{ claude_score: 'desc' }],
-  });
-
-  const [{ learningGoals }, pageSizeSetting, dbUser, exchangeRatesSetting, singleDedupSourcePrefSetting] = await Promise.all([
-    loadClientProfile(clientId),
-    prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
-    prisma.user.findUnique({
-      where: { id: clientId },
-      select: { preferred_currency: true, profile: true, offer_skills: true },
-    }),
-    prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
-    prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
-  ]);
-  const preferredCurrency = dbUser?.preferred_currency ?? 'USD';
-  const exchangeRates: Record<string, number> = exchangeRatesSetting
-    ? (JSON.parse(exchangeRatesSetting.value) as Record<string, number>)
-    : {};
-  const rawProfile = dbUser?.profile as { preferences?: { salary?: Array<{ type: string; currency: string; min: number; unit?: string }>; work_model?: string[]; office_location_cities?: string[] } } | null;
-  const salaryPrefs = (rawProfile?.preferences?.salary ?? []).map(p => ({
-    type: p.type,
-    currency: p.currency,
-    min: p.min,
-    unit: p.unit,
-  }));
-  const singleUserWorkModel = (rawProfile?.preferences?.work_model ?? []).map(m => m.toLowerCase());
-  const singleUserOfficeCities = rawProfile?.preferences?.office_location_cities ?? [];
-  const singlePreferredSource = singleDedupSourcePrefSetting ? (JSON.parse(singleDedupSourcePrefSetting.value) as string) : undefined;
-  interface OfferSkillEntry { name: string; count: number; category_name: string; dismissed: boolean; }
-  const new_skills_count = ((dbUser?.offer_skills ?? []) as unknown as OfferSkillEntry[]).filter(s => !s.dismissed).length;
-  const pageSize = parseInt(pageSizeSetting?.value ?? '10', 10) || 10;
-  const start = (page - 1) * pageSize;
-
-  // Dedup: one row per offer fingerprint (preferred source → highest claude_score → matched_at)
-  let result = dedupeUserOffers(userOffers, singlePreferredSource, singleUserWorkModel, singleUserOfficeCities);
-
-  if (status === 'ai_rejected') {
-    result = result.filter(uo => hasSalaryData(uo.offer.employment_types));
-    if (has_learning_skills_goals === 'true' && learningGoals.length > 0) {
-      result = result.filter(uo =>
-        uo.missing_skills.some(sk =>
-          learningGoals.includes(sk.toLowerCase()),
-        ),
-      );
+    if (knownApplyCount !== undefined && sections['apply_now'] && knownApplyCount === sections['apply_now'].count) {
+      sections['apply_now'] = { ...sections['apply_now'], offers: [] }
     }
-  }
-
-  const mapped = result.map(uo => {
-    const salaryResult = calculateUserOfferSalary(
-      Array.isArray(uo.offer.employment_types) ? uo.offer.employment_types : [],
-      preferredCurrency,
-      salaryPrefs,
-      exchangeRates,
-    );
-    return {
-      user_offer_id: uo.id,
-      offer_id: uo.offer_id,
-      offer_title: uo.offer.title,
-      offer_company: uo.offer.company_name,
-      offer_url: uo.offer.url,
-      claude_score: uo.claude_score,
-      claude_role_fit: uo.claude_role_fit,
-      claude_matched_reasons: uo.claude_matched_reasons,
-      missing_skills: uo.missing_skills,
-      claude_recommended: uo.claude_recommended,
-      rejection_reason: uo.rejection_reason,
-      matched_at: uo.matched_at,
-      applied_at: uo.status_history[0]?.created_at ?? null,
-      salary: [
-        ...(salaryResult?.contract ? [{ min: salaryResult.contract.min, max: salaryResult.contract.max, currency: salaryResult.salary_currency, delta: salaryResult.contract.delta, type: 'contract' }] : []),
-        ...(salaryResult?.permanent ? [{ min: salaryResult.permanent.min, max: salaryResult.permanent.max, currency: salaryResult.salary_currency, delta: salaryResult.permanent.delta, type: 'permanent' }] : []),
-      ],
-      salary_delta: Math.max(salaryResult?.contract?.delta ?? -Infinity, salaryResult?.permanent?.delta ?? -Infinity),
-      raw_salaries: Array.isArray(uo.offer.employment_types)
-        ? (uo.offer.employment_types as Array<Record<string, unknown>>).map(et => ({
-            from: et['fromPerUnit'] ?? et['from'] ?? null,
-            to: et['toPerUnit'] ?? et['to'] ?? null,
-            currency: et['currency'] ?? null,
-            unit: et['unit'] ?? null,
-            type: et['type'] ?? null,
-          }))
-        : [],
-      source: uo.offer.source,
-      city: uo.offer.city ?? null,
-      work_model: uo.offer.workplace_type ?? null,
-      required_skills: uo.offer.required_skills,
-      nice_to_have_skills: uo.offer.nice_to_have_skills,
-      cv_language: uo.cv_language,
-      cv_status: uo.cv_status ?? null,
-      cv_url: uo.cv_url ?? null,
-      cl_status: uo.cl_status ?? null,
-      cl_url: uo.cl_url ?? null,
-      status: uo.status,
-    };
-  });
-
-  const finalMapped = status === 'ai_rejected'
-    ? mapped.filter(o => o.salary.length > 0)
-    : mapped;
-
-  const apply_now_count = finalMapped.filter(
-    o => o.claude_recommended === true,
-  ).length;
-  // level_up = has missing skills (new rule), not claude_recommended === false.
-  const level_up_count = finalMapped.filter(
-    o => o.missing_skills.length > 0,
-  ).length;
-
-  let filtered = finalMapped;
-
-  // Apply plan limits for pending_apply (client only; agent sees all)
-  if (role === 'client' && status === 'pending_apply') {
-    const subscription = await prisma.subscription.findUnique({
-      where: { user_id: clientId },
-      include: { plan: true },
-    });
-    const effectivePlan =
-      subscription?.plan ??
-      (await prisma.plan.findUnique({ where: { name: 'free' } }));
-    const limits = effectivePlan?.limits as {
-      max_apply_now: number | null;
-      max_level_up: number | null;
-    } | null;
-
-    if (
-      limits != null &&
-      (limits.max_apply_now !== null || limits.max_level_up !== null)
-    ) {
-      const byScoreAndDelta = (
-        a: (typeof mapped)[number],
-        b: (typeof mapped)[number],
-      ) =>
-        (b.claude_score ?? 0) - (a.claude_score ?? 0) ||
-        (b.salary_delta ?? -Infinity) - (a.salary_delta ?? -Infinity);
-
-      const applyNow = filtered
-        .filter(o => o.claude_recommended === true)
-        .sort(byScoreAndDelta);
-      const levelUp = filtered
-        .filter(o => o.claude_recommended === false)
-        .sort(byScoreAndDelta);
-
-      const limitedApplyNow =
-        limits.max_apply_now != null
-          ? applyNow.slice(0, limits.max_apply_now)
-          : applyNow;
-      const limitedLevelUp =
-        limits.max_level_up != null
-          ? levelUp.slice(0, limits.max_level_up)
-          : levelUp;
-
-      filtered = [...limitedApplyNow, ...limitedLevelUp];
+    if (knownLevelUpCount !== undefined && sections['level_up'] && knownLevelUpCount === sections['level_up'].count) {
+      sections['level_up'] = { ...sections['level_up'], offers: [] }
     }
+
+    return res.json({ client_id: clientId, new_skills_count, ...sections })
   }
-
-  if (date_from) {
-    const from = new Date(date_from);
-    filtered = filtered.filter(
-      o => o.applied_at != null && new Date(o.applied_at) >= from,
-    );
-  }
-  if (date_to) {
-    const to = new Date(date_to);
-    filtered = filtered.filter(
-      o => o.applied_at != null && new Date(o.applied_at) <= to,
-    );
-  }
-
-  filtered = [...filtered].sort((a, b) => {
-    if (sortBy === 'salary_delta') {
-      const da = a.salary_delta
-      const db = b.salary_delta
-      if (da !== db) {
-        if (da === null) return 1
-        if (db === null) return -1
-        return db - da
-      }
-    }
-    const scoreDiff = (b.claude_score ?? 0) - (a.claude_score ?? 0)
-    if (scoreDiff !== 0) return scoreDiff
-    return (a.work_model === 'remote' ? 0 : 1) - (b.work_model === 'remote' ? 0 : 1)
-  })
-
-  const pagedOffers = filtered.slice(start, start + pageSize);
-  const has_more = filtered.length > start + pageSize;
-
-  res.json({
-    client_id: clientId,
-    status,
-    count: mapped.length,
-    apply_now_count,
-    level_up_count,
-    has_more,
-    new_skills_count,
-    offers: pagedOffers,
-  });
 });
