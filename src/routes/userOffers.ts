@@ -495,8 +495,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           offers: filteredLevelUp.slice(startLU, startLU + pageSize),
         }
 
-        if (knownApplyCount !== undefined && knownApplyCount === applyNowCount) applyNow = { ...applyNow, offers: [] }
-        if (knownLevelUpCount !== undefined && knownLevelUpCount === levelUpCount) levelUp = { ...levelUp, offers: [] }
+        if (knownApplyCount !== undefined && knownApplyCount === applyNowCount && pageAN === 1) applyNow = { ...applyNow, offers: [] }
+        if (knownLevelUpCount !== undefined && knownLevelUpCount === levelUpCount && pageLU === 1) levelUp = { ...levelUp, offers: [] }
 
         return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
       }
@@ -650,15 +650,15 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       sections[sectionKey] = {
         count,
         count_after_filters,
-        has_more: sorted.length > start + pageSize,
+        has_more: limited.length > start + pageSize,
         offers: sorted.slice(start, start + pageSize),
       }
     }
 
-    if (knownApplyCount !== undefined && sections['apply_now'] && knownApplyCount === sections['apply_now'].count) {
+    if (knownApplyCount !== undefined && sections['apply_now'] && knownApplyCount === sections['apply_now'].count && (page_apply_now ?? 1) === 1) {
       sections['apply_now'] = { ...sections['apply_now'], offers: [] }
     }
-    if (knownLevelUpCount !== undefined && sections['level_up'] && knownLevelUpCount === sections['level_up'].count) {
+    if (knownLevelUpCount !== undefined && sections['level_up'] && knownLevelUpCount === sections['level_up'].count && (page_level_up ?? 1) === 1) {
       sections['level_up'] = { ...sections['level_up'], offers: [] }
     }
 
