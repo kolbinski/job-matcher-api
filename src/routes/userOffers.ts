@@ -450,13 +450,41 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         const snapApplyNow = (snap.apply_now?.offers ?? []) as Array<Record<string, unknown>>
         const snapLevelUp = (snap.level_up?.offers ?? []) as Array<Record<string, unknown>>
 
-        // Fetch live is_starred values for snapshot offers
+        // DB-level base WHERE for count queries (no plan limits)
+        const applyNowBaseWhere = {
+          user_id: clientId,
+          status: 'pending_apply',
+          ...(minScore > 0 ? { claude_score: { gte: minScore } } : {}),
+        }
+        const levelUpBaseWhere = {
+          user_id: clientId,
+          status: 'ai_rejected',
+          missing_skills: { isEmpty: false },
+          OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }],
+        }
+        // User-level filter conditions translated to DB predicates
+        const userAndConditions = [
+          ...(with_salary === 'true' ? [{ OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }] : []),
+          ...(isStarredFilter === 'true' ? [{ is_starred: true as const }] : []),
+          ...(generated_cv === 'true' ? [{ cv_status: 'done' }] : []),
+          ...(generated_cl === 'true' ? [{ cl_status: 'done' }] : []),
+        ]
+        const applyNowFilterWhere = userAndConditions.length > 0 ? { ...applyNowBaseWhere, AND: userAndConditions } : applyNowBaseWhere
+        const levelUpFilterWhere = userAndConditions.length > 0 ? { ...levelUpBaseWhere, AND: userAndConditions } : levelUpBaseWhere
+
         const allSnapIds = [...snapApplyNow, ...snapLevelUp]
           .map(o => o['user_offer_id'] as string).filter(Boolean)
-        const starredRows = await prisma.userOffer.findMany({
-          where: { id: { in: allSnapIds } },
-          select: { id: true, is_starred: true },
-        })
+        const [starredRows, countAN, countAfterFiltersAN, countLU, countAfterFiltersLU] = await Promise.all([
+          prisma.userOffer.findMany({
+            where: { id: { in: allSnapIds } },
+            select: { id: true, is_starred: true },
+          }),
+          prisma.userOffer.count({ where: applyNowBaseWhere }),
+          prisma.userOffer.count({ where: applyNowFilterWhere }),
+          prisma.userOffer.count({ where: levelUpBaseWhere }),
+          prisma.userOffer.count({ where: levelUpFilterWhere }),
+        ])
+
         const isStarredMap: Record<string, boolean> = {}
         for (const r of starredRows) { isStarredMap[r.id] = r.is_starred }
 
@@ -475,28 +503,26 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
         const filteredApplyNow = filterSnap(enrichSnap(snapApplyNow), true)
         const filteredLevelUp = filterSnap(enrichSnap(snapLevelUp), false)
-        const applyNowCount = snap.apply_now?.count ?? 0
-        const levelUpCount = snap.level_up?.count ?? 0
         const pageAN = page_apply_now ?? 1
         const pageLU = page_level_up ?? 1
         const startAN = (pageAN - 1) * pageSize
         const startLU = (pageLU - 1) * pageSize
 
         let applyNow = {
-          count: applyNowCount,
-          count_after_filters: filteredApplyNow.length,
+          count: countAN,
+          count_after_filters: countAfterFiltersAN,
           has_more: filteredApplyNow.length > startAN + pageSize,
           offers: filteredApplyNow.slice(startAN, startAN + pageSize),
         }
         let levelUp = {
-          count: levelUpCount,
-          count_after_filters: filteredLevelUp.length,
+          count: countLU,
+          count_after_filters: countAfterFiltersLU,
           has_more: filteredLevelUp.length > startLU + pageSize,
           offers: filteredLevelUp.slice(startLU, startLU + pageSize),
         }
 
-        if (knownApplyCount !== undefined && knownApplyCount === applyNowCount && pageAN === 1) applyNow = { ...applyNow, offers: [] }
-        if (knownLevelUpCount !== undefined && knownLevelUpCount === levelUpCount && pageLU === 1) levelUp = { ...levelUp, offers: [] }
+        if (knownApplyCount !== undefined && knownApplyCount === countAN && pageAN === 1) applyNow = { ...applyNow, offers: [] }
+        if (knownLevelUpCount !== undefined && knownLevelUpCount === countLU && pageLU === 1) levelUp = { ...levelUp, offers: [] }
 
         return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
       }
