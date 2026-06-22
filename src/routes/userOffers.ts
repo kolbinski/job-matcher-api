@@ -442,8 +442,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         where: { id: clientId },
         select: { free_plan_snapshot: true },
       })
-      if (userWithSnapshot?.free_plan_snapshot != null) {
-        const snap = userWithSnapshot.free_plan_snapshot as {
+      const snapshotExists = userWithSnapshot?.free_plan_snapshot != null
+      if (!snapshotExists) {
+        console.log(`[snapshot] exists: false — falling through to live DB path`)
+      }
+      if (snapshotExists) {
+        const snap = userWithSnapshot!.free_plan_snapshot as {
           apply_now?: { count: number; offers: unknown[] }
           level_up?: { count: number; offers: unknown[] }
         }
@@ -508,23 +512,31 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         const startAN = (pageAN - 1) * pageSize
         const startLU = (pageLU - 1) * pageSize
 
-        let applyNow = {
-          count: countAN,
-          count_after_filters: countAfterFiltersAN,
-          has_more: filteredApplyNow.length > startAN + pageSize,
-          offers: filteredApplyNow.slice(startAN, startAN + pageSize),
-        }
-        let levelUp = {
-          count: countLU,
-          count_after_filters: countAfterFiltersLU,
-          has_more: filteredLevelUp.length > startLU + pageSize,
-          offers: filteredLevelUp.slice(startLU, startLU + pageSize),
-        }
+        console.log(`[snapshot] exists: true, apply_now length: ${snapApplyNow.length}, level_up length: ${snapLevelUp.length}, page_apply_now: ${pageAN}, offset: ${startAN}, countAN: ${countAN}, countLU: ${countLU}`)
 
-        if (knownApplyCount !== undefined && knownApplyCount === countAN && pageAN === 1) applyNow = { ...applyNow, offers: [] }
-        if (knownLevelUpCount !== undefined && knownLevelUpCount === countLU && pageLU === 1) levelUp = { ...levelUp, offers: [] }
+        // Stale snapshot: has no offers but DB has items — fall through to live path so
+        // the user sees real results instead of empty offers.
+        if (snapApplyNow.length === 0 && snapLevelUp.length === 0 && (countAN > 0 || countLU > 0)) {
+          console.log(`[snapshot] stale (empty offers but DB has apply_now=${countAN}, level_up=${countLU}), falling through to live DB path`)
+        } else {
+          let applyNow = {
+            count: countAN,
+            count_after_filters: countAfterFiltersAN,
+            has_more: filteredApplyNow.length > startAN + pageSize,
+            offers: filteredApplyNow.slice(startAN, startAN + pageSize),
+          }
+          let levelUp = {
+            count: countLU,
+            count_after_filters: countAfterFiltersLU,
+            has_more: filteredLevelUp.length > startLU + pageSize,
+            offers: filteredLevelUp.slice(startLU, startLU + pageSize),
+          }
 
-        return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
+          if (knownApplyCount !== undefined && knownApplyCount === countAN && pageAN === 1) applyNow = { ...applyNow, offers: [] }
+          if (knownLevelUpCount !== undefined && knownLevelUpCount === countLU && pageLU === 1) levelUp = { ...levelUp, offers: [] }
+
+          return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
+        }
       }
     }
 
