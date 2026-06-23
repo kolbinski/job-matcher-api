@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { validateJwt } from '../middleware/validateJwt'
-import { syncUserById, buildAndSaveFreePlanSnapshot } from '../services/syncService'
+import { syncUserById } from '../services/syncService'
 import { AppError } from '../lib/errors'
 import { compareMatchingFields, compareMatchingFieldsExcludingSalary, stableStringify, getField } from '../lib/profileComparison'
 import { calculateUserOfferSalary } from '../lib/salaryCalculator'
@@ -200,7 +200,7 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
   let triggerSyncStartedAt: Date | undefined
   if (matchingRelevantChange) {
     triggerSyncStartedAt = new Date()
-    await prisma.user.update({ where: { id: userId }, data: { free_plan_snapshot: Prisma.JsonNull, sync_started_at: triggerSyncStartedAt } })
+    await prisma.user.update({ where: { id: userId }, data: { sync_started_at: triggerSyncStartedAt } })
   }
 
   // ── Salary-only detection ────────────────────────────────────────────────────
@@ -307,9 +307,6 @@ profileRouter.post('/trigger-sync', validateJwt, async (req, res) => {
 
     const [keptCount, rejectedCount] = await recalculateSalaryDeltas(newPrefs, exchangeRates, preferredCurrency)
     console.log(`[trigger-sync] salary-only increase: kept ${keptCount} offers, rejected ${rejectedCount} offers`)
-
-    await buildAndSaveFreePlanSnapshot(userId, newPrefs, exchangeRates, user.profile, triggerSyncStartedAt)
-    console.log('[trigger-sync] salary-only increase: snapshot rebuilt')
 
     await prisma.user.update({
       where: { id: userId },

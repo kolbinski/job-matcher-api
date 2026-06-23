@@ -1,11 +1,8 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import Stripe from 'stripe'
-import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { env } from '../lib/env'
-import { buildAndSaveFreePlanSnapshot } from '../services/syncService'
-import { type SalaryPref } from '../services/syncReport'
 
 export const stripeWebhookRouter = Router()
 
@@ -152,11 +149,11 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       await prisma.user.update({
         where: { id: userId },
         data: {
-          free_plan_snapshot: Prisma.JsonNull,
           scan_page_counter_max: { increment: (proLimits.max_scan_page ?? 0) - (freeLimits.max_scan_page ?? 0) },
           cv_counter_max: { increment: (proLimits.max_cv ?? 0) - (freeLimits.max_cv ?? 0) },
           cl_counter_max: { increment: (proLimits.max_cl ?? 0) - (freeLimits.max_cl ?? 0) },
           review_by_ai_counter_max: { increment: (proLimits.max_review_by_ai ?? 0) - (freeLimits.max_review_by_ai ?? 0) },
+          status_change_counter_max: proPlan.max_status_change ?? null,
         },
       })
 
@@ -201,22 +198,10 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
 
       console.log(`[stripe-webhook] Downgraded user ${sub.user_id} to Free plan`)
 
-      const userId = sub.user_id
-      const userRow = await prisma.user.findUnique({ where: { id: userId }, select: { profile: true } })
-      if (userRow?.profile != null) {
-        const rawProfile = userRow.profile as unknown as {
-          preferences?: { salary?: Array<{ type?: string; currency?: string; min?: number }> }
-        }
-        const salaryPrefs: SalaryPref[] = (rawProfile.preferences?.salary ?? []).filter(
-          (p): p is SalaryPref => p.type != null && p.currency != null && p.min != null,
-        )
-        let exchangeRates: Record<string, number> = {}
-        try {
-          const ratesSetting = await prisma.settings.findUnique({ where: { key: 'exchange_rates' } })
-          if (ratesSetting) exchangeRates = JSON.parse(ratesSetting.value) as Record<string, number>
-        } catch { /* rates stay empty */ }
-        await buildAndSaveFreePlanSnapshot(userId, salaryPrefs, exchangeRates, userRow.profile)
-      }
+      await prisma.user.update({
+        where: { id: sub.user_id },
+        data: { status_change_counter_max: freePlan.max_status_change ?? null },
+      })
     }
 
     return res.json({ received: true })

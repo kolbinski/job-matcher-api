@@ -58,7 +58,6 @@ model User {
   profile_synced_at                   DateTime?
   sync_started_at                     DateTime?
   profile_editing_snapshot            Json?
-  free_plan_snapshot                  Json?
   stripe_customer_id                  String?
   scan_page_counter                   Int       @default(0)
   scan_page_counter_max               Int       @default(0)
@@ -72,6 +71,8 @@ model User {
   pending_rematch                     Boolean   @default(false)
   review_by_ai_counter                Int       @default(0)
   review_by_ai_counter_max            Int       @default(0)
+  status_change_counter               Int       @default(0)
+  status_change_counter_max           Int?
   is_admin                            Boolean   @default(false)
   timezone                            String?
   preferred_currency                  String?
@@ -88,14 +89,15 @@ model User {
 }
 
 model Plan {
-  id              String         @id @default(cuid())
-  name            String         @unique
-  stripe_price_id String?
-  limits          Json
-  features        Json
-  is_active       Boolean        @default(true)
-  created_at      DateTime       @default(now())
-  subscriptions   Subscription[]
+  id                String         @id @default(cuid())
+  name              String         @unique
+  stripe_price_id   String?
+  limits            Json
+  features          Json
+  is_active         Boolean        @default(true)
+  created_at        DateTime       @default(now())
+  max_status_change Int?
+  subscriptions     Subscription[]
 
   @@map("plans")
 }

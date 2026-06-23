@@ -259,8 +259,11 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
   }
 
   const { role, user_id, agent_id } = req.jwt!;
+  // Assigned in exactly one of the two branches below; both either return early or assign.
+  let targetUserId!: string;
 
   if (role === 'client') {
+    targetUserId = user_id!;
     const userOffer = await prisma.userOffer.findFirst({
       where: { id, user_id: user_id! },
     });
@@ -280,12 +283,23 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'User offer not found' });
     }
 
+    targetUserId = userOffer.user_id;
+
     const agentClient = await prisma.agentClient.findUnique({
       where: { agent_id_user_id: { agent_id, user_id: userOffer.user_id } },
     });
     if (!agentClient) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'User offer does not belong to your client' });
     }
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { status_change_counter: true, status_change_counter_max: true },
+  });
+
+  if (targetUser?.status_change_counter_max != null && targetUser.status_change_counter >= targetUser.status_change_counter_max) {
+    return res.status(402).json({ error: 'free_limit_reached' });
   }
 
   const updated = await prisma.userOffer.update({
@@ -296,6 +310,13 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
   await prisma.userOfferStatus.create({
     data: { user_offer_id: id, status: parsed.data.status },
   });
+
+  if (targetUser?.status_change_counter_max != null) {
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: { status_change_counter: { increment: 1 } },
+    });
+  }
 
   return res.json(updated);
 });
@@ -409,7 +430,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           ? prisma.subscription.findUnique({ where: { user_id: clientId }, include: { plan: true } })
           : Promise.resolve(null),
         prisma.settings.findUnique({ where: { key: 'listing_offers_page_size' } }),
-        prisma.user.findUnique({ where: { id: clientId }, select: { preferred_currency: true, profile: true, offer_skills: true } }),
+        prisma.user.findUnique({ where: { id: clientId }, select: { preferred_currency: true, profile: true, offer_skills: true, status_change_counter: true, status_change_counter_max: true } }),
         prisma.settings.findUnique({ where: { key: 'exchange_rates' } }),
         prisma.settings.findUnique({ where: { key: 'dedup_source_preference' } }),
       ])
@@ -434,111 +455,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       source: true, city: true, workplace_type: true, experience_level: true,
       working_time: true, required_skills: true, nice_to_have_skills: true, published_at: true,
     } as const
-
-    // ── Free plan snapshot (pending_apply|ai_rejected two-section view only) ──
-    const isDefaultView = statuses.length === 2 && statuses.includes('pending_apply') && statuses.includes('ai_rejected')
-    if (role === 'client' && effectivePlan?.name === 'free' && isDefaultView) {
-      const userWithSnapshot = await prisma.user.findUnique({
-        where: { id: clientId },
-        select: { free_plan_snapshot: true },
-      })
-      const snapshotExists = userWithSnapshot?.free_plan_snapshot != null
-      if (!snapshotExists) {
-        console.log(`[snapshot] exists: false — falling through to live DB path`)
-      }
-      if (snapshotExists) {
-        const snap = userWithSnapshot!.free_plan_snapshot as {
-          apply_now?: { count: number; offers: unknown[] }
-          level_up?: { count: number; offers: unknown[] }
-        }
-        const snapApplyNow = (snap.apply_now?.offers ?? []) as Array<Record<string, unknown>>
-        const snapLevelUp = (snap.level_up?.offers ?? []) as Array<Record<string, unknown>>
-
-        // DB-level base WHERE for count queries (no plan limits)
-        const applyNowBaseWhere = {
-          user_id: clientId,
-          status: 'pending_apply',
-          ...(minScore > 0 ? { claude_score: { gte: minScore } } : {}),
-        }
-        const levelUpBaseWhere = {
-          user_id: clientId,
-          status: 'ai_rejected',
-          missing_skills: { isEmpty: false },
-          OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }],
-        }
-        // User-level filter conditions translated to DB predicates
-        const userAndConditions = [
-          ...(with_salary === 'true' ? [{ OR: [{ salary_contract_delta: { not: null } }, { salary_permanent_delta: { not: null } }] }] : []),
-          ...(isStarredFilter === 'true' ? [{ is_starred: true as const }] : []),
-          ...(generated_cv === 'true' ? [{ cv_status: 'done' }] : []),
-          ...(generated_cl === 'true' ? [{ cl_status: 'done' }] : []),
-        ]
-        const applyNowFilterWhere = userAndConditions.length > 0 ? { ...applyNowBaseWhere, AND: userAndConditions } : applyNowBaseWhere
-        const levelUpFilterWhere = userAndConditions.length > 0 ? { ...levelUpBaseWhere, AND: userAndConditions } : levelUpBaseWhere
-
-        const allSnapIds = [...snapApplyNow, ...snapLevelUp]
-          .map(o => o['user_offer_id'] as string).filter(Boolean)
-        const [starredRows, countAN, countAfterFiltersAN, countLU, countAfterFiltersLU] = await Promise.all([
-          prisma.userOffer.findMany({
-            where: { id: { in: allSnapIds } },
-            select: { id: true, is_starred: true },
-          }),
-          prisma.userOffer.count({ where: applyNowBaseWhere }),
-          prisma.userOffer.count({ where: applyNowFilterWhere }),
-          prisma.userOffer.count({ where: levelUpBaseWhere }),
-          prisma.userOffer.count({ where: levelUpFilterWhere }),
-        ])
-
-        const isStarredMap: Record<string, boolean> = {}
-        for (const r of starredRows) { isStarredMap[r.id] = r.is_starred }
-
-        const enrichSnap = (offers: Array<Record<string, unknown>>) =>
-          offers.map(o => ({ ...o, is_starred: isStarredMap[o['user_offer_id'] as string] ?? false }))
-
-        const filterSnap = (offers: Array<Record<string, unknown>>, applyMinScore: boolean): Array<Record<string, unknown>> => {
-          let arr = offers
-          if (applyMinScore && minScore > 0) arr = arr.filter(o => ((o['claude_score'] as number | null) ?? 0) >= minScore)
-          if (with_salary === 'true') arr = arr.filter(o => Array.isArray(o['salary']) && (o['salary'] as unknown[]).length > 0)
-          if (isStarredFilter === 'true') arr = arr.filter(o => o['is_starred'] === true)
-          if (generated_cv === 'true') arr = arr.filter(o => o['cv_status'] === 'done')
-          if (generated_cl === 'true') arr = arr.filter(o => o['cl_status'] === 'done')
-          return arr
-        }
-
-        const filteredApplyNow = filterSnap(enrichSnap(snapApplyNow), true)
-        const filteredLevelUp = filterSnap(enrichSnap(snapLevelUp), false)
-        const pageAN = page_apply_now ?? 1
-        const pageLU = page_level_up ?? 1
-        const startAN = (pageAN - 1) * pageSize
-        const startLU = (pageLU - 1) * pageSize
-
-        console.log(`[snapshot] exists: true, apply_now length: ${snapApplyNow.length}, level_up length: ${snapLevelUp.length}, page_apply_now: ${pageAN}, offset: ${startAN}, countAN: ${countAN}, countLU: ${countLU}`)
-
-        // Stale snapshot: has no offers but DB has items — fall through to live path so
-        // the user sees real results instead of empty offers.
-        if (snapApplyNow.length === 0 && snapLevelUp.length === 0 && (countAN > 0 || countLU > 0)) {
-          console.log(`[snapshot] stale (empty offers but DB has apply_now=${countAN}, level_up=${countLU}), falling through to live DB path`)
-        } else {
-          let applyNow = {
-            count: countAN,
-            count_after_filters: countAfterFiltersAN,
-            has_more: filteredApplyNow.length > startAN + pageSize,
-            offers: filteredApplyNow.slice(startAN, startAN + pageSize),
-          }
-          let levelUp = {
-            count: countLU,
-            count_after_filters: countAfterFiltersLU,
-            has_more: filteredLevelUp.length > startLU + pageSize,
-            offers: filteredLevelUp.slice(startLU, startLU + pageSize),
-          }
-
-          if (knownApplyCount !== undefined && knownApplyCount === countAN && pageAN === 1) applyNow = { ...applyNow, offers: [] }
-          if (knownLevelUpCount !== undefined && knownLevelUpCount === countLU && pageLU === 1) levelUp = { ...levelUp, offers: [] }
-
-          return res.json({ client_id: clientId, new_skills_count, apply_now: applyNow, level_up: levelUp })
-        }
-      }
-    }
 
     // ── Build sections from live DB ─────────────────────────────────────────────
     const sections: Record<string, { count: number; count_after_filters: number; has_more: boolean; offers: unknown[] }> = {}
@@ -700,6 +616,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       sections['level_up'] = { ...sections['level_up'], offers: [] }
     }
 
-    return res.json({ client_id: clientId, new_skills_count, ...sections })
+    return res.json({
+      client_id: clientId,
+      new_skills_count,
+      status_change_counter: dbUser?.status_change_counter ?? 0,
+      status_change_counter_max: dbUser?.status_change_counter_max ?? null,
+      ...sections,
+    })
   }
 });

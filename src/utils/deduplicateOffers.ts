@@ -42,7 +42,7 @@ export interface DedupableUserOffer {
 
 // Collapse user_offer rows that share an offer fingerprint.
 // Tie-break order: preferred source → highest claude_score → most recent matched_at.
-// Shared by GET /v1/user-offers (both paths) and buildAndSaveFreePlanSnapshot.
+// Shared by GET /v1/user-offers and syncService.ts.
 export function dedupeUserOffers<T extends DedupableUserOffer>(
   rows: T[],
   preferredSource?: string,

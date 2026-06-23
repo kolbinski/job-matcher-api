@@ -292,7 +292,6 @@ export async function startScheduler(): Promise<void> {
         profile_synced_at: null,
         sync_started_at: null,
         pending_rematch: false,
-        free_plan_snapshot: Prisma.DbNull,
         offer_skills: Prisma.DbNull,
       },
     });
