@@ -38,11 +38,12 @@ export interface DedupableUserOffer {
   offer: DedupableOffer
   claude_score: number | null
   matched_at: Date
+  is_starred: boolean
 }
 
 // Collapse user_offer rows that share an offer fingerprint.
-// Tie-break order: preferred source → highest claude_score → most recent matched_at.
-// Shared by GET /v1/user-offers and syncService.ts.
+// Tie-break order: starred → preferred source → highest claude_score → most recent matched_at.
+// Shared by GET /v1/user-offers.
 export function dedupeUserOffers<T extends DedupableUserOffer>(
   rows: T[],
   preferredSource?: string,
@@ -56,17 +57,23 @@ export function dedupeUserOffers<T extends DedupableUserOffer>(
     if (!prev) {
       seen.set(key, uo)
     } else {
-      const curIsPreferred = preferredSource ? uo.offer.source === preferredSource : false
-      const prevIsPreferred = preferredSource ? prev.offer.source === preferredSource : false
-      if (curIsPreferred && !prevIsPreferred) {
+      if (uo.is_starred && !prev.is_starred) {
         seen.set(key, uo)
-      } else if (!curIsPreferred && prevIsPreferred) {
+      } else if (!uo.is_starred && prev.is_starred) {
         // keep prev
       } else {
-        const prevScore = prev.claude_score ?? -1
-        const newScore = uo.claude_score ?? -1
-        if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+        const curIsPreferred = preferredSource ? uo.offer.source === preferredSource : false
+        const prevIsPreferred = preferredSource ? prev.offer.source === preferredSource : false
+        if (curIsPreferred && !prevIsPreferred) {
           seen.set(key, uo)
+        } else if (!curIsPreferred && prevIsPreferred) {
+          // keep prev
+        } else {
+          const prevScore = prev.claude_score ?? -1
+          const newScore = uo.claude_score ?? -1
+          if (newScore > prevScore || (newScore === prevScore && uo.matched_at > prev.matched_at)) {
+            seen.set(key, uo)
+          }
         }
       }
     }

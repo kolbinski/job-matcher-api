@@ -795,6 +795,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         userFiltered = userFiltered.filter(o => o.salary.length > 0);
       if (isStarredFilter === 'true')
         userFiltered = userFiltered.filter(o => o.is_starred);
+      if (bucketStatus === 'pending_apply') {
+        console.log(`[user-offers] apply_now is_starred: before_dedup=${rows.length}, after_dedup=${deduped.length}, after_starred_filter=${userFiltered.length}`)
+      }
       if (generated_cv === 'true')
         userFiltered = userFiltered.filter(o => o.cv_status === 'done');
       if (generated_cl === 'true')
