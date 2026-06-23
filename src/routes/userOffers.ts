@@ -425,8 +425,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     generated_cv,
     generated_cl,
     sort_by: sortBy,
-    known_apply_count: knownApplyCount,
-    known_level_up_count: knownLevelUpCount,
     with_salary,
     is_starred: isStarredFilter,
     page_apply_now,
@@ -878,25 +876,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         has_more: limited.length > start + pageSize,
         offers: sorted.slice(start, start + pageSize),
       };
-    }
-
-    if (
-      knownApplyCount !== undefined &&
-      sections['apply_now'] &&
-      knownApplyCount === sections['apply_now'].count &&
-      (page_apply_now ?? 1) === 1
-    ) {
-      console.log(`[user-offers] apply_now suppressed: knownApplyCount=${knownApplyCount} matches count=${sections['apply_now'].count}`)
-      sections['apply_now'] = { ...sections['apply_now'], offers: [] };
-    }
-    if (
-      knownLevelUpCount !== undefined &&
-      sections['level_up'] &&
-      knownLevelUpCount === sections['level_up'].count &&
-      (page_level_up ?? 1) === 1
-    ) {
-      console.log(`[user-offers] level_up suppressed: knownLevelUpCount=${knownLevelUpCount} matches count=${sections['level_up'].count}`)
-      sections['level_up'] = { ...sections['level_up'], offers: [] };
     }
 
     return res.json({
