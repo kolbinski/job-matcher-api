@@ -663,6 +663,12 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
       };
 
+      if (bucketStatus === 'pending_apply') {
+        console.log(`[user-offers] apply_now query: page_apply_now=${page}, page_size=${pageSize}, offset=${start}, userId=${clientId}`)
+      } else if (bucketStatus === 'ai_rejected') {
+        console.log(`[user-offers] level_up query: page_level_up=${page}, page_size=${pageSize}, offset=${start}, userId=${clientId}`)
+      }
+
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
         include: {
@@ -862,6 +868,10 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
         );
       });
 
+      if (bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected') {
+        console.log(`[user-offers] ${sectionKey}: rows=${rows.length}, deduped=${deduped.length}, mapped=${mapped.length}, limited=${limited.length}, sorted=${sorted.length}, start=${start}, offers=${sorted.slice(start, start + pageSize).length}`)
+      }
+
       sections[sectionKey] = {
         count,
         count_after_filters,
@@ -876,6 +886,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       knownApplyCount === sections['apply_now'].count &&
       (page_apply_now ?? 1) === 1
     ) {
+      console.log(`[user-offers] apply_now suppressed: knownApplyCount=${knownApplyCount} matches count=${sections['apply_now'].count}`)
       sections['apply_now'] = { ...sections['apply_now'], offers: [] };
     }
     if (
@@ -884,6 +895,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       knownLevelUpCount === sections['level_up'].count &&
       (page_level_up ?? 1) === 1
     ) {
+      console.log(`[user-offers] level_up suppressed: knownLevelUpCount=${knownLevelUpCount} matches count=${sections['level_up'].count}`)
       sections['level_up'] = { ...sections['level_up'], offers: [] };
     }
 
