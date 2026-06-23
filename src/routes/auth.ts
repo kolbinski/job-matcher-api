@@ -104,7 +104,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
         scan_page_counter_max: true,
         profile_relevant_change_counter_max: true,
         review_by_ai_counter_max: true,
-        max_status_change: true,
+        status_change_counter_max: true,
       },
     }),
   ]);
