@@ -343,7 +343,7 @@ export async function runMatchForUser(
       const userSkillsLower = new Set(
         Object.values(profile.skills).flat().map(s => s.name.toLowerCase()),
       );
-      const cvLanguageByIndex = new Map<number, 'pl' | 'en'>();
+      const cvLanguageByIndex = new Map<number, string>();
       for (const ev of batchResults.evaluations) {
         if (ev.offer_index < 0 || ev.offer_index >= batch.length) continue;
         const p = batch[ev.offer_index];

@@ -59,7 +59,7 @@ export async function generateCoverLetter(
   const resolvedModel = model ?? await getClaudeModel('cl_generation')
   const { basic_info } = profile
   const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
-  const lang = isPl ? 'pl' : 'en'
+  const lang = cvLanguage
 
   const profileSummary = {
     basic_info: {

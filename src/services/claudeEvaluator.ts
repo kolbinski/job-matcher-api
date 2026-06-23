@@ -79,8 +79,7 @@ const EVALUATE_OFFERS_TOOL: Anthropic.Tool = {
             },
             offer_language: {
               type: 'string',
-              enum: ['pl', 'en'],
-              description: 'Detected language of the offer',
+              description: "Detected language of the offer as ISO 639-1 code (e.g. 'en', 'pl', 'de', 'fr')",
             },
           },
           required: [
@@ -108,7 +107,7 @@ export interface ClaudeEvaluation {
   salary_comparison: string;
   role_fit: string;
   recommended: boolean;
-  offer_language: 'pl' | 'en';
+  offer_language: string;
 }
 
 export interface EvaluateOffersResult {
@@ -377,7 +376,7 @@ function validateEvaluation(
     typeof obj['recommended'] === 'boolean' ? obj['recommended'] : false;
 
   const rawLang = obj['offer_language'];
-  const offer_language: 'pl' | 'en' = rawLang === 'pl' ? 'pl' : 'en';
+  const offer_language: string = typeof rawLang === 'string' && rawLang.length >= 2 ? rawLang.toLowerCase() : 'en';
 
   return {
     offer_index,
