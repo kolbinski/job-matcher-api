@@ -547,6 +547,7 @@ Rules:
 
   let html = buildHtml(cv, profile, locale, labels, presentLabel, isRtl, translateCategory, nativeLabel, translateLanguageName, categoryOrder)
     .replace('{{CV_TITLE}}', filename.replace('.pdf', ''))
+    .replace('{{LANG}}', cvLanguage)
     .replace('{{TEXT_DIRECTION}}', textDirection);
 
   // Agent info + GDPR footer
