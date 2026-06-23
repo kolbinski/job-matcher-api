@@ -104,6 +104,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
         scan_page_counter_max: true,
         profile_relevant_change_counter_max: true,
         review_by_ai_counter_max: true,
+        max_status_change: true,
       },
     }),
   ]);
@@ -114,6 +115,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
         max_scan_page?: number;
         profile_relevant_change_max?: number;
         max_review_by_ai?: number;
+        max_status_change?: number | null;
       }
     | undefined;
   const defaultTimezone = timezone ?? 'America/New_York';
@@ -131,7 +133,7 @@ authRouter.post('/social-login', validateSupabaseJwt, async (req, res) => {
       profile_relevant_change_counter_max:
         freeLimits?.profile_relevant_change_max ?? 0,
       review_by_ai_counter_max: freeLimits?.max_review_by_ai ?? 0,
-      status_change_counter_max: freePlan?.max_status_change ?? null,
+      status_change_counter_max: freeLimits?.max_status_change ?? null,
       timezone: defaultTimezone,
       preferred_currency: defaultCurrency,
     },
