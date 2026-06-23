@@ -382,7 +382,7 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
 
   if (
     targetUser?.status_change_counter_max != null &&
-    targetUser.status_change_counter > targetUser.status_change_counter_max
+    targetUser.status_change_counter >= targetUser.status_change_counter_max
   ) {
     return res.status(402).json({ error: 'free_limit_reached' });
   }
