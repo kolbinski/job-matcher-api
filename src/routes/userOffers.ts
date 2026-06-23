@@ -235,6 +235,7 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       work_model: uo.offer.workplace_type ?? null,
       required_skills: uo.offer.required_skills,
       nice_to_have_skills: uo.offer.nice_to_have_skills,
+      is_starred: uo.is_starred,
       cv_language: uo.cv_language,
       cv_status: uo.cv_status ?? null,
       cv_url: uo.cv_url ?? null,
