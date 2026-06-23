@@ -94,6 +94,7 @@ const StatusBodySchema = z.object({
     'offer_received',
     'accepted',
     'client_withdrawn',
+    'pending_apply',
   ]),
 });
 
@@ -660,12 +661,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           : {}),
         ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
       };
-
-      if (bucketStatus === 'pending_apply') {
-        console.log(`[user-offers] apply_now query: page_apply_now=${page}, page_size=${pageSize}, offset=${start}, userId=${clientId}`)
-      } else if (bucketStatus === 'ai_rejected') {
-        console.log(`[user-offers] level_up query: page_level_up=${page}, page_size=${pageSize}, offset=${start}, userId=${clientId}`)
-      }
 
       const rows = await prisma.userOffer.findMany({
         where: bucketWhere,
