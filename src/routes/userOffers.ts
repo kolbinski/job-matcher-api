@@ -657,9 +657,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
               ],
             }
           : {}),
-        ...(bucketStatus === 'pending_apply' && minScore > 0
-          ? { claude_score: { gte: minScore } }
-          : {}),
         ...(Object.keys(offerWhere).length > 0 ? { offer: offerWhere } : {}),
       };
 
@@ -787,6 +784,8 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
 
       // User-level filters (affect count_after_filters, not count)
       let userFiltered = mapped as typeof mapped;
+      if (bucketStatus === 'pending_apply' && minScore > 0)
+        userFiltered = userFiltered.filter(o => (o.claude_score ?? 0) >= minScore);
       if (with_salary === 'true')
         userFiltered = userFiltered.filter(o => o.salary.length > 0);
       if (isStarredFilter === 'true')
