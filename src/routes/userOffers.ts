@@ -249,34 +249,28 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
 userOffersRouter.patch('/:id/role-fit', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!;
   if (role !== 'client') {
-    return res
-      .status(403)
-      .json({
-        error: 'FORBIDDEN',
-        message: 'Only clients can use this endpoint',
-      });
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'Only clients can use this endpoint',
+    });
   }
   const { id } = req.params as { id: string };
   const roleFit = req.body?.claude_role_fit;
   if (typeof roleFit !== 'string' || !roleFit.trim()) {
-    return res
-      .status(422)
-      .json({
-        error: 'INVALID_REQUEST',
-        message: 'claude_role_fit must be a non-empty string',
-      });
+    return res.status(422).json({
+      error: 'INVALID_REQUEST',
+      message: 'claude_role_fit must be a non-empty string',
+    });
   }
 
   const userOffer = await prisma.userOffer.findFirst({
     where: { id, user_id: user_id! },
   });
   if (!userOffer) {
-    return res
-      .status(403)
-      .json({
-        error: 'FORBIDDEN',
-        message: 'User offer not found or does not belong to you',
-      });
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'User offer not found or does not belong to you',
+    });
   }
 
   await prisma.userOffer.update({
@@ -290,24 +284,20 @@ userOffersRouter.patch('/:id/role-fit', validateJwt, async (req, res) => {
 userOffersRouter.patch('/:id/star', validateJwt, async (req, res) => {
   const { role, user_id } = req.jwt!;
   if (role !== 'client') {
-    return res
-      .status(403)
-      .json({
-        error: 'FORBIDDEN',
-        message: 'Only clients can use this endpoint',
-      });
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'Only clients can use this endpoint',
+    });
   }
   const { id } = req.params as { id: string };
   const userOffer = await prisma.userOffer.findFirst({
     where: { id, user_id: user_id! },
   });
   if (!userOffer) {
-    return res
-      .status(403)
-      .json({
-        error: 'FORBIDDEN',
-        message: 'User offer not found or does not belong to you',
-      });
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'User offer not found or does not belong to you',
+    });
   }
   const updated = await prisma.userOffer.update({
     where: { id },
@@ -336,12 +326,10 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
       where: { id, user_id: user_id! },
     });
     if (!userOffer) {
-      return res
-        .status(403)
-        .json({
-          error: 'FORBIDDEN',
-          message: 'User offer not found or does not belong to you',
-        });
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'User offer not found or does not belong to you',
+      });
     }
   } else {
     if (!agent_id) {
@@ -366,12 +354,10 @@ userOffersRouter.patch('/:id/status', validateJwt, async (req, res) => {
       where: { agent_id_user_id: { agent_id, user_id: userOffer.user_id } },
     });
     if (!agentClient) {
-      return res
-        .status(403)
-        .json({
-          error: 'FORBIDDEN',
-          message: 'User offer does not belong to your client',
-        });
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'User offer does not belong to your client',
+      });
     }
   }
 
@@ -447,24 +433,20 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
     clientId = user_id!;
   } else {
     if (!parsed.data.client_id) {
-      return res
-        .status(422)
-        .json({
-          error: 'INVALID_REQUEST',
-          message: 'Missing required query param: client_id',
-        });
+      return res.status(422).json({
+        error: 'INVALID_REQUEST',
+        message: 'Missing required query param: client_id',
+      });
     }
     clientId = parsed.data.client_id;
     const agentClient = await prisma.agentClient.findUnique({
       where: { agent_id_user_id: { agent_id: agent_id!, user_id: clientId } },
     });
     if (!agentClient) {
-      return res
-        .status(403)
-        .json({
-          error: 'FORBIDDEN',
-          message: 'Client not linked to this agent',
-        });
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Client not linked to this agent',
+      });
     }
   }
 
@@ -785,7 +767,9 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
       // User-level filters (affect count_after_filters, not count)
       let userFiltered = mapped as typeof mapped;
       if (bucketStatus === 'pending_apply' && minScore > 0)
-        userFiltered = userFiltered.filter(o => (o.claude_score ?? 0) >= minScore);
+        userFiltered = userFiltered.filter(
+          o => (o.claude_score ?? 0) >= minScore,
+        );
       if (with_salary === 'true')
         userFiltered = userFiltered.filter(o => o.salary.length > 0);
       if (isStarredFilter === 'true')
@@ -860,10 +844,6 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           (b.work_model === 'remote' ? 0 : 1)
         );
       });
-
-      if (bucketStatus === 'pending_apply' || bucketStatus === 'ai_rejected') {
-        console.log(`[user-offers] ${sectionKey}: rows=${rows.length}, deduped=${deduped.length}, mapped=${mapped.length}, limited=${limited.length}, sorted=${sorted.length}, start=${start}, offers=${sorted.slice(start, start + pageSize).length}`)
-      }
 
       sections[sectionKey] = {
         count,
