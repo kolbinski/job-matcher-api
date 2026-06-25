@@ -446,12 +446,15 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation) matching th
 }
 
 Rules:
-- highlighted_skills: 6–10 skills from the job offer requirements that match the candidate's profile
+- highlighted_skills: 6–10 skills matching the job offer requirements. Prioritize required skills over nice-to-have. Do not pad with generic skills (e.g. "teamwork", "communication") — only technical and domain skills from the offer.
 - work_experience: include ALL jobs; per job select 1–2 most relevant projects with 1–2 achievements each
+- When rewriting achievements, always start with a strong action verb (e.g. Engineered, Architected, Reduced, Scaled, Delivered, Migrated, Led, Optimized, Launched). Rewrite candidate's natural-language achievements into punchy, resume-style bullet points.
+- Preserve and highlight any quantified results in achievements (percentages, time saved, team size, revenue impact, etc.) — never drop numbers from the source profile.
 - own_projects: include all provided projects with a tailored 1-sentence description in the detected language
 - certifications: include only if relevant to this offer, otherwise return []
 - date_to: null means currently employed there
 - dates must be in YYYY-MM format (e.g. "2021-03")
+- For summary: be specific and concrete. Avoid generic filler phrases like "passionate developer", "team player", "strong communicator". Every sentence must carry specific information about the candidate.
 - IMPORTANT: if a project has name="" (empty string) in the profile, do NOT invent or generate a project name — output name="" in your JSON response. The CV template hides it automatically.`;
 
   console.log('[cvGenerator] calling Claude API, prompt length:', prompt.length);

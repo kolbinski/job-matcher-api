@@ -111,6 +111,12 @@ export async function generateCoverLetter(
         achievements: p.achievements ?? [],
       })),
     })),
+    own_projects: (profile.own_projects ?? []).map(p => ({
+      name: p.name,
+      url: p.url ?? null,
+      skills: p.skills,
+      achievements: p.achievements,
+    })),
   };
 
   const prompt = `You are a professional cover letter writer. Detect the language of the job offer below and write the cover letter body in that same language. Do not use any other language.
@@ -131,9 +137,11 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 
 The "body" field must contain exactly 3 HTML paragraphs (each wrapped in <p> tags), plus an optional 4th paragraph for profile links (see below). No greeting, no sign-off — just the <p> elements in the detected language.
 
-Paragraph 1: Why this specific company and role — show genuine knowledge of the offer and how the candidate's background is a precise fit.
-Paragraph 2: Key achievements and concrete value the candidate brings — use specific, quantified examples from their experience.
-Paragraph 3: Call to action — express enthusiasm, invite to an interview, professional closing sentence.
+Tone: write as a senior professional addressing a future colleague, not as a job seeker addressing a hiring manager. Confident and direct, not eager or subservient.
+
+Paragraph 1: Mention something specific about the company or product that shows genuine interest — not generic praise like "I admire your innovative culture". Reference something real from the offer (tech stack, product, mission, specific challenge mentioned). Then connect the candidate's background directly to it.
+Paragraph 2: Lead with the single strongest, most quantified achievement first. Then support with one more specific example. If own_projects are present and relevant to the offer, naturally reference one as additional evidence of the candidate's skills (e.g. open source project, side product) — do not force it if not relevant.
+Paragraph 3: Confident call to action — no phrases like "I hope to hear from you" or "I would be grateful for an opportunity". Direct and peer-level, e.g. "I'd welcome a conversation about how I can contribute."
 Paragraph 4 (only if basic_info contains linkedin_url or github_url): A single short sentence naturally mentioning the provided profile links in the detected language (e.g. "You can find my professional profile at {linkedin_url} and my code on GitHub at {github_url}."). Use only the links that are present. Do not invent or modify any URLs.
 
 Rules:
