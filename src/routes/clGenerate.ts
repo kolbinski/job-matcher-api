@@ -58,7 +58,7 @@ async function runGeneration(
   const clModel = await getClaudeModel('cl_generation')
 
   try {
-    const { html, filename, usage, detected_language } = await generateCoverLetter(profileParsed.data, offerText, clLanguage, jobTitle, companyName, user, clModel)
+    const { html, filename, usage, detected_language, cl_txt } = await generateCoverLetter(profileParsed.data, offerText, clLanguage, jobTitle, companyName, user, clModel)
 
     const formData = new FormData()
     formData.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
@@ -84,7 +84,7 @@ async function runGeneration(
 
     await prisma.userOffer.update({
       where: { id: userOfferId },
-      data: { cl_status: 'done', cl_url: publicUrl, cv_language: detected_language },
+      data: { cl_status: 'done', cl_url: publicUrl, cl_txt, cv_language: detected_language },
     })
 
     await prisma.user.update({ where: { id: userId }, data: { cl_counter: { increment: 1 } } })
@@ -114,7 +114,7 @@ async function runGeneration(
       }))
       .catch(err => console.error('[ai_usage] insert failed:', err))
 
-    return { cl_url: publicUrl, cl_status: 'done' }
+    return { cl_url: publicUrl, cl_status: 'done', cl_txt }
   } catch (err) {
     await prisma.userOffer.update({ where: { id: userOfferId }, data: { cl_status: 'error' } }).catch(() => {})
     throw err

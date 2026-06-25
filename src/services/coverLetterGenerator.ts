@@ -55,7 +55,7 @@ export async function generateCoverLetter(
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
   model?: string,
-): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number }; detected_language: string }> {
+): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number }; detected_language: string; cl_txt: string }> {
   const resolvedModel = model ?? await getClaudeModel('cl_generation')
   const { basic_info } = profile
   const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
@@ -173,6 +173,12 @@ Rules:
   const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN)
   const bestRegards = langEntry?.best_regards ?? 'Best regards,'
 
+  const paragraphs = body
+    .split(/<\/?p>/i)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+  const clTxt = [...paragraphs, `${bestRegards}\n${first_name} ${last_name}`].join('\n\n')
+
   // Footer (agent info + GDPR)
   const footerParts: string[] = []
   if (user?.show_agent_info_in_cv) {
@@ -210,5 +216,5 @@ Rules:
 
   html = html.replace(/—/g, '-')
 
-  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 }, detected_language: detectedLanguage }
+  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 }, detected_language: detectedLanguage, cl_txt: clTxt }
 }

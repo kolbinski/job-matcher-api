@@ -241,6 +241,7 @@ userOffersRouter.get('/by-url', validateJwt, async (req, res) => {
       cv_url: uo.cv_url ?? null,
       cl_status: uo.cl_status ?? null,
       cl_url: uo.cl_url ?? null,
+      cl_txt: uo.cl_txt ?? null,
       status: uo.status,
     },
   });
@@ -758,6 +759,7 @@ userOffersRouter.get('/', validateJwt, async (req, res) => {
           cv_url: uo.cv_url ?? null,
           cl_status: uo.cl_status ?? null,
           cl_url: uo.cl_url ?? null,
+          cl_txt: uo.cl_txt ?? null,
           status: uo.status,
         };
       });
