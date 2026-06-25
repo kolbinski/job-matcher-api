@@ -393,13 +393,15 @@ export async function generateCV(
 
   const prompt = `Detect the language of the job offer from the JOB OFFER section below and generate the entire CV in that same language. Do not use any other language.
 
+The JOB OFFER section may contain UI elements, navigation, and page chrome in a different language than the actual job offer. Detect the language of the JOB OFFER ITSELF — focus on: job title, job description, requirements, responsibilities, and qualifications sections. Ignore any navigation menus, buttons, footer text, or unrelated page elements when determining the language.
+
 CRITICAL: You must output ONLY valid text in the detected language. Never mix characters from other writing systems. If uncertain about a word, use a simpler alternative in the detected language. Any character that is not part of the detected language's writing system must be removed.
 
 CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in the detected language of the job offer. This is non-negotiable. Every sentence, every description, every achievement must be written in that language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to the detected language.
 
 You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
 
-LANGUAGE: Detect the language from the JOB OFFER section. Generate ALL text content in that language. Translate the candidate's summary, work experience achievements, and any other descriptive text. Keep proper nouns (company names, technology names, product names) in their original form.
+LANGUAGE: Detect the language from the job title, job description, requirements, responsibilities, and qualifications in the JOB OFFER section — not from UI chrome or navigation. Generate ALL text content in that language. Translate the candidate's summary, work experience achievements, and any other descriptive text. Keep proper nouns (company names, technology names, product names) in their original form.
 
 CANDIDATE PROFILE:
 ${JSON.stringify(profileForClaude, null, 2)}

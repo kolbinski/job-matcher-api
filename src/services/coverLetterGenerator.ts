@@ -87,6 +87,8 @@ export async function generateCoverLetter(
 
   const prompt = `You are a professional cover letter writer. Detect the language of the job offer below and write the cover letter body in that same language. Do not use any other language.
 
+The JOB OFFER section may contain UI elements, navigation, and page chrome in a different language than the actual job offer. Detect the language of the JOB OFFER ITSELF — focus on: job title, job description, requirements, responsibilities, and qualifications sections. Ignore any navigation menus, buttons, footer text, or unrelated page elements when determining the language.
+
 CANDIDATE PROFILE:
 ${JSON.stringify(profileSummary, null, 2)}
 
