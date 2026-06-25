@@ -109,6 +109,7 @@ interface CvCert {
 }
 
 interface CvContent {
+  detected_language: string;
   target_role: string;
   summary: string;
   highlighted_skills: string[];
@@ -369,11 +370,8 @@ export async function generateCV(
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
   model?: string,
-): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
+): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number }; detected_language: string }> {
   const resolvedModel = model ?? await getClaudeModel('cv_generation')
-  const langEntry = await getLanguageEntry(cvLanguage);
-  const langName = langEntry?.name ?? cvLanguage;
-  const langCode = langEntry?.code ?? cvLanguage;
   const profileForClaude = {
     basic_info: {
       first_name: profile.basic_info.first_name,
@@ -393,24 +391,27 @@ export async function generateCV(
     skills: profile.skills,
   };
 
-  const prompt = `CRITICAL: You must output ONLY valid ${langName} text. Never mix characters from other writing systems. Do not output Korean, Chinese, Japanese or any other script characters. If uncertain about a word, use a simpler ${langName} alternative. Any character that is not part of the ${langName} writing system must be removed.
+  const prompt = `Detect the language of the job offer from the JOB OFFER section below and generate the entire CV in that same language. Do not use any other language.
 
-CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in ${langName} (${langCode}). This is non-negotiable. Every sentence, every description, every achievement must be written in ${langName}. Do NOT use Polish, English, or any other language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to ${langName}.
+CRITICAL: You must output ONLY valid text in the detected language. Never mix characters from other writing systems. If uncertain about a word, use a simpler alternative in the detected language. Any character that is not part of the detected language's writing system must be removed.
+
+CRITICAL INSTRUCTION: You MUST generate ALL text content EXCLUSIVELY in the detected language of the job offer. This is non-negotiable. Every sentence, every description, every achievement must be written in that language. The candidate's profile may be in Polish or English — ignore the source language and translate everything to the detected language.
 
 You are a professional CV writer. Analyse the candidate profile and job offer, then return a JSON object with tailored CV content.
 
-LANGUAGE: Generate ALL text content in ${langName} language. Translate the candidate's summary, work experience achievements, and any other descriptive text into ${langName}. Keep proper nouns (company names, technology names, product names) in their original form.
+LANGUAGE: Detect the language from the JOB OFFER section. Generate ALL text content in that language. Translate the candidate's summary, work experience achievements, and any other descriptive text. Keep proper nouns (company names, technology names, product names) in their original form.
 
 CANDIDATE PROFILE:
 ${JSON.stringify(profileForClaude, null, 2)}
 
-JOB OFFER (${cvLanguage}):
+JOB OFFER:
 ${offerText.slice(0, 3000)}
 
 Return ONLY valid JSON (no markdown, no code fences, no explanation) matching this exact structure:
 {
+  "detected_language": "ISO 639-1 code of the detected offer language (e.g. 'en', 'de', 'pl', 'fr')",
   "target_role": "job title tailored to this offer",
-  "summary": "2-3 sentence professional summary in ${cvLanguage} tailored to this offer. Write in first person (I, my, me) — never third person (he, she, they). Example: 'I led a cross-functional team...' not 'He led a cross-functional team...'. Use cv_summary_bullets as inspiration. Highlight experience_in_industry and experience_in_country_markets where relevant. Weave soft_skills naturally into prose — do not list them verbatim.",
+  "summary": "2-3 sentence professional summary in the detected language tailored to this offer. Write in first person (I, my, me) — never third person (he, she, they). Example: 'I led a cross-functional team...' not 'He led a cross-functional team...'. Use cv_summary_bullets as inspiration. Highlight experience_in_industry and experience_in_country_markets where relevant. Weave soft_skills naturally into prose — do not list them verbatim.",
   "highlighted_skills": ["skill1", "skill2"],
   "work_experience": [
     {
@@ -434,7 +435,7 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation) matching th
       "name": "project name",
       "url": "url or null",
       "skills": ["tech1", "tech2"],
-      "description": "1 sentence tailored to this offer in ${cvLanguage}"
+      "description": "1 sentence tailored to this offer in the detected language"
     }
   ],
   "certifications": [
@@ -445,7 +446,7 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation) matching th
 Rules:
 - highlighted_skills: 6–10 skills from the job offer requirements that match the candidate's profile
 - work_experience: include ALL jobs; per job select 1–2 most relevant projects with 1–2 achievements each
-- own_projects: include all provided projects with a tailored 1-sentence description in ${cvLanguage}
+- own_projects: include all provided projects with a tailored 1-sentence description in the detected language
 - certifications: include only if relevant to this offer, otherwise return []
 - date_to: null means currently employed there
 - dates must be in YYYY-MM format (e.g. "2021-03")
@@ -486,6 +487,8 @@ Rules:
     .trim();
 
   const cv = JSON.parse(raw) as CvContent;
+  const detectedLanguage = cv.detected_language ?? cvLanguage;
+  const langEntry = await getLanguageEntry(detectedLanguage);
 
   // Enforce empty project names regardless of what Claude generated.
   // Claude may invent a name even when told not to — the profile is the source of truth.
@@ -581,5 +584,5 @@ Rules:
   html = html.replace('{{GDPR_CONSENT}}', gdprText);
   html = html.replace(/—/g, '-');
 
-  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } };
+  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 }, detected_language: detectedLanguage };
 }

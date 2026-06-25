@@ -55,7 +55,7 @@ export async function generateCoverLetter(
   companyName?: string,
   user?: { id: string; show_agent_info_in_cv: boolean },
   model?: string,
-): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number } }> {
+): Promise<{ html: string; filename: string; usage: { input_tokens: number; output_tokens: number }; detected_language: string }> {
   const resolvedModel = model ?? await getClaudeModel('cl_generation')
   const { basic_info } = profile
   const isPl = cvLanguage.toLowerCase() === 'pl' || cvLanguage.toLowerCase().startsWith('pol')
@@ -85,15 +85,21 @@ export async function generateCoverLetter(
     })),
   }
 
-  const prompt = `You are a professional cover letter writer. Write a cover letter body for this candidate applying to the job offer below.
+  const prompt = `You are a professional cover letter writer. Detect the language of the job offer below and write the cover letter body in that same language. Do not use any other language.
 
 CANDIDATE PROFILE:
 ${JSON.stringify(profileSummary, null, 2)}
 
-JOB OFFER (${cvLanguage}):
+JOB OFFER:
 ${offerText.slice(0, 3000)}
 
-Return ONLY the cover letter body as exactly 3 HTML paragraphs (each wrapped in <p> tags), in ${cvLanguage}. No other output, no greeting, no sign-off — just the 3 <p> elements.
+Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
+{
+  "detected_language": "ISO 639-1 code of the detected offer language (e.g. 'en', 'de', 'pl', 'fr')",
+  "body": "<p>paragraph 1</p><p>paragraph 2</p><p>paragraph 3</p>"
+}
+
+The "body" field must contain exactly 3 HTML paragraphs (each wrapped in <p> tags). No greeting, no sign-off — just the 3 <p> elements in the detected language.
 
 Paragraph 1: Why this specific company and role — show genuine knowledge of the offer and how the candidate's background is a precise fit.
 Paragraph 2: Key achievements and concrete value the candidate brings — use specific, quantified examples from their experience.
@@ -103,7 +109,7 @@ Rules:
 - Write in first person (I, my, me)
 - Do NOT use em dashes (—), use a regular hyphen (-) instead
 - Keep each paragraph to 3-5 sentences
-- Language: ${cvLanguage}`
+- Generate the entire cover letter in the detected language of the job offer`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -129,7 +135,14 @@ Rules:
     content: Array<{ text: string }>;
     usage?: { input_tokens: number; output_tokens: number };
   }
-  const body = data.content[0].text.trim()
+  const rawText = data.content[0].text
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+  const parsed = JSON.parse(rawText) as { detected_language: string; body: string }
+  const body = parsed.body
+  const detectedLanguage = parsed.detected_language ?? cvLanguage
 
   // Contacts
   const contactParts = [
@@ -153,7 +166,7 @@ Rules:
   ].filter((p): p is string => p !== null && p.length > 0)
   const filename = filenameParts.join('-') + '.pdf'
 
-  const langEntry = await getLanguageEntry(cvLanguage)
+  const langEntry = await getLanguageEntry(detectedLanguage)
   const locale = langEntry?.locale ?? 'en-US'
   const gdprText = esc(langEntry?.gdpr ?? FALLBACK_GDPR_EN)
   const bestRegards = langEntry?.best_regards ?? 'Best regards,'
@@ -195,5 +208,5 @@ Rules:
 
   html = html.replace(/—/g, '-')
 
-  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
+  return { html, filename, usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 }, detected_language: detectedLanguage }
 }

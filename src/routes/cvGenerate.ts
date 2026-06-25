@@ -16,7 +16,6 @@ const AgentGenerateCVSchema = z.object({
   client_id: z.string().uuid(),
   user_offer_id: z.string().uuid(),
   offer_text: z.string().min(1),
-  cv_language: z.string().min(2),
   company_name: z.string().optional(),
   job_title: z.string().optional(),
 })
@@ -24,7 +23,6 @@ const AgentGenerateCVSchema = z.object({
 const ClientGenerateCVSchema = z.object({
   user_offer_id: z.string().uuid(),
   offer_text: z.string().min(1),
-  cv_language: z.string().min(2),
   company_name: z.string().optional(),
   job_title: z.string().optional(),
 })
@@ -33,7 +31,6 @@ async function runGeneration(
   userId: string,
   userOfferId: string,
   offerText: string,
-  cvLanguage: string,
   jobTitle: string | undefined,
   companyName: string | undefined,
 ) {
@@ -54,12 +51,14 @@ async function runGeneration(
   const userOffer = await prisma.userOffer.findUnique({ where: { id: userOfferId } })
   if (!userOffer || userOffer.user_id !== userId) throw new AppError(404, 'NOT_FOUND', 'User offer not found')
 
+  const cvLanguage = userOffer.cv_language ?? 'en'
+
   await prisma.userOffer.update({ where: { id: userOfferId }, data: { cv_status: 'generating' } })
 
   const cvModel = await getClaudeModel('cv_generation')
 
   try {
-    const { html, filename, usage } = await generateCV(profileParsed.data, offerText, cvLanguage, jobTitle, companyName, user, cvModel)
+    const { html, filename, usage, detected_language } = await generateCV(profileParsed.data, offerText, cvLanguage, jobTitle, companyName, user, cvModel)
 
     const formData = new FormData()
     formData.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
@@ -85,7 +84,7 @@ async function runGeneration(
 
     await prisma.userOffer.update({
       where: { id: userOfferId },
-      data: { cv_status: 'done', cv_url: publicUrl, cv_language: cvLanguage },
+      data: { cv_status: 'done', cv_url: publicUrl, cv_language: detected_language },
     })
 
     await prisma.user.update({ where: { id: userId }, data: { cv_counter: { increment: 1 } } })
@@ -130,8 +129,8 @@ cvGenerateRouter.post('/generate', validateJwt, async (req, res) => {
     if (!parsed.success) {
       return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
     }
-    const { user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
-    return res.json(await runGeneration(user_id!, user_offer_id, offer_text, cv_language, job_title, company_name))
+    const { user_offer_id, offer_text, company_name, job_title } = parsed.data
+    return res.json(await runGeneration(user_id!, user_offer_id, offer_text, job_title, company_name))
   }
 
   // agent path
@@ -144,12 +143,12 @@ cvGenerateRouter.post('/generate', validateJwt, async (req, res) => {
     return res.status(422).json({ error: 'INVALID_REQUEST', message: 'Invalid request body', issues: parsed.error.issues })
   }
 
-  const { client_id, user_offer_id, offer_text, cv_language, company_name, job_title } = parsed.data
+  const { client_id, user_offer_id, offer_text, company_name, job_title } = parsed.data
 
   const link = await prisma.agentClient.findUnique({
     where: { agent_id_user_id: { agent_id, user_id: client_id } },
   })
   if (!link) throw new AppError(403, 'FORBIDDEN', 'Client not found or not linked to this agent')
 
-  return res.json(await runGeneration(client_id, user_offer_id, offer_text, cv_language, job_title, company_name))
+  return res.json(await runGeneration(client_id, user_offer_id, offer_text, job_title, company_name))
 })
